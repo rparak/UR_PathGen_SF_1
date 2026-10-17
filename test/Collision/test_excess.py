@@ -56,13 +56,15 @@ CONST_COMPONENT_PIECES = 3
 def setup(root, cfg):
     """
     Description:
-        The committed set and the STL by component.
+        The committed set, the STL by component, and the configured component translations (an
+        overridden component's excess is measured against its translated surface).
     """
 
     collision = Read_Collision_Set(cfg.Collision_Set, root)
     vertices, faces = Read_Binary_STL(cfg.Visual_Mesh)
     _, labels = Connected_Components(faces)
-    return collision, vertices, faces, labels
+    shift = {c: np.asarray(t) for c, t, _ in cfg.Component_Overrides}
+    return collision, vertices, faces, labels, shift
 
 
 def _Selected(collision):
@@ -87,7 +89,7 @@ def test_the_pruned_surface_distance_is_exact(setup):
         vertex array holds the whole STL (a first version took its bound from any vertex of it).
     """
 
-    collision, vertices, faces, labels = setup
+    collision, vertices, faces, labels, shift = setup
     piece = int(np.argmax(collision.Excess))
     f = faces[labels == collision.Components[piece]]
     points = Hull_Of(collision.Pieces[piece])[0].points[:200]
@@ -102,14 +104,15 @@ def test_the_recorded_excess_matches_an_independent_recomputation(setup):
         recorded one within half the sum of both sample spacings; the largest piece stays flagged above 10 mm.
     """
 
-    collision, vertices, faces, labels = setup
+    collision, vertices, faces, labels, shift = setup
     rng = np.random.default_rng(CONST_SEED)
     flagged = set(collision.Manifest['flagged_open_shells']['pieces'])
     for piece in _Selected(collision):
         hull = Hull_Of(collision.Pieces[piece])[0]
         samples = Sample_Surface(hull.points, hull.simplices, rng, 1e9, CONST_SAMPLES, CONST_SAMPLES, per_triangle=False)
         points = np.concatenate([hull.points[hull.vertices], samples])
-        recomputed = float(np.max(Surface_Distance(points, vertices, faces[labels == collision.Components[piece]])))
+        c = collision.Components[piece]
+        recomputed = float(np.max(Surface_Distance(points, vertices + shift.get(c, 0.0), faces[labels == c])))
         build_count = min(20000, max(64, int(np.ceil(hull.area * 1e4))))
         tolerance = 0.5 * (np.sqrt(hull.area / build_count) + np.sqrt(hull.area / CONST_SAMPLES))
         recorded = collision.Excess[piece]

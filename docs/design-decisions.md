@@ -285,3 +285,30 @@ consume the budget everywhere.
 **Revisit if** the station is measured, or the planner needs station points other than the taught ones.
 
 Pinned by `test/Scene/test_core.py::test_the_station_zone_applies_within_the_endpoint_radius`.
+
+## The rotation-station geometry is fitted to the taught program
+
+**Decision.** Component 2710 (the left window profile) is translated by (−114.8, −6.2, −0.6) mm and
+component 1154 (the machine body) by (−32.6, −11.6, +3.6) mm, each the smallest translation that
+keeps every segment of the taught rotation sequence (cases 17 and 18) at least 5 mm clear. The
+station zone's box starts at world x = −0.80 m, so the machine-interior fallback hull (component
+1638) stays outside it.
+
+**Why.** No measurement is available, and the real robot runs the whole program without collision
+(owner): the program is the only evidence of where the cell is not. A rigid translation per
+component changes the least geometry for that evidence. Moving the whole machine body was accepted
+because no segment of any of the 21 cases gets new or deeper penetration from it (SPEC §4.7); a split
+of the component was the fallback (owner's condition). The approved box (x from −0.85 m) also caught
+the 235 mm-excess interior hull and about 30 small parts behind the machine front; at −0.80 m the
+zone holds the station frame only and the taught replay still keeps every margin.
+
+**Alternatives.** Trimming the post in z: rejected, it removes the post exactly where the robot
+works. Translating only the touched 1154 pieces: rejected, piece ids change with every rebuild and
+a moved piece leaves its surface. A lower global margin: rejected, it hides every contradiction at
+once.
+
+**Revisit if** the station is measured, or a taught segment changes.
+
+Pinned by `test/Scene/test_station.py::test_the_taught_rotation_sequence_keeps_its_margins`,
+`test/Scene/test_station.py::test_the_corrections_are_recorded_and_configured` and
+`test/Scene/test_station.py::test_the_zone_covers_the_corrected_station_and_nothing_far`.

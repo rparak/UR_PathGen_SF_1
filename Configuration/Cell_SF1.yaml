@@ -32,7 +32,17 @@ Environment:
   # Translation [x, y, z] in the world frame (at most 150 mm), Source (where the value comes from).
   # The visual mesh is never changed; the manifest records the overrides and the scene refuses a
   # set built with others. REQUIRED (may be empty). [-, m, text]
-  Component_Overrides: []
+  # 2710: the left window profile at the rotation station; 1154: the machine body. Each is the
+  # smallest translation (seed 20261017, 400 directions, bisection) that keeps every joint-linear
+  # segment of cases 17 and 18 at least 5 mm clear; no segment of the other 19 cases gets new or
+  # deeper penetration (SPEC 4.7).
+  Component_Overrides:
+    - Component: 2710
+      Translation: [-0.1148, -0.0062, -0.0006]
+      Source: derived from sf1_plc_v4.script cases 17/18, not measured
+    - Component: 1154
+      Translation: [-0.0326, -0.0116, 0.0036]
+      Source: derived from sf1_plc_v4.script cases 17/18, not measured
 
 # The robot and its placement.
 Robot:
@@ -96,12 +106,13 @@ Clearance:
   # for a generated sample only while its TCP lies within Endpoint_Radius of a fixed station point.
   # Box: around the left window profile, the station and the window's top-left corner, the only
   # region where the taught program (cases 17 and 18) comes closer than 20 mm after the
-  # correction. Environment 5 mm: the taught segments keep >= 5.2 mm after the fit; it covers eps
+  # correction. Its x range starts at -0.80 m so that the machine-interior fallback hull (component
+  # 1638, x up to -0.805 m) stays outside: the zone covers the station frame only. Environment 5 mm: the taught segments keep >= 5.2 mm after the fit; it covers eps
   # (1 mm) and the measured kinematic error at the drop (4.0 mm), nothing for cables (SPEC 9.8).
   # Endpoint_Radius 50 mm: every taught sample under 20 mm near the station has its TCP within
   # 44 mm of a station point (owner, 2026-10-17). REQUIRED, all four. [m]
   Station_Zone:
-    Min: [-0.85, -0.40, 1.00]
+    Min: [-0.80, -0.40, 1.00]
     Max: [-0.55, -0.20, 1.85]
     Environment: 0.005
     Endpoint_Radius: 0.050

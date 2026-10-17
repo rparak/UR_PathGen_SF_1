@@ -55,10 +55,6 @@ CONST_STL_FACES = 1757948
 # Connected components by manifold edge, as measured independently with trimesh (SPEC 4.1).
 #   Unit [int]
 CONST_STL_COMPONENTS = 2756
-# Rotation-station geometry: the STL does not match the cell there (KNOWN_ISSUES.md); a test that
-# fails only because of it is a strict xfail, so it turns red once the geometry is fixed.
-#   Unit [string]
-CONST_STATION_XFAIL = 'KNOWN_ISSUES: STL does not match the cell at the rotation station'
 
 
 @pytest.fixture(scope='module')
@@ -161,20 +157,22 @@ def test_the_crop_sphere_contains_the_robot_everywhere(robot_scene, collision, c
     assert worst <= bound
 
 
-def test_every_hull_piece_contains_its_component(stl, collision):
+def test_every_hull_piece_contains_its_component(stl, collision, cfg):
     """
     Description:
         Hull and thickened pieces are conservative by convexity: every vertex of the original
-        component lies inside the piece's hull (checked here, independently of the build).
+        component, translated by its configured override if it has one, lies inside the piece's
+        hull (checked here, independently of the build).
     """
 
     vertices, faces = stl
     _, labels = Connected_Components(faces)
+    shift = {c: np.asarray(t) for c, t, _ in cfg.Component_Overrides}
     checked = 0
     for piece, component, method in zip(collision.Pieces, collision.Components, collision.Methods):
         if method not in ('hull', 'thickened', 'fallback'):
             continue
-        original = vertices[np.unique(faces[labels == component])]
+        original = vertices[np.unique(faces[labels == component])] + shift.get(component, 0.0)
         hull = ConvexHull(piece)
         signed = original @ hull.equations[:, :3].T + hull.equations[:, 3]
         assert np.max(signed) <= 1e-7, (component, float(np.max(signed)))
@@ -236,8 +234,7 @@ def test_a_collinear_component_is_thickened_in_two_directions():
     assert np.max(line @ hull.equations[:, :3].T + hull.equations[:, 3]) <= 1e-12
 
 
-@pytest.mark.parametrize('name', ['home_safe', pytest.param('drop_rot_01', marks=pytest.mark.xfail(
-    strict=True, reason=CONST_STATION_XFAIL))])
+@pytest.mark.parametrize('name', ['home_safe', 'drop_rot_01'])
 def test_no_robot_body_at_a_or_b_is_inside_a_flagged_piece(scene, collision, points, name):
     """
     Description:

@@ -294,6 +294,59 @@ the margin of the modelled parts they grasp (−12 to −20 mm), and the machine
 the hull of machine (a): both are expected for points that handle parts, and neither is a learned
 point of the planner.
 
+### 4.7 Station correction fitted to the taught program (*measured*, 2026-10-17)
+
+No measurement of the cell is available. The ground truth is the owner's statement that every
+segment of `sf1_plc_v4.script` runs on the real robot without collision. At `Base_Yaw` = 180° the
+rotation sequence of cases 17 and 18 (home → … → home, movel checked joint-linear, 50 mm opening
+while holding, 85 mm open — assumption: full 85 mm stroke for `rq_set_pos_spd_for(0, ...)`;
+conservative; owner did not confirm (the URCap sets `set_open_mm(50.0, 1)`)) came within 5 mm of two STL
+components only: 2710, the left window profile (one hull piece, −59.3 mm), and 1154, the machine
+body (21 pieces; only the flagged front pieces were touched, −29.2 mm).
+
+**Fit.** For each component, the smallest rigid translation (≤ 150 mm) that keeps every segment of
+the sequence ≥ 5 mm clear: 400 directions (Fibonacci sphere), bisection on the length, then 300
+seeded shrinking steps (seed 20261017); distances by `mj_geomDistance` from every robot collision
+geom at the segment's opening.
+
+| Component | Translation (world) | Worst before | Worst after |
+|---|---|---|---|
+| 2710 (post) | (−114.8, −6.2, −0.6) mm; only directions near −x are feasible (36 of 400) | −59.3 mm | +5.3 mm |
+| 1154 (machine body, whole component) | (−32.6, −11.6, +3.6) mm | −29.2 mm | +5.2 mm |
+
+After the shift the post spans world x [−0.817, −0.727]: nearly flush with the machine front
+instead of 108 mm proud of it. The real robot sweeps the post's STL volume at three heights
+(station, 1.42 m, 1.7 m), so the post cannot stand there; a y shift or a z trim does not work (the
+station is on one side, the gripper sweeps the other).
+
+**All cases.** Every unique segment of all 21 cases (121), joint-linear, both openings, before and
+after: no segment gets new or deeper penetration, neither in its worst value nor in its distance to
+1154 or to 2710 alone; every distance to 1154 grows, and the closest distance to 2710 outside cases
+17/18 falls from 67.0 to 39.9 mm (load3 → load_hower). The whole-component shift of 1154 is
+therefore used, not a split of the component (owner's condition, 2026-10-17).
+
+**Rotation sequence after the rebuild** (minimum robot – environment distance; the station zone,
+§9.7, contains the post, four 1154 front pieces and the window's top profile):
+
+| Segment | Case 17 | Case 18 |
+|---|---|---|
+| home → Waypoint_1 | ≥ 20 mm | ≥ 20 mm |
+| Waypoint_1 → drop | −27.4 → 6.5 mm | −28.4 → 5.8 mm |
+| drop → movel target (Waypoint_4 / 7) | −28.2 → 5.7 mm | −29.2 → 5.2 mm |
+| movel target → Waypoint_5 | −27.7 → 6.6 mm | −29.0 → 5.3 mm |
+| Waypoint_5 → Waypoint_1 | −20.0 → 14.9 mm | −20.0 → 14.9 mm |
+| Waypoint_1 → Waypoint_2 | −52.6 → 15.3 mm (top profile) | −52.6 → 15.3 mm |
+| Waypoint_2 → Waypoint_3 | −54.6 → ≥ 20 mm | −54.6 → ≥ 20 mm |
+| Waypoint_3 → Waypoint_18 / 11 | −8.9 → 19.2 mm | −2.1 → ≥ 20 mm |
+| → pick | −18.6 → 11.3 mm | −16.3 → 13.6 mm |
+| pick → movel target (Waypoint_6 / 8) | −20.1 → 5.7 mm | −19.0 → 6.8 mm |
+| movel target → Waypoint_2 | −59.3 → 9.5 mm | −58.6 → 12.4 mm |
+| Waypoint_2 → home | ≥ 20 mm | ≥ 20 mm |
+
+Checked as taught, every segment keeps its margins. Checked as generated (station points as the
+fixed points), only Waypoint_1 → Waypoint_2 violates: the top profile at 15.3 mm with the TCP about
+300 mm from every station point.
+
 ## 5. Platform
 
 - macOS on Apple silicon (primary, verified here) and Ubuntu Linux (unverified).
@@ -671,6 +724,12 @@ Not in the budget, because they are not small bounded errors. Each is listed in 
 
 Self-collision (5 mm) is not affected by cables or calibration at the gripper. Only eps applies.
 
+**Inside the station zone** (§9.7) the environment margin is 5 mm: eps (1 mm) + the measured
+kinematic error at the drop points (4.0 mm) leaves **0 mm for cables**, and case B (10 mm) is **not
+covered**. The station geometry was fitted to keep the taught segments 5 mm clear of the
+nominal-DH robot (§4.7), so the zone margin pins consistency with the taught program, not real
+clearance. A generated path gets it only within 50 mm of a station point.
+
 ## 10. Data formats
 
 ### 10.1 URScript variables (reader and writer in `src/URScript/Core.py` only)
@@ -736,6 +795,7 @@ synthetic point with a joint at 4.0 rad that must come out as 4.0.
 | `test/Configuration/test_core.py` | shipped file loads; each REQUIRED field missing → named failure; invalid values (wrong length, limits outside ±360°, min ≥ max, coupling spigot depth ≥ thickness, negative clearance or sanity bound, a component override beyond 150 mm, without a source or named twice, a zone margin above `Clearance.Environment`, a zone box with Min ≥ Max, a zero endpoint radius) fail; all problems listed at once; unknown key → WARNING |
 | `test/Kinematics/test_core.py` | `FK_DH(q) · TCP_config` vs `_p`: regression pin (§9.4) of 1.72 mm / 0.261° and 4.02 mm / 0.376° (±0.01 mm / ±0.001°); diagnostic derived TCP pinned the same way and never read by any check; both points within the sanity bound; `Check_Learned_Point` rejects a point beyond it (perturbed `_q`) with the numbers in the message; configured TCP == (0, 0, 0.174, 0, 0, 0); geodesic angle 0 between r and its π-equivalent; `Normalize_Rotvec` rule incl. near-π |
 | `test/Scene/test_core.py` | scene compiles; base body world position == `Base_Position` exactly and yaw == `Base_Yaw`; **at `Base_Yaw` = 90° (a temporary copy of the configuration) `home_safe`'s TCP lands at `Base_Position` + (−y, x, z) of its `_p` within 3 mm, in MuJoCo and through the base frame (the file is in degrees; read as radians the test fails)**; **MuJoCo flange FK (after the MjSpec offset override) == DH flange FK within 1e-9 m / 1e-9 rad (atan2 geodesic, §9.5) for 1000 seeded random joint vectors within the limits**, plus A and B; pad-span hull present in the gripper rigid group; fingers open along flange ±x at `Mount_Yaw` = 0; visual mesh has no hull (`mesh_graphadr = −1`); base↔env build check runs; loader rejects an elbow limit beyond ±180°; gripper opening == `Tool.Opening` ± 0.5 mm, equality residual < 0.1 mm; coupling cylinder present (visual + collision), Menagerie `base_mount` mesh geoms absent, vendored files byte-identical to `models/MANIFEST.json`; pad end from the flange face 163.3 mm open and 176.8 mm closed (± 0.5 mm, manual chain) and the 50 mm values 154.39 / 173.23 mm (± 0.05 mm, regression); exclusion set == configuration expansion + `base–env_stand`, filterparent disabled; joint ranges == `Joint_Position_Limits`; **placement (§4.6): `pick_obj_1..8` on the pallet table, `unload_obj_1..8` on the side table (between the plate top and the highest part), `bench_drop_1..8` inside object (a); the same check at `Base_Yaw` = 0 refuses all 24**; A and B pass `Check_Clearance`, and **any violation fails the test, listing every pair with its distance and margin** (no report-only path); B (`drop_rot_01`) is a strict xfail while the STL does not match the cell at the rotation station (`KNOWN_ISSUES.md`), so it turns red once the geometry is fixed; `hover_unload_2` (clear) pushed into the side table is reported as a collision; a collision set whose recorded component overrides differ from the configuration is refused; the station zone applies to a generated configuration only within `Endpoint_Radius` of a station point (DH distances); a segment kind other than taught/generated is refused |
+| `test/Scene/test_station.py` | the taught rotation sequence of cases 17 and 18 (home → … → home, typed from the program, 50 mm holding / 85 mm open) checked as taught has no violation: no penetration, the zone margin at the zone pieces, the global margins elsewhere; as generated, Waypoint_1 → Waypoint_2 violates the 20 mm margin only on samples outside the 50 mm neighbourhood, and drop_rotate_1 → Waypoint_4 is clear only with the station points; the manifest records exactly the fitted overrides, which are the configured ones; the zone holds every piece of the post and the top profile, no piece of the side table, pallet table, machine-interior hull or right window profile |
 | `test/Scene/test_margin.py` | margin accuracy on **mesh hull vs mesh hull** (robot geom on a joint, so not static): a robot link hull at 3 orientations vs a box-hull face, and box-hull edge vs edge; at 10 mm a violation is reported, at 30 mm none; reported distance error < 0.5 mm (prototype: 0.000 mm, §4.5) |
 | `test/Collision/test_core.py` | manifest STL hash == sha256 of the file; `R_crop` ≥ the bound recomputed from the current scene, and no robot collision vertex leaves the sphere over 1000 seeded random `q`; conservativeness violations == 0 at `eps` (vertices + 1 sample/cm² for CoACD components, hull-only exempt); degenerate components thickened and containing the original; excess metrics present and equal to a recomputation on a fixed sample; no robot body at A/B inside a flagged open-shell piece (B a strict xfail while the STL does not match the cell at the rotation station); mismatched hash → `Collision_Error_Cls` |
 | `test/Example/test_demo.py` | headless demo runs N steps without exception; only the chosen joint changes, monotonically between turning points; it stays within `Joint_Position_Limits`; the pre-check runs on the dense segment samples of §9.7; the label equals the check result ("clearance checked" iff no violation, otherwise "VISUAL ONLY — UNCHECKED"); the shipped motion's label is pinned |
@@ -907,5 +967,9 @@ Measured on the development Mac (M2 Pro), Python 3.11, mujoco 3.16.0.
 - **MuJoCo FK vs DH** over 1000 random `q`: ≤ 1e-15 m, ≤ 1e-15 rad.
 - **`base – upper_arm_link` true minimum:** 2.3237 mm (grid 2.3263 mm).
 - **A and B against the full environment:** no violation. *Corrected 2026-10-17: measured at `Base_Yaw` = 0. At 180° A is clear and B penetrates the rotation-station model by 27.4 mm (`KNOWN_ISSUES.md`); the closest-pair line above is also from 0°.*
+- **Collision set rebuilt with the component overrides (2026-10-17):** 2710 and 1154 translated
+  (§4.7); 6716 pieces, the same counts by method and body, conservativeness max 0.769 mm, excess max
+  234.8 mm / p95 11.3 mm, 396 flagged: every metric is identical to the build without overrides
+  (the translation is rigid); build time 1141 s. The manifest records both overrides.
 - **Demo** (base ±45° around `home_safe`): 1234 joint-linear samples, every margin kept, label
   **"clearance checked"**. At 180° (2026-10-17) the same: 1234 samples, every margin kept.

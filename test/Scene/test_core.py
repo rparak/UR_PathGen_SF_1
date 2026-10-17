@@ -71,10 +71,6 @@ CONST_SIDE_TABLE_TOP = 0.781
 CONST_TABLE_PLATE_TOP = 0.721
 CONST_PALLET_TABLE_X = (-0.295, 0.295)
 CONST_PALLET_TABLE_Y = (-1.411, -0.501)
-# Rotation-station geometry: the STL does not match the cell there (KNOWN_ISSUES.md); a test that
-# fails only because of it is a strict xfail, so it turns red once the geometry is fixed.
-#   Unit [string]
-CONST_STATION_XFAIL = 'KNOWN_ISSUES: STL does not match the cell at the rotation station'
 # Object (a), the machine behind the robot (SPEC 4.1): bounding box, world frame.
 #   Unit [Vector<float> 1x3] (m)
 CONST_OBJECT_A_MIN = (-1.609, -0.422, -0.002)
@@ -356,16 +352,16 @@ def test_the_placement_check_refuses_a_base_yaw_of_0_deg(cfg, plc_points, tmp_pa
     assert len(_Placement_Problems(_Scene_With_Yaw(tmp_path, 0.0), cfg, plc_points)) == 24
 
 
-@pytest.mark.parametrize('name', ['home_safe', pytest.param('drop_rot_01', marks=pytest.mark.xfail(
-    strict=True, reason=CONST_STATION_XFAIL))])
+@pytest.mark.parametrize('name', ['home_safe', 'drop_rot_01'])
 def test_a_and_b_keep_every_clearance_margin(scene, cfg, points, name):
     """
     Description:
-        A and B against the full environment and self-collision. Any violation fails, listing
-        every pair with its distance and margin.
+        A and B against the full environment and self-collision, as learned (taught) points: the
+        zone margin for the station-zone pieces, the global margins otherwise. Any violation fails,
+        listing every pair with its distance and margin.
     """
 
-    violations = scene.Check_Clearance(points[name].Q)
+    violations = scene.Check_Clearance(points[name].Q, station_zone=True)
     assert not violations, '%s: %s' % (name, '; '.join('%s - %s %.2f mm (margin %.1f mm)' % (
         v.Body_1, v.Body_2, v.Distance * 1e3, v.Margin * 1e3) for v in violations))
     Check_Learned_Point(scene, cfg, points[name])

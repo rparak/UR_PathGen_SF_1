@@ -1,0 +1,172 @@
+## =========================================================================== ##
+# MIT License
+# Copyright (c) 2026 JIC Smart Factory
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+## =========================================================================== ##
+# Author   : JIC Smart Factory
+# File Name: ../test/Scene/test_station.py
+## =========================================================================== ##
+
+# Dataclasses (Data Classes)
+import dataclasses
+# Pytest (Testing framework) [pip3 install pytest]
+import pytest
+# Custom Lib.:
+#   ../src/Scene/Core — the scene and the taught / generated rule under test
+from Scene.Core import Scene_Cls
+#   ../src/Collision/Core — the set's components and the manifest form of the overrides
+from Collision.Core import Read_Collision_Set, Component_Overrides_Record
+
+"""
+Description:
+    Initialization of constants.
+
+    The rotation (regrasp) sequence of the owner's program sf1_plc_v4.script, cases 17 and 18, from
+    home to home (owner-confirmed boundaries), typed from the program lines 3407-3463 and
+    3490-3546. Every segment runs on the real robot without collision (owner). movel segments
+    are checked joint-linear here (an approximation; the robot moves the TCP on a line), and blended
+    corners (r > 0) are checked through the corner, not along the blend.
+"""
+# Gripper opening per state: holding the 50 x 50 mm part (Tool.Opening, owner) and open after
+# rq_set_pos_spd_for(0, ...). Open is an assumption: the full 85 mm stroke for
+# rq_set_pos_spd_for(0, ...); conservative; owner did not confirm (the URCap sets set_open_mm(50.0, 1)).
+#   Unit [float] (m)
+CONST_OPENING = {'holding': 0.050, 'open': 0.085}
+# The segments (from, to, gripper state) of each case.
+#   Unit [Dict<int, List<Tuple<string, string, string>>>]
+CONST_SEQUENCES = {
+    17: [('home', 'Waypoint_1', 'holding'), ('Waypoint_1', 'drop_rotate_1', 'holding'),
+         ('drop_rotate_1', 'Waypoint_4', 'holding'), ('Waypoint_4', 'Waypoint_5', 'open'),
+         ('Waypoint_5', 'Waypoint_1', 'open'), ('Waypoint_1', 'Waypoint_2', 'open'), ('Waypoint_2', 'Waypoint_3', 'open'),
+         ('Waypoint_3', 'Waypoint_18', 'open'), ('Waypoint_18', 'pick_rotate_1', 'open'),
+         ('pick_rotate_1', 'Waypoint_6', 'holding'), ('Waypoint_6', 'Waypoint_2', 'holding'), ('Waypoint_2', 'home', 'holding')],
+    18: [('home', 'Waypoint_1', 'holding'), ('Waypoint_1', 'drop_rotate_2', 'holding'),
+         ('drop_rotate_2', 'Waypoint_7', 'holding'), ('Waypoint_7', 'Waypoint_5', 'open'),
+         ('Waypoint_5', 'Waypoint_1', 'open'), ('Waypoint_1', 'Waypoint_2', 'open'), ('Waypoint_2', 'Waypoint_3', 'open'),
+         ('Waypoint_3', 'Waypoint_11', 'open'), ('Waypoint_11', 'pick_rotate_2', 'open'),
+         ('pick_rotate_2', 'Waypoint_8', 'holding'), ('Waypoint_8', 'Waypoint_2', 'holding'), ('Waypoint_2', 'home', 'holding')],
+}
+# The fixed station points, which stay verbatim (owner): drop, the drop's movel target, the retreat
+# after the drop, the approach to the pick, the pick and the pick's movel target, both cases.
+#   Unit [Tuple<string>]
+CONST_STATION_POINTS = ('drop_rotate_1', 'drop_rotate_2', 'Waypoint_4', 'Waypoint_7', 'Waypoint_5', 'Waypoint_18',
+                        'Waypoint_11', 'pick_rotate_1', 'pick_rotate_2', 'Waypoint_6', 'Waypoint_8')
+# The corrections, typed from the fit (SPEC 4.7), and their source.
+#   Unit [List<Tuple<int, List<float> 1x3, string>>] (-, m, -)
+CONST_OVERRIDES = [(1154, [-0.0326, -0.0116, 0.0036], 'derived from sf1_plc_v4.script cases 17/18, not measured'),
+                   (2710, [-0.1148, -0.0062, -0.0006], 'derived from sf1_plc_v4.script cases 17/18, not measured')]
+# STL components: the left window profile (corrected), the window's top profile (near, not
+# corrected), the side table and the pallet table (far from the station, below the zone box), the
+# machine-interior fallback hull (235 mm excess, behind the zone box) and the right window profile
+# (beside the zone box, the other side of the window). SPEC 4.1, 4.6, 4.7.
+#   Unit [int]
+CONST_POST, CONST_TOP_PROFILE, CONST_SIDE_TABLE, CONST_PALLET_TABLE = 2710, 2699, 1061, 1060
+CONST_MACHINE_INTERIOR, CONST_RIGHT_PROFILE = 1638, 2709
+
+
+@pytest.fixture(scope='module')
+def scenes(cfg):
+    """
+    Description:
+        The scene with the environment at each gripper state's opening.
+    """
+
+    return {state: Scene_Cls(dataclasses.replace(cfg, Opening=opening)) for state, opening in CONST_OPENING.items()}
+
+
+def _Station_Q(plc_points):
+    return [plc_points[name].Q for name in CONST_STATION_POINTS]
+
+
+@pytest.mark.parametrize('case', sorted(CONST_SEQUENCES))
+def test_the_taught_rotation_sequence_keeps_its_margins(scenes, plc_points, case):
+    """
+    Description:
+        Every segment of the taught rotation sequence, checked as taught, has no penetration and
+        keeps the zone margin at the station-zone pieces and the global margins elsewhere. Any
+        violation fails, naming the segment, the sample, the pair and the distance.
+    """
+
+    found = []
+    for a, b, state in CONST_SEQUENCES[case]:
+        samples, violations = scenes[state].Check_Segment(plc_points[a].Q, plc_points[b].Q, kind='taught')
+        assert samples > 1
+        found += ['%s -> %s sample %d: %s - %s %.2f mm (margin %.1f mm)' % (a, b, k, v.Body_1, v.Body_2, v.Distance * 1e3,
+                                                                            v.Margin * 1e3) for k, v in violations]
+    assert not found, '\n'.join(found)
+
+
+def test_a_generated_segment_keeps_the_global_margin_away_from_the_station(scenes, cfg, plc_points):
+    """
+    Description:
+        Waypoint_1 -> Waypoint_2 passes the window's top profile (a station-zone piece) between the
+        zone and the global margin with its TCP far from every station point: as taught it is clear,
+        as generated it violates the 20 mm margin, only on samples outside the 50 mm neighbourhood.
+    """
+
+    scene, a, b = scenes['open'], plc_points['Waypoint_1'].Q, plc_points['Waypoint_2'].Q
+    assert scene.Check_Segment(a, b, kind='taught')[1] == []
+    samples, violations = scene.Check_Segment(a, b, kind='generated', station_q=_Station_Q(plc_points))
+    assert violations
+    q = scene.Segment_Samples(a, b)
+    for k, v in violations:
+        assert v.Margin == cfg.Clearance_Environment
+        assert cfg.Station_Zone_Environment <= v.Distance < cfg.Clearance_Environment
+        assert not scene.Station_Zone_Active(q[k], _Station_Q(plc_points))
+
+
+def test_a_generated_segment_uses_the_zone_margin_near_a_station_point(scenes, cfg, plc_points):
+    """
+    Description:
+        The drop's descent drop_rotate_1 -> Waypoint_4 keeps less than 20 mm to the station: as a
+        generated segment it is clear only because every sample's TCP lies within 50 mm of a
+        station point; without station points the global margin applies and it violates.
+    """
+
+    scene, a, b = scenes['holding'], plc_points['drop_rotate_1'].Q, plc_points['Waypoint_4'].Q
+    assert scene.Check_Segment(a, b, kind='generated', station_q=_Station_Q(plc_points))[1] == []
+    violations = scene.Check_Segment(a, b, kind='generated')[1]
+    assert violations and all(v.Margin == cfg.Clearance_Environment for _, v in violations)
+
+
+def test_the_corrections_are_recorded_and_configured(scenes, cfg):
+    """
+    Description:
+        The collision set's manifest records exactly the fitted corrections, which are also the
+        configured ones (the scene would refuse a mismatch).
+    """
+
+    recorded = scenes['holding'].Collision_Manifest['component_overrides']
+    assert recorded == Component_Overrides_Record(CONST_OVERRIDES)
+    assert recorded == Component_Overrides_Record(cfg.Component_Overrides)
+
+
+def test_the_zone_covers_the_corrected_station_and_nothing_far(scenes, cfg, root):
+    """
+    Description:
+        The station-zone pieces include every piece of the corrected post and a piece of the
+        window's top profile, and no piece of the side table, the pallet table, the
+        machine-interior fallback hull or the right window profile: the box bounds the zone on
+        every side.
+    """
+
+    components = Read_Collision_Set(cfg.Collision_Set, root).Components
+    zone = {components[i] for i in scenes['holding'].Zone_Pieces}
+    assert all(i in scenes['holding'].Zone_Pieces for i, c in enumerate(components) if c == CONST_POST)
+    assert CONST_TOP_PROFILE in zone
+    assert CONST_SIDE_TABLE not in zone and CONST_PALLET_TABLE not in zone
+    assert CONST_MACHINE_INTERIOR not in zone and CONST_RIGHT_PROFILE not in zone

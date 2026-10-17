@@ -18,47 +18,47 @@ kinematics. Along a path, and at generated via points, the error is unmeasured a
 - **Pinned by:** `test/Kinematics/test_core.py::test_the_configured_tcp_residual_is_pinned`.
 - **What would close it:** the robot's `calibration.conf` and FK with its corrections.
 
-## The STL does not match the cell at the rotation station
+## Simulation only: no real robot is available
 
-With `Base_Yaw` = 180°, the regrasp sequence of `sf1_plc_v4.script` (cases 17 and 18) collides with
-the environment model. The real robot runs it, so the model is wrong there, or the base position
-is. The station is a small bracket on the left vertical profile of the machine-front window of
-machine (a), lower part (owner). In the model the drop TCP lies on the machine-front plane
-(world x = −0.703 m against −0.702 m), next to a vertical post (STL component 2710, 90 × 45 ×
-1937 mm, world x [−0.702, −0.612], y [−0.290, −0.245]).
+No real robot and no measurement of the cell are available (owner, 2026-10-17). Every result of this
+tool, including everything below, is a simulation of a model that was in part fitted to the robot
+program, not measured.
 
-Joint-linear replay of the program's segments (movel approximated as joint-linear, 50 mm opening
-while holding, 85 mm open; distances are the worst over the segment):
+- **Impact:** any new path through the station region must first run on the robot at reduced
+  speed, with someone at the stop button, before it is used.
 
-| Segment | Case 17 | Case 18 | Piece (flagged open shell, excess) |
-|---|---|---|---|
-| home → Waypoint_1 | clear | clear | |
-| Waypoint_1 → drop | −27.4 mm | −28.4 mm | 3236 (yes, 37.9 mm), 3238 (yes, 44.0 mm) |
-| drop → movel target (Waypoint_4 / 7) | −28.2 mm | −29.2 mm | 3236 |
-| movel target → Waypoint_5 | −27.3 mm | −29.0 mm | 3236 |
-| Waypoint_5 → Waypoint_1 | −19.1 mm | −19.1 mm | 3236 |
-| Waypoint_1 → Waypoint_2 | −46.0 mm | −46.0 mm | **6524 (no, 4.6 mm)** |
-| Waypoint_2 → Waypoint_3 | −51.0 mm | −51.0 mm | **6524** |
-| Waypoint_3 → Waypoint_18 / 11 | −2.3 mm | +5.2 mm (margin only) | 3238 |
-| → pick | −15.4 mm | −13.2 mm | 3238 |
-| pick → movel target (Waypoint_6 / 8) | −20.1 mm | −19.0 mm | 3238 |
-| movel target → Waypoint_2 | −59.3 mm | −58.6 mm | **6524** |
-| Waypoint_2 → home | clear | clear | |
+## The rotation-station geometry is approximate: fitted to the taught program, not measured
 
-Piece 6524 is the post itself, an unflagged hull 4.6 mm larger than the post; the original surface
-passes through the gripper hulls (0.0 mm from their vertices). This is not hull over-fill. Pieces
-3236 and 3238 (the machine front) are mixed: at the drop the original surface is 0.5 – 3 mm from the
-contact point, near the pick 9 – 27 mm (partly over-fill). No base yaw between 170° and 190° clears
-both drop (≤ 172°) and pick (≥ 182°), and Waypoint_6 → Waypoint_2 still penetrates at 190°.
+At `Base_Yaw` = 180° the taught rotation sequence (cases 17 and 18, home → … → home) collided with
+the original STL although the real robot runs it. Two components are translated before the collision
+set is built (`Environment.Component_Overrides`, source "derived from sf1_plc_v4.script cases 17/18,
+not measured"): the left window profile 2710 by (−114.8, −6.2, −0.6) mm, which puts it nearly flush
+with the machine front, and the machine body 1154 by (−32.6, −11.6, +3.6) mm. Each is the smallest
+translation that keeps every segment of the sequence 5 mm clear; no segment of the other cases got
+new or deeper penetration (SPEC §4.7). The visual mesh is unchanged, so the viewer shows the
+original post and machine front, not the collision geometry.
 
-- **Impact:** nothing near the rotation station can be checked or planned: the model reports
-  collisions the real robot does not have. A path there that the simulation called clear would mean
-  nothing either, until the geometry is fixed.
-- **Evidence:** scratch replay 2026-10-17 (yaw from the configuration, `Clearance.Environment` 20 mm).
-- **Pinned by:** strict xfails `test/Scene/test_core.py::test_a_and_b_keep_every_clearance_margin[drop_rot_01]`
-  and `test/Collision/test_core.py::test_no_robot_body_at_a_or_b_is_inside_a_flagged_piece[drop_rot_01]`.
-- **What would close it:** touch-probing the post, the machine-front plane and the station bracket
-  on the real cell, then correcting the STL (or the base position) to match.
+Inside the station zone (`Clearance.Station_Zone`: the post, the machine-front pieces, the window's
+top profile) the environment margin is 5 mm instead of 20 mm: for taught segments everywhere, for a
+generated path only while its TCP lies within 50 mm of a station point.
+
+- **Impact:**
+  - **0 mm is left for cables inside the zone** (5 mm = 1 mm eps + 4.0 mm measured kinematic error);
+  - **case B (10 mm sanity bound) is not covered** there;
+  - **the fitted geometry pins consistency with the taught program, not real clearance:** the
+    taught segments keep ≥ 5.2 mm by construction;
+  - what the translations hide: a real protrusion of the post up to about 110 mm, at every height,
+    and a 35 mm placement error of the machine body.
+- **Also assumed in the fit:** movel segments checked joint-linear (the robot moves the TCP on a
+  line); blended corners (r > 0) checked through the corner, not along the blend; nominal DH (4.0 mm
+  error at the drop); the open gripper at 85 mm — assumption: full 85 mm stroke for
+  `rq_set_pos_spd_for(0, ...)`; conservative; owner did not confirm (the URCap sets
+  `set_open_mm(50.0, 1)`).
+- **Evidence:** SPEC §4.7 (fit, all-cases check, per-segment table).
+- **Pinned by:** `test/Scene/test_station.py` (the replay of both cases as taught, the generated
+  rule, the recorded overrides, the zone pieces).
+- **What would close it:** measuring the post, the machine front and the station bracket on the
+  real cell, then correcting the STL and removing the overrides.
 
 ## The carried part is not modelled
 

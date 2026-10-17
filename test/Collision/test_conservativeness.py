@@ -79,7 +79,9 @@ def _Independent_Distance(point, triangle):
 def setup(root, cfg):
     """
     Description:
-        The committed set, the STL by component, and the pieces of each CoACD component.
+        The committed set, the STL by component, the pieces of each CoACD component, and the
+        configured component translations (the build checks an overridden component against its
+        translated surface, so the recomputation does too).
     """
 
     collision = Read_Collision_Set(cfg.Collision_Set, root)
@@ -89,15 +91,17 @@ def setup(root, cfg):
     for i, (c, m) in enumerate(zip(collision.Components, collision.Methods)):
         if m == 'coacd':
             pieces.setdefault(c, []).append(i)
-    return collision, vertices, faces, labels, pieces
+    shift = {c: np.asarray(t) for c, t, _ in cfg.Component_Overrides}
+    return collision, (vertices, shift), faces, labels, pieces
 
 
-def _Component(vertices, faces, labels, c):
+def _Component(mesh, faces, labels, c):
+    vertices, shift = mesh
     f = faces[labels == c]
     used = np.unique(f)
     remap = np.full(len(vertices), -1)
     remap[used] = np.arange(len(used))
-    return vertices[used], remap[f]
+    return vertices[used] + shift.get(c, 0.0), remap[f]
 
 
 def test_the_point_triangle_distance_matches_an_independent_formula():
