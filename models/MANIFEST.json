@@ -1,0 +1,60 @@
+{
+  "source": "https://github.com/google-deepmind/mujoco_menagerie",
+  "commit": "62ab00f2bc44f6f20c1c9b7a13f3fb1dd41a4e35",
+  "commit_date": "2026-10-14",
+  "vendored_on": "2026-10-17",
+  "packages": {
+    "universal_robots_ur10e": {
+      "license": "BSD-3-Clause",
+      "copyright": "Copyright 2018 ROS Industrial Consortium"
+    },
+    "robotiq_2f85": {
+      "license": "BSD-2-Clause",
+      "copyright": "Copyright (c) 2013, ROS-Industrial"
+    }
+  },
+  "excluded": [
+    "*.png (preview images only)"
+  ],
+  "note": "Files are byte-identical to upstream. Every patch is applied in code through MjSpec (src/Scene/Core.py); never edit these files. install.sh verifies every hash below.",
+  "sha256": {
+    "models/robotiq_2f85/2f85.xml": "d48aca5f9151798ffd38111ce4e8b2081f3ec2d4f525161b33643451580010de",
+    "models/robotiq_2f85/CHANGELOG.md": "38082db6de93a95ef85a319c2a8cac8b1dbcff597a718d8cdf843c339e7b23a6",
+    "models/robotiq_2f85/LICENSE": "3d5edd18d1e22a17666e9bb84270171ed5ac90b192d24e0177fd171708ea2316",
+    "models/robotiq_2f85/README.md": "a10f34027d417f8f7b9102b74b42976031f0246f3090444728ab322bc4632aaf",
+    "models/robotiq_2f85/assets/base.stl": "1c7b9f2bd92d705fc4e897c94e905973a3c05f406845e942229433deb7041453",
+    "models/robotiq_2f85/assets/base_mount.stl": "87971dfdd6e5311b5a723e7b73c4701ebf5c2364df671500f30dfc1c53c8e61a",
+    "models/robotiq_2f85/assets/coupler.stl": "d5ee95e62f8415bf5b6e503c831a958f5fc1990bf9b2865329ec38a28932727c",
+    "models/robotiq_2f85/assets/driver.stl": "bbd6e868b1778bead60d2516c7ede581d7ad4e431744b1828757d6ea5129c112",
+    "models/robotiq_2f85/assets/follower.stl": "633793332c081641ce200df27a40643cc293b29956e3cb5cb29cb811c33ef1c7",
+    "models/robotiq_2f85/assets/pad.stl": "4af1fa8d9bb285abecbf5dfc88e74cb30f059a7a074c2030dc35e9ee4316019d",
+    "models/robotiq_2f85/assets/silicone_pad.stl": "ca20c0fa61e6d3ce7b04bed25360e048e31dfd88ace04187aa6d9e8f4ca3fd0f",
+    "models/robotiq_2f85/assets/spring_link.stl": "4fb74a8a0d76c0e471cf19fd48bc676fd5b19123798e7a39eb6aa56869354283",
+    "models/robotiq_2f85/scene.xml": "dbc7255f3e1a5539e59cffac3000a49f19aa3cae384061aa74ec787e6a5760ff",
+    "models/universal_robots_ur10e/CHANGELOG.md": "f6fea18cdbc6530f240552b05de1abe92916d720ac32d6593414d2531ad1f91b",
+    "models/universal_robots_ur10e/LICENSE": "5ec71ccf66c8d03261448f2441a586765b97f2248c860a1ae19689fb1c45cee6",
+    "models/universal_robots_ur10e/README.md": "69af5118815feba60c683415231fcd2c27d4a240c9e613731596583440a96ed3",
+    "models/universal_robots_ur10e/assets/base_0.obj": "bf32c8c773792ef5d77733faca78f76aac09253d1f27e5d6550d016de7c71805",
+    "models/universal_robots_ur10e/assets/base_1.obj": "849a788074d7670d9ba736f80b36622777d533eff883ccc973c916e1662a4fc1",
+    "models/universal_robots_ur10e/assets/forearm_0.obj": "7bdcfc8879ee27eedbcf9bda49133209a8988869ca810abed12510da52aec6ce",
+    "models/universal_robots_ur10e/assets/forearm_1.obj": "add3f9150c7a39f9619d7a13cb730f836b0f5bb0538d22998b2ef2531ccb231d",
+    "models/universal_robots_ur10e/assets/forearm_2.obj": "e7a4ef8ebc423dc89f3b709de5331e6546ba619515ab4e9f4173e1c4df50928c",
+    "models/universal_robots_ur10e/assets/forearm_3.obj": "7963bc45f0caa7891e16e0e3aaf1b8255ccb31c45eb2e7189ae41ab79d769c6c",
+    "models/universal_robots_ur10e/assets/shoulder_0.obj": "dc2cb7d3c9a89fd5a7cc954f72448e0b096b8a55bd2552fbb5012cb63a8665ad",
+    "models/universal_robots_ur10e/assets/shoulder_1.obj": "29300890574301e471272b609462df7ce4c740c94b28d5d397742344884034dd",
+    "models/universal_robots_ur10e/assets/shoulder_2.obj": "c9d28de31d417e478e807ac181ca713ae85cd3e2ec7e2ee59411ffa441a1ea7c",
+    "models/universal_robots_ur10e/assets/upperarm_0.obj": "443e65b87bd6494ce60e1020750b8d12d75fb647b15a0a20c46cf6bcdd367189",
+    "models/universal_robots_ur10e/assets/upperarm_1.obj": "1faf80f2049a7d5f423ee5cb64b3660ffe7a7268952e547e0c41b0d8a8381280",
+    "models/universal_robots_ur10e/assets/upperarm_2.obj": "6bcadcbab26e2c93b6e6d1148d9f1ec3afbaed601d4b1c33e3ac655cd2713fce",
+    "models/universal_robots_ur10e/assets/upperarm_3.obj": "19b05ed2b694965b8aae32495297223f03c2c0fa21db9baa5283f3225abcc311",
+    "models/universal_robots_ur10e/assets/wrist1_0.obj": "29c7986338deaaac9c08e178cae1f6a6b72d35baeab9e431e0c9e0c94ad098d9",
+    "models/universal_robots_ur10e/assets/wrist1_1.obj": "793966ed9435327bbf6321bf519b20b5a5fc224af7b6cc3d77c5aa55facd97a2",
+    "models/universal_robots_ur10e/assets/wrist1_2.obj": "9f4ee5635420d34e25a4daa776a5c2eb0b9b5b16e952b98f298eee77bf9755aa",
+    "models/universal_robots_ur10e/assets/wrist2_0.obj": "a0a095dcd76a4658124530de86c5fe578d7a82d0dd2843345f75f2c37951d4b5",
+    "models/universal_robots_ur10e/assets/wrist2_1.obj": "613d0933859d74cef3afce04023c7bec7e600fef8461bd5a8fa687fc73b5297c",
+    "models/universal_robots_ur10e/assets/wrist2_2.obj": "8c3a94f34998629636c0b947d6f0122dbb675e51fa8885502d20cc1d7fdb7a3c",
+    "models/universal_robots_ur10e/assets/wrist3.obj": "7d125e3585fe8a208042ea1dfd39e178efa946604e0e89c4f7dc1467a6354b22",
+    "models/universal_robots_ur10e/scene.xml": "fc50163a7d83af12d950bddc4df7ff61817895540922a40d23b5855f372888d3",
+    "models/universal_robots_ur10e/ur10e.xml": "a8f709df340788033d497ff7d892fdecab4f6cc9c36299a00f57efa9f25e0744"
+  }
+}
