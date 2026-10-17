@@ -824,20 +824,35 @@ Measured on the development Mac (M2 Pro), Python 3.11, mujoco 3.16.0.
   base sat 0.2 mm above that hull, and the static-base check refused the scene. This was an
   implementation mismatch with §4.1, not a parameter: `Hull_Excess_Max`, `eps` and the margins were
   not changed.
-- **Collision set:**
-  - crop radius 2.026 m (a conservative chain bound: every one of the 2756 components is kept);
-  - 6737 pieces: 2123 hull, 503 thickened (all planar; none collinear), 4110 CoACD, 1 fallback;
-  - bodies: 4739 `env`, 1998 `env_stand`;
-  - conservativeness: 1 702 083 points checked, max 0.99998 mm (≤ eps 1 mm), 0 violations above
-    eps;
-  - excess: max 237.3 mm (the fallback hull of component 1638, an open shell in object (a)),
-    p95 11.5 mm; 405 pieces flagged above 10 mm;
-  - build time 1137 s (CoACD 932 s); 3.0 MB `.npz`.
-- **Scene:** 6806 geoms, 6772 of them collision geoms, 6737 of those environment; build 1.7 s without
-  the visual mesh.
-- **`Check_Clearance(q)`** over 1000 random `q` within the limits: mean 3.18 ms, p95 14.26 ms, max
-  63.6 ms. 714 of the 1000 random poses violate some margin. Whether the §7.2 merge pass is needed
+- **Conservativeness check corrected (owner review, 2026-10-17).** The first build's check stopped
+  at the first part within eps for each point, so its reported maximum (0.99998 mm) was an upper
+  bound capped at eps, not the true maximum. The verdicts were right. The check now computes the
+  exact distance to the union: numpy point-triangle distance, matching trimesh to 4e-11 m, with
+  pieces skipped only when a facet-plane lower bound proves they cannot be closer. Each component
+  has its own seed. Exact recomputation on the old set gave a true maximum of 0.769 mm. Example of
+  the inflation: component 646 was reported 0.943 mm and is truly 0.138 mm.
+  `test/Collision/test_conservativeness.py` pins the pruned computation against the exhaustive one
+  and recomputes the recorded maximum.
+- **Collision set (rebuilt):**
+  - crop radius 2.026 m (a conservative chain bound: all 2756 components are kept);
+  - 6716 pieces: 2125 hull, 503 thickened (all planar), 4087 CoACD, 1 fallback;
+  - bodies: 4575 `env`, 2141 `env_stand`;
+  - conservativeness: 1 601 339 points over the accepted CoACD components; true max 0.769 mm
+    (component 2132); 0 points above 0.9·eps, 0 above 0.99·eps. The one rejected component, 1638
+    (an open shell in object (a)), is at 1.121 mm > eps and is kept as its hull;
+  - excess: max 234.8 mm (that fallback hull), p95 11.3 mm; 396 pieces flagged above 10 mm;
+  - build time 1145 s (CoACD 952 s); 3.6 MB `.npz`.
+  - The piece counts differ slightly from the first build: the per-component seeds changed the
+    excess samples, so a few borderline components fall on the other side of 10 mm.
+- **Scene:** 6785 geoms, 6751 of them collision geoms, 6716 of those environment; build 1.75 s
+  without the visual mesh.
+- **`Check_Clearance(q)`** over 1000 random `q` within the limits: mean 3.10 ms, p95 13.90 ms, max
+  55.4 ms. 714 of the 1000 random poses violate some margin. Whether the §7.2 merge pass is needed
   is a planner-time decision; for the skeleton it is not.
+- **Closest robot ↔ environment pairs at A and B:** shoulder_link ↔ stand profiles at 99.2 mm at
+  both points (the base is excluded from the stand). Against `env` without the stand: A,
+  upper_arm_link ↔ a column of object (a) at 125.0 mm; B, upper_arm_link ↔ the side-table plate at
+  262.7 mm.
 - **MuJoCo FK vs DH** over 1000 random `q`: ≤ 1e-15 m, ≤ 1e-15 rad.
 - **`base – upper_arm_link` true minimum:** 2.3237 mm (grid 2.3263 mm).
 - **A and B against the full environment:** no violation.

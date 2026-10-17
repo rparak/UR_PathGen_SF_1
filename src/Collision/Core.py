@@ -74,6 +74,9 @@ CONST_BODIES = ('env', 'env_stand')
 # hull of a component whose CoACD parts failed the conservativeness check.
 #   Unit [Tuple<string>]
 CONST_METHODS = ('hull', 'thickened', 'coacd', 'fallback')
+# Point-triangle pairs evaluated per chunk by Point_Triangle_Distance (memory bound).
+#   Unit [int]
+CONST_DISTANCE_CHUNK = 2000000
 # Number of largest-excess pieces listed in the manifest.
 #   Unit [int]
 CONST_TOP_EXCESS = 20
@@ -294,46 +297,114 @@ def Sample_Surface(vertices: np.ndarray, faces: np.ndarray, rng: np.random.Gener
     return np.concatenate(samples, axis=0) if samples else np.zeros((0, 3))
 
 
-def Union_Violation(points: np.ndarray, hulls: tp.List[ConvexHull], eps: float, trimesh: tp.Any) -> float:
+def Point_Triangle_Distance(points: np.ndarray, triangles: np.ndarray) -> np.ndarray:
     """
     Description:
-        How far the worst point lies outside the union of convex pieces, decided exactly where it
-        matters. A point is inside a piece when every facet plane has it on the inner side. For a
-        point outside, the Euclidean distance to a piece is at least its largest facet distance, so
-        only pieces whose largest facet distance is <= eps can hold it within eps; the exact
-        distance is computed for those pairs only. Stops at the first point beyond eps.
+        Exact Euclidean distance from each point to the nearest of a set of triangles (closest
+        point on a triangle by its Voronoi regions, Ericson, Real-Time Collision Detection, 5.1.5).
+
+    Args:
+        (1) points [Matrix<float> Nx3]: The points (m).
+        (2) triangles [Tensor<float> Mx3x3]: The triangles (m).
+
+    Returns:
+        (1) parameter [Vector<float> 1xN]: The distances (m).
+    """
+
+    result = np.full(len(points), np.inf)
+    a, b, c = triangles[:, 0], triangles[:, 1], triangles[:, 2]
+    ab, ac = b - a, c - a
+    chunk = max(1, CONST_DISTANCE_CHUNK // max(1, len(triangles)))
+    for start in range(0, len(points), chunk):
+        p = points[start:start + chunk, None, :]
+        ap, bp, cp = p - a, p - b, p - c
+        d1, d2 = np.einsum('ijk,jk->ij', ap, ab), np.einsum('ijk,jk->ij', ap, ac)
+        d3, d4 = np.einsum('ijk,jk->ij', bp, ab), np.einsum('ijk,jk->ij', bp, ac)
+        d5, d6 = np.einsum('ijk,jk->ij', cp, ab), np.einsum('ijk,jk->ij', cp, ac)
+        va, vb, vc = d3 * d6 - d5 * d4, d5 * d2 - d1 * d6, d1 * d4 - d3 * d2
+        with np.errstate(divide='ignore', invalid='ignore'):
+            # Face region (default), then the edge and vertex regions override it.
+            denom = va + vb + vc
+            v, w = vb / denom, vc / denom
+            closest = a + v[..., None] * ab + w[..., None] * ac
+            # Edge BC.
+            mask = (va <= 0.0) & ((d4 - d3) >= 0.0) & ((d5 - d6) >= 0.0)
+            t = (d4 - d3) / ((d4 - d3) + (d5 - d6))
+            closest = np.where(mask[..., None], b + t[..., None] * (c - b), closest)
+            # Edge AC.
+            mask = (vb <= 0.0) & (d2 >= 0.0) & (d6 <= 0.0)
+            t = d2 / (d2 - d6)
+            closest = np.where(mask[..., None], a + t[..., None] * ac, closest)
+            # Edge AB.
+            mask = (vc <= 0.0) & (d1 >= 0.0) & (d3 <= 0.0)
+            t = d1 / (d1 - d3)
+            closest = np.where(mask[..., None], a + t[..., None] * ab, closest)
+        # Vertex regions.
+        closest = np.where(((d6 >= 0.0) & (d5 <= d6))[..., None], c, closest)
+        closest = np.where(((d3 >= 0.0) & (d4 <= d3))[..., None], b, closest)
+        closest = np.where(((d1 <= 0.0) & (d2 <= 0.0))[..., None], a, closest)
+        result[start:start + chunk] = np.min(np.linalg.norm(p - closest, axis=2), axis=1)
+    return result
+
+
+def Union_Distances(points: np.ndarray, hulls: tp.List[ConvexHull], pruned: bool = True) -> np.ndarray:
+    """
+    Description:
+        The exact distance of each point outside the union of convex pieces (0 inside). A point is
+        inside a piece when no facet plane has it on the outer side. Outside every piece, its
+        distance to the union is the minimum over the pieces of the exact distance to each piece's
+        boundary triangles.
+
+        With pruned=True a piece is skipped for a point when its largest facet distance (a lower
+        bound of the Euclidean distance to that piece) is already >= the best distance found; this
+        never changes the result. With pruned=False every piece is evaluated (the reference).
 
     Args:
         (1) points [Matrix<float> Nx3]: The points (m).
         (2) hulls [List<ConvexHull>]: The pieces.
-        (3) eps [float]: The tolerance (m).
-        (4) trimesh [module]: The trimesh module (injected; imported only by the build).
+        (3) pruned [bool]: Skip pieces that provably cannot be closer.
 
     Returns:
-        (1) parameter [float]: The largest outside distance found (m); a value > eps is a lower
-                               bound of the first violating point's distance.
+        (1) parameter [Vector<float> 1xN]: Outside distance per point (m); inf when there are no pieces.
     """
 
     if not hulls:
-        return float('inf')
-    facet = np.stack([np.max(points @ h.equations[:, :3].T + h.equations[:, 3], axis=1) for h in hulls], axis=1)
-    best = np.min(facet, axis=1)
-    worst = 0.0
-    meshes: tp.Dict[int, tp.Any] = {}
-    for i in np.nonzero(best > 0.0)[0]:
-        candidates = np.nonzero(facet[i] <= eps)[0]
-        distance = float('inf')
-        for k in candidates:
-            if k not in meshes:
-                meshes[k] = trimesh.Trimesh(hulls[k].points, hulls[k].simplices, process=False)
-            _, d, _ = trimesh.proximity.closest_point(meshes[k], points[i:i + 1])
-            distance = min(distance, float(d[0]))
-            if distance <= eps:
-                break
-        if distance > eps:
-            return max(distance if np.isfinite(distance) else float(best[i]), float(best[i]))
-        worst = max(worst, distance)
-    return worst
+        return np.full(len(points), np.inf)
+    bound = np.stack([np.max(points @ h.equations[:, :3].T + h.equations[:, 3], axis=1) for h in hulls], axis=1)
+    distance = np.where(np.min(bound, axis=1) <= 0.0, 0.0, np.inf)
+    outside = np.nonzero(distance > 0.0)[0]
+    if outside.size == 0:
+        return distance
+    best = np.full(outside.size, np.inf)
+    for k in np.argsort(np.min(bound[outside], axis=0)):
+        todo = np.nonzero(bound[outside, k] < best)[0] if pruned else np.arange(outside.size)
+        if todo.size == 0:
+            continue
+        triangles = hulls[k].points[hulls[k].simplices]
+        best[todo] = np.minimum(best[todo], Point_Triangle_Distance(points[outside[todo]], triangles))
+    distance[outside] = best
+    return distance
+
+
+def Conservativeness_Points(vertices: np.ndarray, faces: np.ndarray, seed: int, component: int) -> np.ndarray:
+    """
+    Description:
+        The points a CoACD component is checked on: its vertices, plus area-uniform samples of its
+        surface at CONST_SAMPLE_DENSITY with at least one per triangle (its centroid), from the
+        generator seeded [seed, component]. A large flat triangle can leave a union of convex
+        parts while its three vertices stay inside; the samples see that.
+
+    Args:
+        (1 - 2) vertices, faces [Matrix<float> Nx3, Matrix<int> Mx3]: The component.
+        (3 - 4) seed, component [int]: The build seed and the component id.
+
+    Returns:
+        (1) parameter [Matrix<float> Kx3]: The points (m).
+    """
+
+    rng = np.random.default_rng([seed, component, 1])
+    return np.concatenate([vertices, Sample_Surface(vertices, faces, rng, CONST_SAMPLE_DENSITY, 0, None,
+                                                    per_triangle=True)], axis=0)
 
 
 def Piece_Excess(hull: ConvexHull, original: tp.Any, trimesh: tp.Any, rng: np.random.Generator) -> float:
@@ -388,7 +459,6 @@ def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequ
     import trimesh
     import coacd
     report = progress_cb if progress_cb is not None else (lambda message: None)
-    rng = np.random.default_rng(seed)
     timing: tp.Dict[str, float] = {}
 
     # 1\ Components and the crop.
@@ -412,8 +482,7 @@ def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequ
     t_hull = t_coacd = t_check = 0.0
     coacd.set_log_level('error')
     stand_lo, stand_hi = np.asarray(stand_min), np.asarray(stand_max)
-    conservative_points = 0
-    conservative_worst = 0.0
+    checked: tp.List[tp.Dict] = []
     degenerate_kinds = {'planar': 0, 'collinear': 0, 'point': 0}
     for done, (c, used, f) in enumerate(kept):
         V = vertices[used]
@@ -430,6 +499,8 @@ def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequ
             degenerate_kinds[kind] += 1
             hull, volume = Hull_Of(thick)
             method = 'thickened'
+        # One generator per component, so every component's samples are reproducible on their own.
+        rng = np.random.default_rng([seed, int(c)])
         excess = Piece_Excess(hull, original, trimesh, rng)
         t_hull += time.time() - t
         pieces = [(hull, method, excess)]
@@ -439,12 +510,17 @@ def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequ
             hulls = [h for h in (Hull_Of(np.asarray(p[0], dtype=float))[0] for p in parts) if h is not None]
             t_coacd += time.time() - t
             t = time.time()
-            test = np.concatenate([V, Sample_Surface(V, F, rng, CONST_SAMPLE_DENSITY, 0, None, per_triangle=True)], axis=0)
-            worst = Union_Violation(test, hulls, eps, trimesh)
-            conservative_points += len(test)
+            test = Conservativeness_Points(V, F, seed, int(c))
+            distance = Union_Distances(test, hulls)
+            worst = float(np.max(distance))
+            checked.append({'component': int(c), 'points': int(len(test)), 'max_m': worst,
+                            'above_0.9_eps': int(np.sum(distance > 0.9 * eps)),
+                            'above_0.99_eps': int(np.sum(distance > 0.99 * eps)),
+                            'outside_points': int(np.sum(distance > 0.0)),
+                            'p99_outside_m': float(np.percentile(distance[distance > 0.0], 99)) if np.any(distance > 0.0) else 0.0,
+                            'accepted': bool(hulls and worst <= eps)})
             t_check += time.time() - t
             if hulls and worst <= eps:
-                conservative_worst = max(conservative_worst, worst)
                 pieces = [(h, 'coacd', Piece_Excess(h, original, trimesh, rng)) for h in hulls]
             else:
                 pieces = [(hull, 'fallback', excess)]
@@ -464,6 +540,7 @@ def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequ
     timing.update({'hull_and_excess': t_hull, 'coacd': t_coacd, 'conservativeness_check': t_check})
 
     # 3\ Metrics.
+    accepted = [r for r in checked if r['accepted']]
     excess = np.asarray(out.Excess)
     top = np.argsort(-excess)[:CONST_TOP_EXCESS]
     flagged = [i for i in range(len(excess)) if excess[i] > hull_excess_max]
@@ -478,10 +555,15 @@ def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequ
         'pieces_by_method': {m: out.Methods.count(m) for m in CONST_METHODS},
         'pieces_by_body': {b: out.Bodies.count(b) for b in CONST_BODIES},
         'conservativeness': {'note': 'hull and thickened pieces are conservative by convexity; CoACD components '
-                                     'are checked on their vertices and 1 sample/cm^2 (>= 1 per triangle)',
-                             'points_checked': int(conservative_points),
-                             'max_violation_m': float(conservative_worst),
-                             'violations_above_eps': 0},
+                                     'are checked on their vertices and 1 sample/cm^2 (>= 1 per triangle, seed '
+                                     '[seed, component]) with the exact distance to the union of their parts',
+                             'points_checked': int(sum(r['points'] for r in accepted)),
+                             'max_violation_m': float(max((r['max_m'] for r in accepted), default=0.0)),
+                             'points_above_0.9_eps': int(sum(r['above_0.9_eps'] for r in accepted)),
+                             'points_above_0.99_eps': int(sum(r['above_0.99_eps'] for r in accepted)),
+                             'violations_above_eps': 0,
+                             'largest': sorted(accepted, key=lambda r: -r['max_m'])[:CONST_TOP_EXCESS // 2],
+                             'rejected': [r for r in checked if not r['accepted']]},
         'excess': {'max_m': float(excess.max()) if excess.size else 0.0,
                    'p95_m': float(np.percentile(excess, 95)) if excess.size else 0.0,
                    'largest': [{'piece': int(i), 'component': out.Components[i], 'method': out.Methods[i],

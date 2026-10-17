@@ -43,7 +43,7 @@ from scipy.optimize import minimize
 #   ../src/Scene/Core — the scene under test
 from Scene.Core import Scene_Cls, Scene_Error_Cls, Clearance_Error_Cls, Check_Learned_Point
 #   ../src/Kinematics/Core — the DH truth
-from Kinematics.Core import DH_FK, TCP_Pose, Geodesic_Angle
+from Kinematics.Core import DH_FK, TCP_Pose, Geodesic_Angle, Matrix_To_Pose
 
 """
 Description:
@@ -309,8 +309,9 @@ def test_a_pose_pushed_into_the_side_table_is_a_collision(scene, cfg, points):
     violations = scene.Check_Clearance(trial)
     assert any(v.Body_2.startswith('env') or v.Body_1.startswith('env') for v in violations)
     assert min(v.Distance for v in violations) < 0.0
-    point = dataclasses.replace(points['drop_rot_01'], Q=list(trial))
-    with pytest.raises(Exception):
+    # A consistent point (its _p is the FK of its _q), so it is the clearance check that refuses it.
+    point = dataclasses.replace(points['drop_rot_01'], Q=list(trial), P=Matrix_To_Pose(TCP_Pose(trial, cfg.TCP_Offset)))
+    with pytest.raises(Clearance_Error_Cls, match='drop_rot_01 violates'):
         Check_Learned_Point(scene, cfg, point)
 
 

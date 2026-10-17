@@ -134,6 +134,22 @@ make a check pass.
 
 Pinned by `test/Collision/test_core.py::test_components_are_split_at_non_manifold_edges`.
 
+## CoACD parts are checked with the exact distance to their union
+
+**Decision.** `Union_Distances` computes, for each check point, the exact distance to the union of a
+component's CoACD parts: numpy point-triangle distance (Ericson), with a part skipped only when its
+largest facet-plane distance proves it cannot be closer. There is no early exit, so the recorded
+maximum is the true one. Every component has its own seed.
+
+**Why.** Corrected 2026-10-17: the first check stopped at the first part within eps for each point,
+which capped the reported maximum just below eps (0.99998 mm) while the true maximum was 0.769 mm.
+The verdicts were unaffected.
+
+**Alternatives.** trimesh closest-point per point: exact but slow, and it would bring trimesh into
+the tests.
+
+Pinned by `test/Collision/test_conservativeness.py`.
+
 ## The crop sphere is a conservative chain bound
 
 **Decision.** The crop radius is the sum of the body offsets from the shoulder plus each body's
