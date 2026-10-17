@@ -174,3 +174,18 @@ def test_at_pi_the_first_nonzero_component_is_positive(axis):
     first = next(c for c in r if abs(c) > 1e-9)
     assert first > 0.0
     assert Geodesic_Angle(Rotvec_To_Matrix(r), Rotvec_To_Matrix(math.pi * axis)) < 1e-9
+
+
+def test_rotations_on_either_side_of_pi_are_close():
+    """
+    Description:
+        Rotations by pi - 1e-3 and pi + 1e-3 about the same axis differ by 2e-3 rad, but their
+        normalised rotation vectors point in opposite directions (component-wise ~2*pi apart). The
+        geodesic angle must give 2e-3 rad; a component-wise comparison gives ~6.28.
+    """
+
+    axis = np.array([0.6, -0.48, 0.64])
+    axis /= np.linalg.norm(axis)
+    below, above = Rotvec_To_Matrix((math.pi - 1e-3) * axis), Rotvec_To_Matrix((math.pi + 1e-3) * axis)
+    assert np.linalg.norm(Matrix_To_Rotvec(below) - Matrix_To_Rotvec(above)) > 6.0
+    assert Geodesic_Angle(below, above) == pytest.approx(2e-3, abs=1e-12)
