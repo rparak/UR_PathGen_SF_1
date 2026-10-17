@@ -117,6 +117,30 @@ def Replay_Frames(waypoints: tp.List[np.ndarray], joint: int, rate: float, fps: 
     return frames
 
 
+def Check_Motion(scene: Scene_Cls, waypoints: tp.List[np.ndarray]) -> tp.Tuple[str, int, tp.List[tp.Tuple[int, tp.Any]]]:
+    """
+    Description:
+        Check every joint-linear segment between consecutive waypoints, as movej moves, and choose
+        the label from the result: CONST_LABEL_CHECKED only when no sample violates a margin.
+
+    Args:
+        (1) scene [Scene_Cls(object)]: The scene with the environment.
+        (2) waypoints [List<Vector<float> 1x6>]: The waypoints (rad).
+
+    Returns:
+        (1) parameter [Tuple<string, int, List<Tuple<int, Violation_Str>>>]: The label, the number of
+            samples, and every (global sample index, violation).
+    """
+
+    samples, violations = 0, []
+    for a, b in zip(waypoints[:-1], waypoints[1:]):
+        count, found = scene.Check_Segment(a, b)
+        violations += [(samples + k, v) for k, v in found]
+        samples += count
+    label = CONST_LABEL_CHECKED if not violations else CONST_LABEL_UNCHECKED
+    return label, samples, violations
+
+
 def main():
     """
     Description:
@@ -150,12 +174,7 @@ def main():
 
     # 2\ Check the whole motion first; the label follows from the result.
     waypoints = Motion_Waypoints(start, CONST_JOINT, math.radians(CONST_AMPLITUDE))
-    samples, violations = 0, []
-    for a, b in zip(waypoints[:-1], waypoints[1:]):
-        count, found = scene.Check_Segment(a, b)
-        samples += count
-        violations += found
-    label = CONST_LABEL_CHECKED if not violations else CONST_LABEL_UNCHECKED
+    label, samples, violations = Check_Motion(scene, waypoints)
     if violations:
         worst = {}
         for _, v in violations:

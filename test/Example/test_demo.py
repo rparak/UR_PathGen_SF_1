@@ -107,3 +107,22 @@ def test_the_segment_check_samples_densely_enough(scene, cfg, points):
     samples = scene.Segment_Samples(start, end)
     step = np.abs(np.diff(samples, axis=0)).max(axis=0)
     assert float(np.dot(step, scene.Joint_Levers())) <= cfg.Clearance_Environment / 4.0 + 1e-12
+
+
+def test_a_motion_into_the_side_table_is_labelled_unchecked(root, scene, points):
+    """
+    Description:
+        The label follows the check, not the motion: drop_rot_01 lowered by the shoulder until the
+        gripper is in the side table (+0.9 rad: TCP at z = 0.676 m, below the 0.715 m plate) gets "VISUAL ONLY -
+        UNCHECKED" with its violations, while the shipped motion gets "clearance checked".
+    """
+
+    demo = _Demo_Module(root)
+    start = np.array(points['drop_rot_01'].Q)
+    into_table = start + np.array([0.0, 0.9, 0.0, 0.0, 0.0, 0.0])
+    label, samples, violations = demo.Check_Motion(scene, [start, into_table])
+    assert label == 'VISUAL ONLY - UNCHECKED'
+    assert violations and samples > 1
+    assert any(v.Body_1.startswith('env') or v.Body_2.startswith('env') for _, v in violations)
+    shipped = demo.Motion_Waypoints(np.array(points['home_safe'].Q), 0, math.radians(45.0))
+    assert demo.Check_Motion(scene, shipped)[0] == 'clearance checked'
