@@ -347,19 +347,55 @@ def Make_Document(points: tp.Sequence[Robot_Point_Str], header: tp.Sequence[str]
     return document
 
 
-def Write_Movej_Sequence(names: tp.Sequence[str]) -> str:
+def Write_Movej_Sequence(names: tp.Sequence[str], a_token: str, v_token: str) -> str:
     """
     Description:
-        One 'movej(<name>_q, r=0)' line per point. Joint targets only, never movej(p[...]): with a
-        pose the robot solves its own inverse kinematics and may pick another branch. a and v are
-        omitted (URScript defaults; the operator sets the speed), and r=0 is explicit because a
-        blend leaves the checked joint-linear segment.
+        One 'movej(<name>_q, a=<a>, v=<v>, r=0)' line per point. Joint targets only, never
+        movej(p[...]): with a pose the robot solves its own inverse kinematics and may pick another
+        branch. a and v are the program's tokens, so a generated move runs at the speed the
+        duration estimate assumes; r=0 is explicit because a blend leaves the checked joint-linear
+        segment (SPEC 10.4).
 
     Args:
         (1) names [List<string>]: Point names in motion order.
+        (2 - 3) a_token, v_token [string]: Joint acceleration (rad/s^2) and speed (rad/s), as written.
 
     Returns:
         (1) parameter [string]: The lines, newline-terminated.
     """
 
-    return ''.join('movej(%s_q, r=0)\n' % name for name in names)
+    return ''.join('movej(%s_q, a=%s, v=%s, r=0)\n' % (name, a_token, v_token) for name in names)
+
+
+def Write_Motion_Sequence(entries: tp.Sequence[tp.Tuple[str, str]], header: tp.Sequence[str], a_token: str,
+                          v_token: str) -> str:
+    """
+    Description:
+        A motion sequence in program order: ('movej', name) becomes a generated movej to <name>_q
+        (Write_Movej_Sequence), ('program', line) a program line copied verbatim without its
+        indentation (the robot program's own a, v and r included), ('comment', text) a '# ' line.
+
+    Args:
+        (1) entries [List<Tuple<string, string>>]: The entries in order.
+        (2) header [List<string>]: Comment lines, each starting with '#'.
+        (3 - 4) a_token, v_token [string]: The generated movej's acceleration and speed, as written.
+
+    Returns:
+        (1) parameter [string]: The file content, newline-terminated.
+    """
+
+    out = []
+    for line in header:
+        if not line.startswith('#'):
+            raise URScript_Error_Cls('A header line must start with "#": %s' % line)
+        out.append(line + '\n')
+    for kind, value in entries:
+        if kind == 'movej':
+            out.append(Write_Movej_Sequence([value], a_token, v_token))
+        elif kind == 'program':
+            out.append(value.lstrip() + '\n')
+        elif kind == 'comment':
+            out.append('# %s\n' % value)
+        else:
+            raise URScript_Error_Cls('A motion-sequence entry is movej, program or comment, not %r.' % (kind,))
+    return ''.join(out)

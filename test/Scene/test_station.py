@@ -27,6 +27,8 @@ import dataclasses
 import numpy as np
 # Pytest (Testing framework) [pip3 install pytest]
 import pytest
+# MuJoCo (Physics simulator) [pip3 install mujoco]
+import mujoco
 # Custom Lib.:
 #   ../src/Scene/Core — the scene and the taught / generated rule under test
 from Scene.Core import Scene_Cls
@@ -198,3 +200,31 @@ def test_the_early_exit_check_agrees_with_the_full_check(scenes, plc_points):
                 assert fast == full, (case, a, list(target))
                 verdicts.append(full)
     assert any(verdicts) and not all(verdicts)
+
+
+def test_the_environment_distance_equals_the_exact_distance(scenes, plc_points):
+    """
+    Description:
+        Environment_Distance (raised margins, one collision pass) equals the smallest
+        mj_geomDistance between every robot geom (the static base excluded, as in the scene) and
+        every environment geom, capped at 30 mm, on samples of Waypoint_1 -> Waypoint_2 that
+        include distances in the 20 - 30 mm band, which contacts at the normal margins never show.
+    """
+
+    scene = scenes['open']
+    m, d = scene.Model, scene.Data
+    env = [g for g in range(m.ngeom) if m.geom_contype[g] and m.body(m.geom_bodyid[g]).name.startswith('env')]
+    robot = [g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0
+             and not m.body(m.geom_bodyid[g]).name.startswith('env') and m.body(m.geom_bodyid[g]).name != 'base']
+    samples = scene.Segment_Samples(plc_points['Waypoint_1'].Q, plc_points['Waypoint_2'].Q)
+    band = 0
+    for q in samples[1650:1800:10]:
+        measured = scene.Environment_Distance(q, 0.030)[0]
+        scene.Set_Joints(q)
+        exact = 0.030
+        for g in robot:
+            for e in env:
+                exact = min(exact, mujoco.mj_geomDistance(m, d, g, e, exact, None))
+        assert abs(measured - exact) < 1e-6, (measured, exact)
+        band += int(0.020 < exact < 0.030)
+    assert band > 0

@@ -294,6 +294,9 @@ class Scene_Cls(object):
                                        and not m.body(m.geom_bodyid[g]).name.startswith('env')])
         self.__robot_local = [self.__Geom_Local(g) for g in self.__robot_geoms]
         self.__robot_rbound = np.array([float(np.max(np.linalg.norm(local, axis=1))) for local in self.__robot_local])
+        # Environment geoms, whose margins Environment_Distance raises for one collision pass.
+        self.__env_geoms = np.array([g for g in range(m.ngeom) if m.geom_contype[g]
+                                     and m.body(m.geom_bodyid[g]).name.startswith('env')], dtype=int)
         self.__Set_Gripper()
         self.Set_Joints(np.zeros(6))
         if with_environment:
@@ -855,6 +858,40 @@ class Scene_Cls(object):
                 worst[body] = max(worst.get(body, 0.0), excursion)
         return [Violation_Str(body, 'workspace', -e, 0.0) for body, e in sorted(worst.items(), key=lambda x: -x[1])]
 
+    def Environment_Distance(self, q: tp.Sequence[float], distmax: float) -> tp.Tuple[float, str]:
+        """
+        Description:
+            The smallest robot - environment distance at q, capped at distmax. MuJoCo generates a
+            contact below the sum of the two geom margins (SPEC 9.7), so the environment margins are
+            raised for one collision pass to distmax - Clearance.Self and restored; the exclusions
+            apply as in Check_Clearance (base - env_stand is never reported).
+
+        Args:
+            (1) q [Vector<float> 1x6]: Joint angles (rad).
+            (2) distmax [float]: The cap (m); larger than Clearance.Self.
+
+        Returns:
+            (1) parameter [Tuple<float, string>]: The distance (m), at most distmax (negative when
+                                                  penetrating), and the robot body ('' at the cap).
+        """
+
+        m, d = self.__model, self.__data
+        saved = m.geom_margin[self.__env_geoms].copy()
+        try:
+            m.geom_margin[self.__env_geoms] = distmax - self.__cfg.Clearance_Self
+            self.Set_Joints(q)
+            mujoco.mj_collision(m, d)
+            best, body = distmax, ''
+            env = set(self.__env_geoms.tolist())
+            for i in range(d.ncon):
+                contact = d.contact[i]
+                if (contact.geom1 in env) != (contact.geom2 in env) and contact.dist < best:
+                    robot = contact.geom2 if contact.geom1 in env else contact.geom1
+                    best, body = float(contact.dist), m.body(m.geom_bodyid[robot]).name
+        finally:
+            m.geom_margin[self.__env_geoms] = saved
+        return best, body
+
     def Check_Configuration(self, q: tp.Sequence[float], kind: str = 'generated',
                             station_tcps: tp.Optional[np.ndarray] = None) -> tp.List[Violation_Str]:
         """
@@ -878,11 +915,29 @@ class Scene_Cls(object):
             raise Scene_Error_Cls('A segment is either "taught" or "generated", not %r.' % (kind,))
         if kind == 'taught':
             return self.Check_Clearance(q, station_zone=True)
-        tcps = np.zeros((0, 3)) if station_tcps is None else station_tcps
-        tcp = (self.Base_Frame() @ TCP_Pose(q, self.__cfg.TCP_Offset))[:3, 3]
-        near = bool(len(tcps)) and bool(np.min(np.linalg.norm(tcps - tcp, axis=1)) <= self.__cfg.Station_Zone_Endpoint_Radius)
+        near = self.Near_Station(q, station_tcps)
         # Check_Clearance has set the joints.
         return self.Check_Clearance(q, station_zone=near) + self.__Workspace_Current()
+
+    def Near_Station(self, q: tp.Sequence[float], station_tcps: tp.Optional[np.ndarray]) -> bool:
+        """
+        Description:
+            Whether the TCP at q lies within Clearance.Station_Zone.Endpoint_Radius of a station
+            point's TCP.
+
+        Args:
+            (1) q [Vector<float> 1x6]: Joint angles (rad).
+            (2) station_tcps [Matrix<float> Nx3]: The station points' TCPs (Station_TCPs); none = no
+                                                  neighbourhood.
+
+        Returns:
+            (1) parameter [bool]: True inside the neighbourhood.
+        """
+
+        if station_tcps is None or not len(station_tcps):
+            return False
+        tcp = (self.Base_Frame() @ TCP_Pose(q, self.__cfg.TCP_Offset))[:3, 3]
+        return bool(np.min(np.linalg.norm(station_tcps - tcp, axis=1)) <= self.__cfg.Station_Zone_Endpoint_Radius)
 
     def Station_Zone_Active(self, q: tp.Sequence[float], station_q: tp.Sequence[tp.Sequence[float]]) -> bool:
         """

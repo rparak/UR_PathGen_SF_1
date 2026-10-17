@@ -30,7 +30,7 @@ import pytest
 # Custom Lib.:
 #   ../src/URScript/Core — the reader and writer under test
 from URScript.Core import (Read_URScript, Write_URScript, Write_Movej_Sequence, Make_Generated_Point, Make_Document,
-                           Format_Generated, URScript_Error_Cls, Read_Program_Excerpt)
+                           Format_Generated, URScript_Error_Cls, Read_Program_Excerpt, Write_Motion_Sequence)
 
 """
 Description:
@@ -295,7 +295,25 @@ def test_joint_values_are_never_wrapped():
 def test_movej_uses_joint_targets_and_no_blend():
     """
     Description:
-        Each line is movej(<name>_q, r=0): joint targets only, never a pose, and no blend.
+        Each line is movej(<name>_q, a=<a>, v=<v>, r=0): joint targets only, never a pose, the
+        given a and v tokens as written, and no blend.
     """
 
-    assert Write_Movej_Sequence(['home_safe', 'drop_rot_01']) == 'movej(home_safe_q, r=0)\nmovej(drop_rot_01_q, r=0)\n'
+    assert (Write_Movej_Sequence(['home_safe', 'drop_rot_01'], '1.3962634015954636', '1.0471975511965976')
+            == 'movej(home_safe_q, a=1.3962634015954636, v=1.0471975511965976, r=0)\n'
+               'movej(drop_rot_01_q, a=1.3962634015954636, v=1.0471975511965976, r=0)\n')
+
+
+def test_a_motion_sequence_writes_generated_moves_program_lines_and_comments():
+    """
+    Description:
+        A generated entry becomes movej(<name>_q, a, v, r=0), a program line is copied without its
+        indentation, a comment gets '# '; the header comes first and an unknown entry is refused.
+    """
+
+    text = Write_Motion_Sequence([('movej', 'via_a_b_01'), ('program', '        movel(Waypoint_4_p, a=1.2, v=0.25)'),
+                                  ('comment', 'Gripper open')], ['# head'], '1.4', '1.05')
+    assert text == ('# head\nmovej(via_a_b_01_q, a=1.4, v=1.05, r=0)\nmovel(Waypoint_4_p, a=1.2, v=0.25)\n'
+                    '# Gripper open\n')
+    with pytest.raises(URScript_Error_Cls, match='movej, program or comment'):
+        Write_Motion_Sequence([('movel', 'x')], [], '1', '1')

@@ -35,6 +35,20 @@ Linux:
 
 In the viewer, collision geometry is in geom group 3 (toggle with the `3` key).
 
+Plan the transfer segments of the rotation sequence (cases 17 and 18; about 35 minutes, writes
+`Data/Generated/` and prints the taught vs optimised report):
+
+```bash
+.venv/bin/python Example/plan_rotation.py
+```
+
+Replay taught vs optimised (macOS: `mjpython`), or write screenshots instead of opening the viewer:
+
+```bash
+.venv/bin/mjpython Example/replay_rotation.py --case 17 --segment S2
+.venv/bin/python Example/replay_rotation.py --case 17 --segment S2 --screenshots <directory>
+```
+
 Rebuild the environment collision set after the STL changes (takes several minutes, runs CoACD):
 
 ```bash

@@ -1,0 +1,20 @@
+# Rotation sequence of sf1_plc_v4.script, case 17, home -> ... -> home; the robot starts at home_q.
+# Generated movej use the program's a and v with r=0; station lines are copied verbatim. Points:
+# SF1_Rotation_17.urscript. Simulation passed != safe on the robot: run it at reduced speed first.
+# S1 (generated): home -> drop_rotate_1
+movej(via_home_drop_rotate_1_01_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
+movej(drop_rotate_1_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
+# Station: drop (verbatim from the program)
+movel(Waypoint_4_p, a=1.2, v=0.25)
+# Gripper open: the program's Robotiq node goes here (rq_set_pos_spd_for(0, 255, 255, "1"))
+movej(get_inverse_kin(Waypoint_5_p, qnear=Waypoint_5_q), a=1.3962634015954636, v=1.0471975511965976)
+# S2 (generated): Waypoint_5 -> Waypoint_18
+movej(via_Waypoint_5_Waypoint_18_01_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
+movej(Waypoint_18_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
+# Station: pick (verbatim from the program)
+movej(get_inverse_kin(pick_rotate_1_p, qnear=pick_rotate_1_q), a=1.3962634015954636, v=1.0471975511965976)
+# Gripper close: the program's Robotiq node goes here (rq_set_pos_spd_for(255, 255, 255, "1"))
+movel(Waypoint_6_p, a=1.2, v=0.25)
+# S3 (generated): Waypoint_6 -> home
+movej(via_Waypoint_6_home_01_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
+movej(home_q, a=1.3962634015954636, v=1.0471975511965976, r=0)

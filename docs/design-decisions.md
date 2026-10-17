@@ -195,8 +195,11 @@ Pinned by `test/Kinematics/test_core.py`.
 
 ## Every emitted movej has r=0 and joint targets only
 
-**Decision.** `Write_Movej_Sequence` writes `movej(<name>_q, r=0)`. `a` and `v` are omitted (URScript
-defaults), and no pose target is ever written.
+**Decision.** `Write_Movej_Sequence` writes `movej(<name>_q, a=<a>, v=<v>, r=0)` and no pose target is
+ever written. *Corrected 2026-10-17 (owner):* `a` and `v` were omitted (URScript defaults); they are
+now the robot program's tokens (1.3962634015954636, 1.0471975511965976), so a generated move runs
+at the speed the duration estimate assumes. Station lines copied verbatim from the program are the
+one exception to "movej with joint targets only" (SPEC §10.4).
 
 **Why.** The check covers the joint-linear segment. A blend leaves it, and a pose target lets the
 robot choose its own IK branch. Speed does not change the path of an unblended `movej`.
@@ -345,3 +348,38 @@ approximation: rejected, it is a second geometry to keep consistent.
 
 Pinned by `test/Scene/test_station.py::test_the_early_exit_check_agrees_with_the_full_check` and
 `test/Scene/test_core.py::test_the_van_der_corput_order_visits_every_sample_once`.
+
+## Generated segments minimise the estimated duration, with a soft clearance penalty
+
+**Decision.** The planner minimises the estimated duration (trapezoid on the leading joint with the
+program's a and v, a stop at every via point) plus w times the sum over samples of
+max(0, 30 mm − d) outside the station neighbourhood; ties go to fewer via points.
+
+**Why.** Cycle time is what the owner optimises; with r = 0 every via point is a stop, so the same
+estimate also rewards fewer via points. An optimiser moves a path up to the hard margin, which has
+no reserve beyond the budget; the penalty prefers clearance above the margin where the geometry is
+not fitted (owner, 2026-10-17). Its weight is the owner's choice after seeing the trade-off.
+
+**Alternatives.** Joint-path length: rejected, it ignores the stops and the leading joint. A larger
+hard margin: rejected, it would fail the station operations the owner tested.
+
+**Revisit if** blends become allowed (then the estimate needs the blend), or real cycle times are
+measured.
+
+Pinned by `test/Planner/test_core.py::test_the_duration_estimates_match_hand_computed_values` and
+`test/Planner/test_core.py::test_the_penalty_counts_only_far_from_the_station`.
+
+## The planner's budgets are iteration counts, so its output is reproducible
+
+**Decision.** Restarts, RRT extensions, shortcut and refinement attempts are counted; every random
+draw comes from a generator seeded with the recorded seed, the segment and the restart. Wall-clock
+time is reported, never used to stop.
+
+**Why.** A time budget makes the output depend on the machine and its load, and two runs would
+differ (owner, 2026-10-17).
+
+**Alternatives.** A time budget with a fixed seed: rejected for that reason.
+
+**Revisit if** planning takes too long on the owner's machine (then the counts change, recorded).
+
+Pinned by `test/Planner/test_core.py::test_a_reduced_planning_run_is_byte_identical_twice`.

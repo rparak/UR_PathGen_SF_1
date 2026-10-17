@@ -83,6 +83,25 @@ the grasp and unload points reach into the modelled parts on the pallet and side
 - **What would close it:** a decomposition of component 1638 that passes the conservativeness check
   (or a measured, simplified machine interior), then a replay of the loading segments.
 
+## Generated transfer segments: estimates, margins without reserve, unproven space
+
+The optimised segments S1 - S3 of the rotation sequence (`Data/Generated/`) pass the full
+generated-rule check in simulation. What that does not cover:
+
+- **Durations are estimates:** a trapezoid on the leading joint with the program's a and v, a stop
+  at every via point; the controller's profile, blends and the gripper's time are not modelled. The
+  cycle-time gain (about 6 s home -> home per case) is not measured.
+- **Clearance has no reserve beyond the margins:** the hard limits are 20 mm, and 5 mm within
+  50 mm of a station point. The clearance penalty (weight 0.5 s/m, pending the owner's decision)
+  keeps the optimised paths at 26.6 mm or more outside the station neighbourhood; without it they
+  went down to 20.4 mm.
+- **Space:** a generated segment stays inside `Clearance.Workspace` (the STL's x/y extents, up to
+  2.35 m, the height the taught program reaches); what lies outside the STL is unknown.
+- **The carried part, cables, Polyscope safety limits** as elsewhere in this file.
+- **Impact:** run every generated path on the robot at reduced speed first, with someone at the
+  stop button; no real robot is available.
+- **Pinned by:** `test/Planner/test_core.py` (the committed paths pass `Verify_Path`).
+
 ## The carried part is not modelled
 
 The gripper holds a 50 × 50 mm part of negligible mass during transit (owner); it is not in the

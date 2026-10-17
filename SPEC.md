@@ -42,6 +42,12 @@ coverage of the carried part is stated as it actually is (§9.6).
 Generate and verify, in simulation, a collision-free joint-space path for the UR10e of cell SF1
 before it is run on the real robot.
 
+**Current goal (owner, 2026-10-17): optimise the 90° part rotation (regrasp) sequence** of the robot
+program `sf1_plc_v4.script` (cases 17 and 18). The station operations stay verbatim; the transfer
+segments between them (S1 home → drop, S2 retreat → approach, S3 lift → home) are generated with
+the planner of §10.6 and compared with the taught baseline. The A → B planner below is the tool for
+that.
+
 Long-term pipeline:
 
 1. Read learned robot positions from a Polyscope `*.urscript` variable file
@@ -76,7 +82,7 @@ at reduced speed first. The tool never claims more than that.
 
 ## 3. Out of scope for the milestone
 
-- The planner (RRT-Connect + shortcutting, ≤ 5 via points) — the first `/feature-manager` task.
+- The planner (RRT-Connect + shortcutting, ≤ 5 via points) — implemented since, §10.6.
 - Modelling the carried part (accepted risk, `KNOWN_ISSUES.md`).
 - Blend radius > 0 and blend-envelope checking. The writer always emits `r=0` (§8.5).
 - Dynamics, payload, cycle time. The simulation is kinematic only.
@@ -394,7 +400,11 @@ src/Configuration/Core.py   Load_Configuration → Cell_Configuration_Str (the o
 src/URScript/Core.py        Read_URScript, Write_URScript, Write_Movej_Sequence (the only URScript reader/writer)
 src/Kinematics/Core.py      UR10e DH FK, rotvec ↔ matrix, Geodesic_Angle, Normalize_Rotvec, Derive_TCP_Offset
 src/Collision/Core.py       Build_Collision_Set, Write_Collision_Set, Read_Collision_Set (the only npz/manifest reader/writer)
-src/Scene/Core.py           Build_Scene (MjSpec), Set_Configuration, Check_Clearance
+src/Scene/Core.py           Build_Scene (MjSpec), Set_Configuration, Check_Clearance, the taught / generated rule
+src/Planner/Core.py         Planner_Cls (direct, RRT-Connect, shortcut, refinement), Verify_Path, duration estimates
+Example/plan_rotation.py    plans S1 - S3 of cases 17 and 18, writes Data/Generated/, prints the report
+Example/replay_rotation.py  viewer replay of taught vs optimised, labelled by the generated rule; screenshots
+Data/Generated/             SF1_Rotation_<case>.urscript (points) and SF1_Rotation_<case>_Sequence.script
 Example/build_collision.py  regenerates CAD/Collision/ from the STL (runs CoACD; not in the test suite)
 Example/demo_rotate_axis.py the viewer demo
 test/<Domain>/test_<module>.py mirroring src/, test/Install/test_install.py, test/Example/test_demo.py
@@ -793,14 +803,19 @@ of both files are identical. The mapping is recorded in that file's comment head
 ### 10.4 Motion output (requirement B)
 
 ```
-movej(<name>_q, r=0)
+movej(<name>_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
 ```
 
-`a` and `v` are omitted, so the robot uses the URScript defaults (a = 1.4 rad/s², v = 1.05 rad/s).
-The operator sets the speed on the robot. Speed does not change the path of a `movej` with `r=0`,
-so it is not the tool's to choose. `r=0` is written explicitly because it is the one argument that
-does change the path. Joint targets only, never `movej(p[...])`. `_p` of via points is
-informational: the robot would otherwise solve its own IK and could pick another branch.
+*Corrected 2026-10-17 (owner):* `a` and `v` are written, as the tokens of the robot program
+`sf1_plc_v4.script`, so a generated move runs at the speed the duration estimate assumes (§10.6).
+Speed does not change the path of a `movej` with `r=0`. `r=0` is written explicitly because it is
+the one argument that does change the path. Joint targets only, never `movej(p[...])`. `_p` of via
+points is informational: the robot would otherwise solve its own IK and could pick another branch.
+
+**Exception: station lines copied verbatim.** In a motion sequence (`Write_Motion_Sequence`) the
+station operations of the robot program are copied verbatim (without indentation), with their own
+`movel(...)` and `movej(get_inverse_kin(<name>_p, qnear=<name>_q), …)` and their a, v, r. They are
+the owner's tested program, not generated output; the gripper nodes are marked by comments.
 
 ### 10.5 Joint branches (requirement C)
 
@@ -808,6 +823,54 @@ Joint values are never wrapped into [−π, π]. UR joints span ±2π and `movej
 value. The planner and writer stay on the branch of A and B. A test feeds A and B through parse →
 path (the milestone's trivial path [A, B]) → write and asserts the tokens are unchanged, plus a
 synthetic point with a joint at 4.0 rad that must come out as 4.0.
+
+### 10.6 Planner and the rotation-sequence output
+
+**Segments.** Per case, S1 home → drop (holding, 50 mm), S2 retreat → approach (open, 85 mm —
+assumption: the full stroke for `rq_set_pos_spd_for(0, ...)`; conservative; not confirmed by the
+owner), S3 lift → home (holding). The ends are the program's `_q` tokens, never wrapped.
+
+**Planner** (`Planner_Cls.Plan`):
+1. Both ends must keep the generated rule (§9.7), else `Planner_Error_Cls`.
+2. The direct segment, if it keeps the rule.
+3. Otherwise each of 20 restarts (generator `[seed, restart]`) runs RRT-Connect in joint space within
+   the joint limits (elbow ±180°): step 0.35 rad (max-joint), samples half from the box around both
+   ends expanded by 1 rad, half from the whole range, ≤ 3000 extensions; then 150 shortcut
+   attempts.
+4. The two fastest paths are refined (150 attempts each, generator `[seed, 1000 + rank]`): a via
+   point is removed or moved by a shrinking random step; a change is kept only if it lowers the
+   cost and both touched segments keep the rule.
+5. The lowest cost wins, ties going to fewer via points, then to the earlier restart. More than 5 via
+   points, or no path, raises `Planner_Error_Cls`.
+
+Edges use `Segment_Valid` (early exit, same verdict as the full check). **Every budget is an
+iteration count**, never a time: the output depends on the inputs and the seed only, and two runs
+are byte-identical. Wall-clock time is reported, never used to stop.
+
+**Objective.** Minimise the estimated duration plus `w` × the clearance penalty; tie-break on fewer
+via points.
+- Estimated duration: the sum over segments of the trapezoid (or triangle) profile of the leading
+  joint from rest to rest, a = 1.3962634015954636 rad/s², v = 1.0471975511965976 rad/s (the
+  program's), r = 0. **An estimate**: the controller's profile, blends and the gripper are not
+  modelled.
+- Clearance penalty: the sum over the samples of every segment of max(0, 30 mm − d), d the smallest
+  robot – environment distance (`Environment_Distance`), for samples whose TCP lies outside the
+  station neighbourhood. The hard margins are unchanged; the penalty only prefers clearance above
+  them. `w` [s/m] is set in `Example/plan_rotation.py`: 0.5, pending the owner's choice (trade-off in §17).
+
+**Final verification.** `Verify_Path` re-checks every segment with the full generated-rule check
+(`Check_Segment`, no early exit, no cache), at most 5 via points, within the joint limits; a path
+that fails is never written.
+
+**Output** (`Example/plan_rotation.py`, `Data/Generated/`):
+- `SF1_Rotation_<case>.urscript`: home and the station points with the program's tokens, then the
+  via points `via_<from>_<to>_<nn>` (§10.1 format, `_p` informational).
+- `SF1_Rotation_<case>_Sequence.script`: home → … → home in program order: generated movej (§10.4)
+  for S1 – S3 and their ends, the station lines copied verbatim, the gripper nodes as comments.
+- The script prints, per segment, taught vs optimised: via points, estimated duration, Σ|Δq|,
+  max-joint length, the smallest robot – environment distance and its robot body, the generated-rule
+  violations, and the home → home totals (station operations estimated with the same model, movel
+  on the TCP path at 1.2 m/s², 0.25 m/s). Every output says simulation passed ≠ safe on the robot.
 
 ## 11. Tests of the first milestone
 
@@ -818,6 +881,7 @@ synthetic point with a joint at 4.0 rad that must come out as 4.0.
 | `test/Kinematics/test_core.py` | `FK_DH(q) · TCP_config` vs `_p`: regression pin (§9.4) of 1.72 mm / 0.261° and 4.02 mm / 0.376° (±0.01 mm / ±0.001°); diagnostic derived TCP pinned the same way and never read by any check; both points within the sanity bound; `Check_Learned_Point` rejects a point beyond it (perturbed `_q`) with the numbers in the message; configured TCP == (0, 0, 0.174, 0, 0, 0); geodesic angle 0 between r and its π-equivalent; `Normalize_Rotvec` rule incl. near-π |
 | `test/Scene/test_core.py` | scene compiles; base body world position == `Base_Position` exactly and yaw == `Base_Yaw`; **at `Base_Yaw` = 90° (a temporary copy of the configuration) `home_safe`'s TCP lands at `Base_Position` + (−y, x, z) of its `_p` within 3 mm, in MuJoCo and through the base frame (the file is in degrees; read as radians the test fails)**; **MuJoCo flange FK (after the MjSpec offset override) == DH flange FK within 1e-9 m / 1e-9 rad (atan2 geodesic, §9.5) for 1000 seeded random joint vectors within the limits**, plus A and B; pad-span hull present in the gripper rigid group; fingers open along flange ±x at `Mount_Yaw` = 0; visual mesh has no hull (`mesh_graphadr = −1`); base↔env build check runs; loader rejects an elbow limit beyond ±180°; gripper opening == `Tool.Opening` ± 0.5 mm, equality residual < 0.1 mm; coupling cylinder present (visual + collision), Menagerie `base_mount` mesh geoms absent, vendored files byte-identical to `models/MANIFEST.json`; pad end from the flange face 163.3 mm open and 176.8 mm closed (± 0.5 mm, manual chain) and the 50 mm values 154.39 / 173.23 mm (± 0.05 mm, regression); exclusion set == configuration expansion + `base–env_stand`, filterparent disabled; joint ranges == `Joint_Position_Limits`; **placement (§4.6): `pick_obj_1..8` on the pallet table, `unload_obj_1..8` on the side table (between the plate top and the highest part), `bench_drop_1..8` inside object (a); the same check at `Base_Yaw` = 0 refuses all 24**; A and B pass `Check_Clearance`, and **any violation fails the test, listing every pair with its distance and margin** (no report-only path); B (`drop_rot_01`) is a strict xfail while the STL does not match the cell at the rotation station (`KNOWN_ISSUES.md`), so it turns red once the geometry is fixed; `hover_unload_2` (clear) pushed into the side table is reported as a collision; a collision set whose recorded component overrides differ from the configuration is refused; the station zone applies to a generated configuration only within `Endpoint_Radius` of a station point (DH distances); a segment kind other than taught/generated is refused; a generated configuration with the tool pointing up above 2.35 m violates the workspace (excursion = the pad end's, from DH), the taught rule does not apply the box; the van der Corput order is a permutation of the samples |
 | `test/Scene/test_station.py` | the taught rotation sequence of cases 17 and 18 (home → … → home, typed from the program, 50 mm holding / 85 mm open) checked as taught has no violation: no penetration, the zone margin at the zone pieces, the global margins elsewhere; as generated, Waypoint_1 → Waypoint_2 violates the 20 mm margin only on samples outside the 50 mm neighbourhood, and drop_rotate_1 → Waypoint_4 is clear only with the station points; the manifest records exactly the fitted overrides, which are the configured ones; the zone holds every piece of the post and the top profile, no piece of the side table, pallet table, machine-interior hull or right window profile; the early-exit check agrees with the full check on 72 seeded segments from the taught points (both verdicts occur) |
+| `test/Planner/test_core.py` | duration estimates against hand-computed values (triangle, trapezoid, leading joint, path sum, movel); the committed paths of both cases pass `Verify_Path`, S2 with fewer via points than taught, S1 and S3 no more; the station points keep their tokens; the sequence file's motion lines are in program order (generated movej with the program's a, v and r=0; station lines verbatim; gripper comments; the safety sentence); one reduced planning run is byte-identical twice; an impossible plan raises (inflated margin, no iterations, six via points); the penalty counts only far from the station |
 | `test/Scene/test_margin.py` | margin accuracy on **mesh hull vs mesh hull** (robot geom on a joint, so not static): a robot link hull at 3 orientations vs a box-hull face, and box-hull edge vs edge; at 10 mm a violation is reported, at 30 mm none; reported distance error < 0.5 mm (prototype: 0.000 mm, §4.5) |
 | `test/Collision/test_core.py` | manifest STL hash == sha256 of the file; `R_crop` ≥ the bound recomputed from the current scene, and no robot collision vertex leaves the sphere over 1000 seeded random `q`; conservativeness violations == 0 at `eps` (vertices + 1 sample/cm² for CoACD components, hull-only exempt); degenerate components thickened and containing the original; excess metrics present and equal to a recomputation on a fixed sample; no robot body at A/B inside a flagged open-shell piece (B a strict xfail while the STL does not match the cell at the rotation station); mismatched hash → `Collision_Error_Cls` |
 | `test/Example/test_demo.py` | headless demo runs N steps without exception; only the chosen joint changes, monotonically between turning points; it stays within `Joint_Position_Limits`; the pre-check runs on the dense segment samples of §9.7; the label equals the check result ("clearance checked" iff no violation, otherwise "VISUAL ONLY — UNCHECKED"); the shipped motion's label is pinned |
@@ -993,5 +1057,23 @@ Measured on the development Mac (M2 Pro), Python 3.11, mujoco 3.16.0.
   (§4.7); 6716 pieces, the same counts by method and body, conservativeness max 0.769 mm, excess max
   234.8 mm / p95 11.3 mm, 396 flagged: every metric is identical to the build without overrides
   (the translation is rigid); build time 1141 s. The manifest records both overrides.
+- **Planner, rotation sequence (2026-10-17, M2 Pro).** Generated rule: 0.28 ms per sample (workspace
+  check 0.05 ms after precomputing bounding points; 9.8 ms before). `Example/plan_rotation.py` with
+  the default budget takes about 36 min for both cases; two full runs gave byte-identical outputs.
+  Every S needs one via point; S2 one instead of three. Penalty weight w, smallest clearance outside
+  the station neighbourhood and estimated duration:
+
+  | Case, S | Taught | w = 0 | w = 0.5 (written, pending the owner) |
+  |---|---|---|---|
+  | 17 S1 | 5.95 s, 26.0 mm | 4.84 s, 24.5 mm | 4.88 s, 27.6 mm |
+  | 17 S2 | 8.30 s, 15.4 mm (fails the generated rule) | 4.51 s, 25.3 mm | 4.51 s, 33.8 mm |
+  | 17 S3 | 6.81 s, 28.5 mm | 5.65 s, 25.6 mm | 5.71 s, 32.9 mm |
+  | 18 S1 | 5.96 s, 26.5 mm | 4.89 s, 23.2 mm | 4.94 s, 26.6 mm |
+  | 18 S2 | 8.29 s, 15.4 mm (fails the generated rule) | 4.48 s, 28.9 mm | 4.47 s, 34.5 mm |
+  | 18 S3 | 6.84 s, 29.5 mm | 5.78 s, 20.4 mm | 5.71 s, 30.4 mm |
+  | home → home 17 / 18 | 23.37 / 23.49 s | 17.32 / 17.54 s | 17.41 / 17.52 s |
+
+  Estimates (§10.6). The optimised paths reach no deeper into the machine window than the taught
+  ones (deepest gripper point x = −0.756 m in both, at the shared station ends).
 - **Demo** (base ±45° around `home_safe`): 1234 joint-linear samples, every margin kept, label
   **"clearance checked"**. At 180° (2026-10-17) the same: 1234 samples, every margin kept.
