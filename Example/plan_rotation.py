@@ -85,8 +85,8 @@ CONST_OPENING = {'S1': 0.050, 'S2': 0.085, 'S3': 0.050}
 # seed * 1000 + case * 10 + k.
 #   Unit [int]
 CONST_SEED = 20261017
-# Weight of the clearance penalty in the objective (SPEC 10.6). Proposed 2026-10-17, pending the
-# owner's decision: against w = 0 it raised the smallest clearance outside the station
+# Weight of the clearance penalty in the objective (SPEC 10.6), chosen by the owner (2026-10-17):
+# against w = 0 it raised the smallest clearance outside the station
 # neighbourhood from 20.4 - 28.9 mm to 26.6 - 34.5 mm for +0.09 / -0.02 s home -> home (cases 17 / 18).
 #   Unit [float] (s/m)
 CONST_PENALTY_WEIGHT = 0.5

@@ -856,7 +856,7 @@ via points.
 - Clearance penalty: the sum over the samples of every segment of max(0, 30 mm − d), d the smallest
   robot – environment distance (`Environment_Distance`), for samples whose TCP lies outside the
   station neighbourhood. The hard margins are unchanged; the penalty only prefers clearance above
-  them. `w` [s/m] is set in `Example/plan_rotation.py`: 0.5, pending the owner's choice (trade-off in §17).
+  them. `w` = 0.5 s/m (owner, 2026-10-17, after the trade-off in §17), set in `Example/plan_rotation.py`.
 
 **Final verification.** `Verify_Path` re-checks every segment with the full generated-rule check
 (`Check_Segment`, no early exit, no cache), at most 5 via points, within the joint limits; a path
@@ -1063,7 +1063,7 @@ Measured on the development Mac (M2 Pro), Python 3.11, mujoco 3.16.0.
   Every S needs one via point; S2 one instead of three. Penalty weight w, smallest clearance outside
   the station neighbourhood and estimated duration:
 
-  | Case, S | Taught | w = 0 | w = 0.5 (written, pending the owner) |
+  | Case, S | Taught | w = 0 | w = 0.5 (chosen, written) |
   |---|---|---|---|
   | 17 S1 | 5.95 s, 26.0 mm | 4.84 s, 24.5 mm | 4.88 s, 27.6 mm |
   | 17 S2 | 8.30 s, 15.4 mm (fails the generated rule) | 4.51 s, 25.3 mm | 4.51 s, 33.8 mm |

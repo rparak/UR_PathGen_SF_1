@@ -353,12 +353,25 @@ Pinned by `test/Scene/test_station.py::test_the_early_exit_check_agrees_with_the
 
 **Decision.** The planner minimises the estimated duration (trapezoid on the leading joint with the
 program's a and v, a stop at every via point) plus w times the sum over samples of
-max(0, 30 mm − d) outside the station neighbourhood; ties go to fewer via points.
+max(0, 30 mm − d) outside the station neighbourhood, w = 0.5 s/m; ties go to fewer via points.
 
 **Why.** Cycle time is what the owner optimises; with r = 0 every via point is a stop, so the same
 estimate also rewards fewer via points. An optimiser moves a path up to the hard margin, which has
 no reserve beyond the budget; the penalty prefers clearance above the margin where the geometry is
-not fitted (owner, 2026-10-17). Its weight is the owner's choice after seeing the trade-off.
+not fitted (owner, 2026-10-17). The owner chose w = 0.5 s/m after this trade-off (estimated
+duration; smallest clearance outside the station neighbourhood):
+
+| Case, S | w = 0 | w = 0.5 |
+|---|---|---|
+| 17 S1 | 4.84 s, 24.5 mm | 4.88 s, 27.6 mm |
+| 17 S2 | 4.51 s, 25.3 mm | 4.51 s, 33.8 mm |
+| 17 S3 | 5.65 s, 25.6 mm | 5.71 s, 32.9 mm |
+| 18 S1 | 4.89 s, 23.2 mm | 4.94 s, 26.6 mm |
+| 18 S2 | 4.48 s, 28.9 mm | 4.47 s, 34.5 mm |
+| 18 S3 | 5.78 s, 20.4 mm | 5.71 s, 30.4 mm |
+| home → home 17 / 18 | 17.32 / 17.54 s | 17.41 / 17.52 s |
+
+At most 0.09 s for about 6 mm more of the smallest clearance.
 
 **Alternatives.** Joint-path length: rejected, it ignores the stops and the leading joint. A larger
 hard margin: rejected, it would fail the station operations the owner tested.
