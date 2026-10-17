@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 # Numpy (Array computing) [pip3 install numpy]
 import numpy as np
 # SciPy (Scientific computing) [pip3 install scipy]
-from scipy.spatial import ConvexHull, QhullError
+from scipy.spatial import ConvexHull, QhullError, cKDTree
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 
@@ -344,6 +344,37 @@ def Point_Triangle_Distance(points: np.ndarray, triangles: np.ndarray) -> np.nda
         closest = np.where(((d3 >= 0.0) & (d4 <= d3))[..., None], b, closest)
         closest = np.where(((d1 <= 0.0) & (d2 <= 0.0))[..., None], a, closest)
         result[start:start + chunk] = np.min(np.linalg.norm(p - closest, axis=2), axis=1)
+    return result
+
+
+def Surface_Distance(points: np.ndarray, vertices: np.ndarray, faces: np.ndarray) -> np.ndarray:
+    """
+    Description:
+        Exact distance from each point to a triangle surface, without testing every triangle: the
+        nearest surface vertex gives an upper bound u; a triangle can be closer only if its centroid
+        lies within u + its own circumradius (about the centroid), so only those are evaluated
+        exactly with Point_Triangle_Distance.
+
+    Args:
+        (1) points [Matrix<float> Nx3]: The points (m).
+        (2 - 3) vertices, faces [Matrix<float> Kx3, Matrix<int> Mx3]: The surface; vertices may be a
+                                                            larger array that faces index into.
+
+    Returns:
+        (1) parameter [Vector<float> 1xN]: The distances (m).
+    """
+
+    triangles = vertices[faces]
+    centroid = triangles.mean(axis=1)
+    radius = np.max(np.linalg.norm(triangles - centroid[:, None, :], axis=2), axis=1)
+    # Only the surface's own vertices bound the distance: the array may hold other surfaces too.
+    upper, _ = cKDTree(vertices[np.unique(faces)]).query(points)
+    tree = cKDTree(centroid)
+    result = np.empty(len(points))
+    for i, (point, bound) in enumerate(zip(points, upper)):
+        near = np.asarray(tree.query_ball_point(point, bound + float(radius.max())), dtype=np.int64)
+        near = near[np.linalg.norm(centroid[near] - point, axis=1) <= bound + radius[near]]
+        result[i] = min(bound, float(Point_Triangle_Distance(point[None], triangles[near])[0])) if near.size else bound
     return result
 
 
