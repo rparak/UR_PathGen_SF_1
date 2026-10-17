@@ -577,9 +577,13 @@ along the path.
 ### 9.7 Clearance check (risk 6, requirement D)
 
 - Implementation: geom margins. Environment geoms get `Clearance.Environment`, robot and gripper
-  geoms get `Clearance.Self`. MuJoCo uses the larger margin of a pair, so robot↔environment pairs
-  are checked at 20 mm and robot↔robot pairs at 5 mm. Contacts with `dist < margin` are
-  violations; `dist < 0` is a collision. The configuration is set with `mj_kinematics` +
+  geoms get `Clearance.Self`. MuJoCo generates a contact while the gap is below the **sum** of the
+  two geom margins (25 mm robot↔environment, 10 mm robot↔robot; measured with mujoco 3.16,
+  `test/Scene/test_margin.py`). That is a superset of the configured margins, and `Check_Clearance`
+  filters every contact by the pair's configured margin itself: the larger geom margin, i.e. 20 mm
+  for robot↔environment and 5 mm for robot↔robot, or the pair override. Contacts with
+  `dist < margin` are violations; `dist < 0` is a collision. (Corrected 2026-10-17: an earlier
+  revision said MuJoCo itself uses the larger margin.) The configuration is set with `mj_kinematics` +
   `mj_collision`, with no dynamics.
 - `Check_Clearance(q)` returns every violating pair (bodies, distance, margin), never just a bool.
 - **Static bodies.** MuJoCo never collides two jointless, world-welded bodies (§4.5). The robot

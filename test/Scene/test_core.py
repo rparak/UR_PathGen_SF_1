@@ -395,3 +395,40 @@ def test_check_learned_point_refuses_a_point_whose_joints_disagree_with_its_pose
     assert match, str(error.value)
     assert abs(float(match.group(1)) - chord) <= 4.1
     assert abs(float(match.group(2)) - math.degrees(0.05)) <= 0.4
+
+
+def test_a_self_pair_inside_5_mm_is_reported(robot_scene, cfg):
+    """
+    Description:
+        A pose (found by seeded random search) where forearm_link and wrist_3_link are 1-5 mm apart,
+        neither excluded nor overridden: Check_Clearance reports exactly that pair with the 5 mm
+        self margin and the distance mj_geomDistance gives.
+    """
+
+    q = [2.3617, -0.3394, -1.1313, 1.0575, 4.4924, -4.9803]
+    distance = robot_scene.Minimum_Distance('forearm_link', 'wrist_3_link', q)
+    assert 0.001 < distance < cfg.Clearance_Self
+    violations = robot_scene.Check_Clearance(q)
+    assert [(v.Body_1, v.Body_2) for v in violations] == [('forearm_link', 'wrist_3_link')]
+    assert violations[0].Margin == cfg.Clearance_Self
+    assert abs(violations[0].Distance - distance) < 1e-4
+
+
+def test_contacts_beyond_the_configured_margin_are_not_violations(scene, cfg):
+    """
+    Description:
+        MuJoCo generates contacts up to the sum of both geom margins (25 / 10 mm); Check_Clearance
+        must filter by the configured margin (20 / 5 mm). Two poses found by seeded random search:
+        a robot - environment contact at 21-24 mm and a robot - robot contact at 6-9 mm are present
+        in MuJoCo's contact list, and neither is a violation.
+    """
+
+    m, d = scene.Model, scene.Data
+    for q, pair, band in (([0.9263, -2.1894, -2.0539, -1.2618, 5.6555, -5.5791], ('env', 'wrist_2_link'), (0.021, 0.024)),
+                          ([-2.4298, -1.9392, 1.2995, -4.1812, -0.7126, 1.3425], ('forearm_link', 'wrist_2_link'),
+                           (0.006, 0.009))):
+        assert scene.Check_Clearance(q) == []
+        contacts = [float(d.contact[i].dist) for i in range(d.ncon)
+                    if tuple(sorted((m.body(m.geom_bodyid[d.contact[i].geom1]).name,
+                                     m.body(m.geom_bodyid[d.contact[i].geom2]).name))) == pair]
+        assert contacts and band[0] < min(contacts) < band[1], (pair, contacts)

@@ -54,8 +54,10 @@ What the scene needs that the vendored files do not say is applied in `Build_Sce
 - The gripper keeps its Menagerie collision geoms at the joint angles that give `Tool.Opening`, plus
   the pad-span hull.
 - Clearance is implemented with geom margins (`Clearance.Environment` on environment geoms,
-  `Clearance.Self` on robot and gripper geoms; MuJoCo uses the larger of a pair); `dist < margin` is a
-  violation, `dist < 0` a collision (SPEC §9.7).
+  `Clearance.Self` on robot and gripper geoms). MuJoCo generates a contact below the **sum** of the
+  two geom margins; `Check_Clearance` filters each contact by the pair's configured margin (the
+  larger geom margin, or a pair override). `dist < margin` is a violation, `dist < 0` a collision
+  (SPEC §9.7).
 
 ## Static bodies never collide with each other ✅
 

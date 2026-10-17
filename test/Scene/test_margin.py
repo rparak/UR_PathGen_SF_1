@@ -37,7 +37,7 @@ Description:
     Initialization of constants.
 
     Margin accuracy of the mechanism Check_Clearance relies on: MuJoCo reports a contact for a geom
-    pair closer than the larger of their margins, with its distance. Tested on mesh hull vs mesh
+    pair closer than the sum of their margins, with its distance (measured, mujoco 3.16). Tested on mesh hull vs mesh
     hull (what the real check uses), with the robot geom on a free joint: MuJoCo never collides two
     static bodies (SPEC 4.5). The true distance is known by construction.
 """
@@ -123,3 +123,33 @@ def test_a_10_mm_gap_violates_the_20_mm_margin_and_30_mm_does_not(root, mode, qu
     assert far == []
     assert abs(near_distance - 0.010) < CONST_DISTANCE_TOLERANCE
     assert abs(far_distance - 0.030) < CONST_DISTANCE_TOLERANCE
+
+
+def test_mujoco_generates_contacts_up_to_the_sum_of_both_margins():
+    """
+    Description:
+        Measured with mujoco 3.16: a contact is generated while the gap is below the SUM of the two
+        geom margins (contact.includemargin = m1 + m2), not the larger one. Check_Clearance relies on
+        this being a superset of its configured margin (20 mm environment, 5 mm self) and filters by
+        the configured margin itself. Two box hulls on free joints: margins 5 + 5 mm give a contact
+        at 9 mm and none at 11 mm; 20 + 5 mm at 24 mm and none at 26 mm.
+    """
+
+    for margins, inside, outside in (((CONST_ROBOT_MARGIN, CONST_ROBOT_MARGIN), 0.009, 0.011),
+                                     ((CONST_ENV_MARGIN, CONST_ROBOT_MARGIN), 0.024, 0.026)):
+        for gap, expected in ((inside, True), (outside, False)):
+            spec = mujoco.MjSpec()
+            spec.add_mesh(name='box', uservert=_Box(0.05, 0.05, 0.05).flatten().tolist())
+            for name, margin in zip(('lower', 'upper'), margins):
+                body = spec.worldbody.add_body(name=name)
+                body.add_freejoint()
+                body.add_geom(name=name, type=mujoco.mjtGeom.mjGEOM_MESH, meshname='box', margin=margin)
+            model = spec.compile()
+            data = mujoco.MjData(model)
+            data.qpos[:] = [0.0, 0.0, 0.5, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6 + gap, 1.0, 0.0, 0.0, 0.0]
+            mujoco.mj_kinematics(model, data)
+            mujoco.mj_collision(model, data)
+            distances = [float(data.contact[i].dist) for i in range(data.ncon)]
+            assert bool(distances) == expected, (margins, gap, distances)
+            assert all(abs(d - gap) < CONST_DISTANCE_TOLERANCE for d in distances)
+            assert all(abs(data.contact[i].includemargin - sum(margins)) < 1e-12 for i in range(data.ncon))
