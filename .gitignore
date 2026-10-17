@@ -1,0 +1,11 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Templates from another project; never committed (owner)
+_source_skills/
+
+# macOS
+.DS_Store
