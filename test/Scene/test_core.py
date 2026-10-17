@@ -41,13 +41,17 @@ import pytest
 import mujoco
 # SciPy (Scientific computing) [pip3 install scipy]
 from scipy.optimize import minimize
+# PyYAML (YAML parser and emitter) [pip3 install pyyaml]
+import yaml
 # Custom Lib.:
 #   ../src/Scene/Core — the scene under test
 from Scene.Core import Scene_Cls, Scene_Error_Cls, Clearance_Error_Cls, Check_Learned_Point
 #   ../src/Kinematics/Core — the kinematic refusal
 from Kinematics.Core import Kinematics_Error_Cls
 #   ../src/Kinematics/Core — the DH truth
-from Kinematics.Core import DH_FK, TCP_Pose, Geodesic_Angle, Matrix_To_Pose
+from Kinematics.Core import DH_FK, TCP_Pose, Geodesic_Angle, Matrix_To_Pose, Pose_To_Matrix
+#   ../src/Configuration/Core — a configuration with another base yaw
+from Configuration.Core import Load_Configuration, CONST_DEFAULT_CONFIG_FILE
 
 """
 Description:
@@ -130,6 +134,30 @@ def test_the_base_sits_at_the_configured_pose(robot_scene, cfg):
     expected = robot_scene.Base_Frame() @ DH_FK(q)
     assert np.allclose(robot_scene.Flange_Pose(), expected, atol=1e-12)
     assert expected[2, 3] > 0.0 and cfg.Base_Position[2] == 0.7152
+
+
+def test_a_base_yaw_of_90_deg_turns_a_known_point_by_90_deg(cfg, points, tmp_path):
+    """
+    Description:
+        Robot.Base_Yaw is written in degrees. At 90 deg, home_safe's TCP - its own _p in the base
+        frame, (x, y, z) - lies at world Base_Position + (-y, x, z), both in MuJoCo (flange * TCP)
+        and through Base_Frame. Tolerance 3 mm: the measured FK residual at home_safe is 1.72 mm
+        (SPEC 4.3). The value read as radians would turn the point by 90 rad (~ 116.6 deg).
+    """
+
+    with open(CONST_DEFAULT_CONFIG_FILE, encoding='utf-8') as handle:
+        data = yaml.safe_load(handle)
+    data['Robot']['Base_Yaw'] = 90.0
+    path = tmp_path / 'cell_yaw_90.yaml'
+    path.write_text(yaml.safe_dump(data), encoding='utf-8')
+    scene = Scene_Cls(Load_Configuration(str(path)), with_environment=False)
+    x, y, z = points['home_safe'].P[:3]
+    expected = np.array(cfg.Base_Position) + np.array([-y, x, z])
+    scene.Set_Joints(points['home_safe'].Q)
+    tcp_mujoco = (scene.Flange_Pose() @ Pose_To_Matrix(cfg.TCP_Offset))[:3, 3]
+    tcp_frame = (scene.Base_Frame() @ TCP_Pose(points['home_safe'].Q, cfg.TCP_Offset))[:3, 3]
+    assert np.linalg.norm(tcp_mujoco - expected) < 0.003, (tcp_mujoco, expected)
+    assert np.linalg.norm(tcp_frame - expected) < 0.003, (tcp_frame, expected)
 
 
 def test_mujoco_flange_equals_dh_flange_for_random_joints(robot_scene, cfg, points):
