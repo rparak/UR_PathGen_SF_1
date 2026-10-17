@@ -812,3 +812,34 @@ milestone keeps the hard error of §9.7.
   (BSD-3-Clause), `robotiq_2f85` (BSD-2-Clause).
 - Universal Robots, UR10e DH parameters (d, a, α as in §9.2), from UR's published "DH parameters for
   calculations of kinematics and dynamics" table.
+
+## 17. Implementation record (skeleton, 2026-10-17)
+
+Measured on the development Mac (M2 Pro), Python 3.11, mujoco 3.16.0.
+
+- **Components are split at manifold edges** (an edge of exactly two faces), as trimesh does and as
+  §4.1 was measured: 2756 components. The first implementation used shared vertices (2270), then
+  any shared edge (2428). With both, the stand frame was one 21 440-face component; its CoACD parts
+  missed eps by 0.12 mm, so it fell back to one hull extending 297 mm beyond the frame. The robot
+  base sat 0.2 mm above that hull, and the static-base check refused the scene. This was an
+  implementation mismatch with §4.1, not a parameter: `Hull_Excess_Max`, `eps` and the margins were
+  not changed.
+- **Collision set:**
+  - crop radius 2.026 m (a conservative chain bound: every one of the 2756 components is kept);
+  - 6737 pieces: 2123 hull, 503 thickened (all planar; none collinear), 4110 CoACD, 1 fallback;
+  - bodies: 4739 `env`, 1998 `env_stand`;
+  - conservativeness: 1 702 083 points checked, max 0.99998 mm (≤ eps 1 mm), 0 violations above
+    eps;
+  - excess: max 237.3 mm (the fallback hull of component 1638, an open shell in object (a)),
+    p95 11.5 mm; 405 pieces flagged above 10 mm;
+  - build time 1137 s (CoACD 932 s); 3.0 MB `.npz`.
+- **Scene:** 6806 geoms, 6772 of them collision geoms, 6737 of those environment; build 1.7 s without
+  the visual mesh.
+- **`Check_Clearance(q)`** over 1000 random `q` within the limits: mean 3.18 ms, p95 14.26 ms, max
+  63.6 ms. 714 of the 1000 random poses violate some margin. Whether the §7.2 merge pass is needed
+  is a planner-time decision; for the skeleton it is not.
+- **MuJoCo FK vs DH** over 1000 random `q`: ≤ 1e-15 m, ≤ 1e-15 rad.
+- **`base – upper_arm_link` true minimum:** 2.3237 mm (grid 2.3263 mm).
+- **A and B against the full environment:** no violation.
+- **Demo** (base ±45° around `home_safe`): 1234 joint-linear samples, every margin kept, label
+  **"clearance checked"**.
