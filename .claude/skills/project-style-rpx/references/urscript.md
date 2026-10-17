@@ -1,9 +1,8 @@
 # URScript - the Polyscope variable files
 
 Learned robot positions come from, and generated via points go back to, a Polyscope `*.urscript`
-variable file (SPEC §1, §10). ✅ = enforced by a test; 📄 = documentation only. The module and its
-tests (`test/URScript/test_core.py`) are planned in SPEC §11 and do not exist yet, so every rule here
-is 📄 until they do.
+variable file (SPEC §1, §10). ✅ = enforced by a test; 📄 = documentation only. The tests are in
+`test/URScript/test_core.py` (and `test/Kinematics/test_core.py` for orientations).
 
 ## The format 📄
 
@@ -29,7 +28,7 @@ global <name>_q=[j0, j1, j2, j3, j4, j5]
 (`Write_URScript`, `Write_Movej_Sequence`). No other module parses or formats these lines - not a
 script, not a test helper (a test compares against literal text, references/python.md > Tests).
 
-## The reader is strict 📄
+## The reader is strict ✅
 
 `URScript_Error_Cls`, with the line number in the message, for:
 
@@ -40,7 +39,7 @@ script, not a test helper (a test compares against literal text, references/pyth
 
 Never a silent skip, never a best-effort parse.
 
-## Tokens are kept, the round trip is byte-identical 📄
+## Tokens are kept, the round trip is byte-identical ✅
 
 - The reader keeps each number's **original token** beside its float. The writer writes learned
   points from the tokens, so `Write_URScript(Read_URScript(text)) == text`, byte for byte.
@@ -50,13 +49,13 @@ Never a silent skip, never a best-effort parse.
   (`0.5` → `.500000000000`, `-0.5` → `-.500000000000`), `-0` written as `0`. Their `_p` comes from DH
   FK · TCP with `Normalize_Rotvec` (SPEC §9.5).
 
-## Joints are never wrapped 📄
+## Joints are never wrapped ✅
 
 UR joints span ±2π and `movej` goes to the exact value. A joint is never wrapped into [−π, π]; the
 planner and writer stay on the branch of A and B. A synthetic joint at 4.0 rad comes out as 4.0
 (SPEC §10.5).
 
-## Motion output: `movej(<name>_q, r=0)` only 📄
+## Motion output: `movej(<name>_q, r=0)` only ✅
 
 ```
 movej(<name>_q, r=0)
@@ -82,7 +81,7 @@ verbatim. The original export is kept as a test fixture, and its number tokens e
 file's (SPEC §10.3). At most **5 via points** per path; more is a failure, never a longer output
 (SPEC §1, §14 risk 8).
 
-## Comparing orientations 📄
+## Comparing orientations ✅
 
 - Always the **geodesic angle**, never component-wise rotation vectors. A rotation vector with
   |r| ≈ π and its equivalent −r′ differ component-wise by ≈ 2π while describing the same rotation

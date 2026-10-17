@@ -2,11 +2,11 @@
 
 The scene is the UR10e and the Robotiq 2F-85 from MuJoCo Menagerie plus the SF1 environment, built
 by `src/Scene/Core.py` (`Build_Scene`) through `mujoco.MjSpec` (SPEC §4.2, §4.5, §7, §9). ✅ =
-enforced by a test; 📄 = documentation only. The scene tests (`test/Scene/test_core.py`,
-`test/Scene/test_margin.py`, `test/Collision/test_core.py`) are planned in SPEC §11 and do not exist
-yet, so every rule here is 📄 until they do.
+enforced by a test; 📄 = documentation only. The tests are in `test/Scene/test_core.py`,
+`test/Scene/test_margin.py`, `test/Collision/test_core.py` and
+`test/Collision/test_conservativeness.py`.
 
-## Vendored models are never edited 📄
+## Vendored models are never edited ✅
 
 - `models/universal_robots_ur10e/` and `models/robotiq_2f85/` are byte-identical to upstream at the
   pinned Menagerie commit, licence files kept (BSD-3-Clause, BSD-2-Clause).
@@ -15,7 +15,7 @@ yet, so every rule here is 📄 until they do.
   not a new baseline.
 - Updating a model is a deliberate change: new commit, new manifest, every pin re-measured.
 
-## Every patch is in code, through MjSpec 📄
+## Every patch is in code, through MjSpec ✅
 
 What the scene needs that the vendored files do not say is applied in `Build_Scene` and recorded in
 `docs/design-decisions.md`, never written into `models/`:
@@ -35,7 +35,7 @@ What the scene needs that the vendored files do not say is applied in `Build_Sce
 - A patch value comes from the configuration or a sourced constant; nothing is tuned to make a pin
   pass (SPEC §9.3 item 5).
 
-## Self-collision exclusions are explicit 📄
+## Self-collision exclusions are explicit ✅
 
 - MuJoCo's automatic parent/child filter is **disabled** (`<flag filterparent="disable"/>`).
 - Only the configured exclusions apply: `Self_Collision.Excluded_Pairs` and every pair inside a
@@ -57,14 +57,14 @@ What the scene needs that the vendored files do not say is applied in `Build_Sce
   `Clearance.Self` on robot and gripper geoms; MuJoCo uses the larger of a pair); `dist < margin` is a
   violation, `dist < 0` a collision (SPEC §9.7).
 
-## Static bodies never collide with each other 📄
+## Static bodies never collide with each other ✅
 
 MuJoCo never collides two jointless, world-welded bodies (SPEC §4.5). The robot `base` is one, so
 `mj_collision` never reports `base` ↔ `env`. Its clearance is a constant, checked once at scene
 build with `mj_geomDistance`; the build fails with the violating pieces if any is below
 `Clearance.Environment`. A test of a margin between two geoms puts at least one on a joint.
 
-## The environment 📄
+## The environment ✅
 
 - **Visual:** `CAD/SF1_Environment.stl` unchanged. MuJoCo's STL loader refuses more than 200 000
   faces (the file has 1 757 948), so the mesh is passed as `uservert`/`userface`, with
