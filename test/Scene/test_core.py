@@ -29,6 +29,8 @@ import hashlib
 import json
 # Math (Mathematical functions)
 import math
+# Regular expressions (Default)
+import re
 # Dataclasses (Data Classes)
 import dataclasses
 # Numpy (Array computing) [pip3 install numpy]
@@ -42,6 +44,8 @@ from scipy.optimize import minimize
 # Custom Lib.:
 #   ../src/Scene/Core — the scene under test
 from Scene.Core import Scene_Cls, Scene_Error_Cls, Clearance_Error_Cls, Check_Learned_Point
+#   ../src/Kinematics/Core — the kinematic refusal
+from Kinematics.Core import Kinematics_Error_Cls
 #   ../src/Kinematics/Core — the DH truth
 from Kinematics.Core import DH_FK, TCP_Pose, Geodesic_Angle, Matrix_To_Pose
 
@@ -368,3 +372,26 @@ def test_the_visual_mesh_is_not_hulled(cfg):
     assert m.mesh_facenum[mesh] == 1757948
     assert m.mesh_graphadr[mesh] == -1
     assert m.geom_contype[geom] == 0 and m.geom_conaffinity[geom] == 0
+
+
+def test_check_learned_point_refuses_a_point_whose_joints_disagree_with_its_pose(scene, cfg, points):
+    """
+    Description:
+        The kinematic branch of Check_Learned_Point: drop_rot_01 with its base joint turned by
+        0.05 rad but its _p unchanged is refused with Kinematics_Error_Cls before any clearance check.
+        Expected numbers, independent of the FK code: the TCP moves along a chord 2 r sin(0.025)
+        with r = |(x, y)| of _p = 0.7660 m, i.e. 38.30 mm, give or take the measured kinematic
+        error (<= 4.1 mm); the orientation by 0.05 rad = 2.865 deg, give or take 0.4 deg.
+    """
+
+    p = points['drop_rot_01'].P
+    chord = 2.0 * math.hypot(p[0], p[1]) * math.sin(0.025) * 1e3
+    q = list(points['drop_rot_01'].Q)
+    q[0] += 0.05
+    with pytest.raises(Kinematics_Error_Cls) as error:
+        Check_Learned_Point(scene, cfg, dataclasses.replace(points['drop_rot_01'], Q=q))
+    match = re.search(r'Point drop_rot_01: .* is ([0-9.]+) mm / ([0-9.]+) deg from its _p; the sanity bound is '
+                      r'10\.00 mm / ([0-9.]+) deg', str(error.value))
+    assert match, str(error.value)
+    assert abs(float(match.group(1)) - chord) <= 4.1
+    assert abs(float(match.group(2)) - math.degrees(0.05)) <= 0.4
