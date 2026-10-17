@@ -264,3 +264,20 @@ def test_the_penalty_counts_only_far_from_the_station(planners, program):
     near = planners['S1'].Segment_Penalty(np.array(points['drop_rotate_1'].Q), np.array(points['Waypoint_4'].Q))
     assert far >= 0.030 - 0.0154
     assert near == 0.0
+
+
+def test_rrt_connect_is_reproducible_with_both_sample_sources(planners, program):
+    """
+    Description:
+        RRT-Connect alone, on S2 of case 17 with generator [8, 0]: that run draws 23 samples from the
+        box around both ends and 25 from the whole joint range (measured 2026-10-17), so both sample
+        sources take part. Two runs with the same seed give the same tree path, byte for byte. (The
+        reduced planning run of the test above connects after one sample from the whole range, so it
+        cannot see the box sampler.)
+    """
+
+    points, _ = program
+    start, goal = np.array(points['Waypoint_5'].Q), np.array(points['Waypoint_18'].Q)
+    paths = [planners['S2'].RRT_Connect(start, goal, np.random.default_rng([8, 0])) for _ in range(2)]
+    assert paths[0] is not None and len(paths[0]) > 2
+    assert np.array(paths[0]).tobytes() == np.array(paths[1]).tobytes()
