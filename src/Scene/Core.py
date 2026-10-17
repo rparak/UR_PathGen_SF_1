@@ -1,0 +1,793 @@
+## =========================================================================== ##
+# MIT License
+# Copyright (c) 2026 JIC Smart Factory
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+## =========================================================================== ##
+# Author   : JIC Smart Factory
+# File Name: ../Scene/Core.py
+## =========================================================================== ##
+
+# Math (Mathematical functions)
+import math
+# Typing (Support for type hints)
+import typing as tp
+# Dataclasses (Data Classes)
+from dataclasses import dataclass
+# Numpy (Array computing) [pip3 install numpy]
+import numpy as np
+# MuJoCo (Physics simulator) [pip3 install mujoco]
+import mujoco
+# Custom Lib.:
+#   ../Configuration/Core — the cell configuration
+from Configuration.Core import Cell_Configuration_Str, CONST_PROJECT_ROOT
+#   ../Kinematics/Core — the DH truth and the learned-point check
+from Kinematics.Core import CONST_DH_D, Check_FK_Consistency, Orientation_Sanity_Bound
+#   ../Collision/Core — the environment collision set and the STL reader
+from Collision.Core import Read_Collision_Set, Read_Binary_STL
+#   ../URScript/Core — the robot point structure
+from URScript.Core import Robot_Point_Str
+
+"""
+Description:
+    Initialization of constants.
+
+    Builds the MuJoCo scene through MjSpec (SPEC 9): the vendored Menagerie files are never
+    edited; every patch is applied here. The scene is kinematic only: configurations are set and
+    checked, nothing is simulated.
+"""
+# Menagerie UR10e body offsets replaced by the DH values (SPEC 4.2, 9.2): (body, position in its
+# parent). The y offsets 0.176 - 0.137 + 0.13515 sum to d4 = 0.17415. The flange site moves from
+# 0.100 to d6 = 0.11655 m along the wrist-3 axis: Menagerie had it 16.5 mm inside the wrist.
+#   Unit [Tuple<Tuple<string, Vector<float> 1x3>>] (m)
+CONST_DH_BODY_OFFSETS = (('shoulder_link', (0.0, 0.0, CONST_DH_D[0])),
+                         ('forearm_link', (0.0, -0.137, 0.6127)),
+                         ('wrist_1_link', (0.0, 0.0, 0.57155)),
+                         ('wrist_2_link', (0.0, CONST_DH_D[3] - 0.176 + 0.137, 0.0)),
+                         ('wrist_3_link', (0.0, 0.0, CONST_DH_D[4])))
+CONST_FLANGE_OFFSET = (0.0, CONST_DH_D[5], 0.0)
+# The Menagerie flange site and the robot's joints, base to wrist 3.
+#   Unit [string], [Tuple<string>]
+CONST_FLANGE_SITE = 'attachment_site'
+CONST_ROBOT_JOINTS = ('shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint', 'wrist_1_joint',
+                      'wrist_2_joint', 'wrist_3_joint')
+# Robot bodies, base to wrist 3. The base is static (no joint).
+#   Unit [Tuple<string>]
+CONST_ROBOT_BODIES = ('base', 'shoulder_link', 'upper_arm_link', 'forearm_link', 'wrist_1_link', 'wrist_2_link',
+                      'wrist_3_link')
+# Prefix of every gripper element in the scene.
+#   Unit [string]
+CONST_GRIPPER_PREFIX = 'gripper_'
+# The gripper datum (the face its Ø71 spigot seats on) in the Menagerie model: the 13.9 mm
+# base_mount disc minus the 2.9 mm bore, i.e. 11.0 mm from the mount face. Inferred from the
+# Menagerie finger ends matching the manual's dimension chain to 0.03 / 0.31 mm with this datum
+# (SPEC 4.4). The gripper is shifted so its datum lies at Thickness - Spigot_Depth.
+#   Unit [float] (m)
+CONST_MENAGERIE_GRIPPER_DATUM = 0.0110
+# Position of the Menagerie base_mount body in the gripper root frame.
+#   Unit [float] (m)
+CONST_MENAGERIE_MOUNT_Z = 0.007
+# Gripper control value range and the settle steps of the opening solve.
+#   Unit [float], [int]
+CONST_GRIPPER_CTRL_MAX = 255.0
+CONST_GRIPPER_SETTLE_STEPS = 5000
+CONST_GRIPPER_BISECTIONS = 30
+# The pad face: the silicone pad's inner face centre in the pad body frame (Menagerie pad mesh:
+# silicone y in [-6.6, -5.0] mm, length 37.5 mm).
+#   Unit [Vector<float> 1x3] (m)
+CONST_PAD_FACE_CENTRE = (0.0, -0.0066, 0.01875)
+# Pad collision boxes of the Menagerie gripper, used for the pad-span hull.
+#   Unit [Tuple<string>]
+CONST_PAD_BOXES = ('left_pad1', 'left_pad2', 'right_pad1', 'right_pad2')
+# Collision geom group (hidden in the viewer by default) and visual environment group.
+#   Unit [int]
+CONST_COLLISION_GROUP = 3
+CONST_ENV_VISUAL_GROUP = 1
+# Extra radius of the crop sphere beyond the reach bound and the clearance (SPEC 7.1).
+#   Unit [float] (m)
+CONST_CROP_PAD = 0.05
+
+
+class Scene_Error_Cls(ValueError):
+    """
+    Description:
+        The scene cannot be built as configured (an unknown body in an exclusion, the static base
+        inside the environment margin). The message says what to change.
+    """
+
+
+class Clearance_Error_Cls(ValueError):
+    """
+    Description:
+        A learned point violates a clearance margin. The message names the point, every violating
+        pair, its distance and the margin. There is no override.
+    """
+
+
+@dataclass
+class Violation_Str:
+    """
+    Description:
+        One body pair closer than its margin.
+    """
+
+    # The two bodies.
+    #   Unit [string]
+    Body_1: str = ''
+    Body_2: str = ''
+    # Their smallest signed distance (negative = penetration).
+    #   Unit [float] (m)
+    Distance: float = 0.0
+    # The margin that applies to the pair.
+    #   Unit [float] (m)
+    Margin: float = 0.0
+
+
+__gripper_cache: tp.Dict[tp.Tuple[str, float], tp.Tuple[tp.Dict[str, float], float, float, np.ndarray]] = {}
+
+
+def Solve_Gripper_Opening(tool_model: str, opening: float) -> tp.Tuple[tp.Dict[str, float], float, float, np.ndarray]:
+    """
+    Description:
+        The gripper joint angles that give an inner pad-face gap of 'opening', by bisection on the
+        control value of the gripper alone, settled without gravity. Also returns the pad-span
+        points: the corners of the four pad boxes in the gripper 'base' body frame. Cached.
+
+    Args:
+        (1) tool_model [string]: The 2F-85 MJCF.
+        (2) opening [float]: The inner pad-face gap (m).
+
+    Returns:
+        (1) parameter [Tuple<Dict<string, float>, float, float, Matrix<float> 32x3>]:
+            joint angles by (unprefixed) name, the achieved gap (m), the equality residual (m),
+            the pad-span points (m).
+    """
+
+    key = (tool_model, opening)
+    if key in __gripper_cache:
+        return __gripper_cache[key]
+    m = mujoco.MjModel.from_xml_path(tool_model)
+    m.opt.gravity[:] = 0.0
+    d = mujoco.MjData(m)
+    pads = [mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, s + '_pad') for s in ('left', 'right')]
+
+    def Settle(ctrl: float) -> float:
+        """
+        Description:
+            Settle the gripper at a control value and measure the inner pad-face gap.
+
+        Args:
+            (1) ctrl [float]: The control value, 0 (open) to 255 (closed).
+
+        Returns:
+            (1) parameter [float]: The gap (m).
+        """
+
+        mujoco.mj_resetData(m, d)
+        d.ctrl[0] = ctrl
+        for _ in range(CONST_GRIPPER_SETTLE_STEPS):
+            mujoco.mj_step(m, d)
+        face = [d.xmat[b].reshape(3, 3) @ np.asarray(CONST_PAD_FACE_CENTRE) + d.xpos[b] for b in pads]
+        return float(np.linalg.norm(face[0] - face[1]))
+
+    lo, hi = 0.0, CONST_GRIPPER_CTRL_MAX
+    for _ in range(CONST_GRIPPER_BISECTIONS):
+        mid = 0.5 * (lo + hi)
+        lo, hi = (mid, hi) if Settle(mid) > opening else (lo, mid)
+    gap = Settle(0.5 * (lo + hi))
+    joints = {m.joint(j).name: float(d.qpos[m.jnt_qposadr[j]]) for j in range(m.njnt)}
+    residual = float(np.max(np.abs(d.efc_pos[:d.ne]))) if d.ne else 0.0
+    base = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, 'base')
+    R_b, p_b = d.xmat[base].reshape(3, 3), d.xpos[base]
+    corners = []
+    for name in CONST_PAD_BOXES:
+        g = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, name)
+        R, p, size = d.geom_xmat[g].reshape(3, 3), d.geom_xpos[g], m.geom_size[g]
+        for sx in (-1.0, 1.0):
+            for sy in (-1.0, 1.0):
+                for sz in (-1.0, 1.0):
+                    corners.append(R_b.T @ (p + R @ (np.array([sx, sy, sz]) * size) - p_b))
+    __gripper_cache[key] = (joints, gap, residual, np.array(corners))
+    return __gripper_cache[key]
+
+
+def Yaw_Quat(angle: float) -> tp.List[float]:
+    """
+    Description:
+        The quaternion (w, x, y, z) of a rotation about z.
+
+    Args:
+        (1) angle [float]: The angle (rad).
+
+    Returns:
+        (1) parameter [Vector<float> 1x4]: The quaternion.
+    """
+
+    return [math.cos(angle / 2.0), 0.0, 0.0, math.sin(angle / 2.0)]
+
+
+class Scene_Cls(object):
+    """
+    Description:
+        The SF1 scene: the UR10e (DH-patched) with coupling and 2F-85 at a fixed opening, the
+        environment collision set and its visual mesh, and the clearance check.
+
+    Initialization of the Class:
+        Args:
+            (1) Cell_Configuration_Str [Cell_Configuration_Str(object)]: The cell configuration.
+            (2) with_environment [bool]: Add the environment collision set (needs the built set).
+            (3) with_visual [bool]: Add the 1.76 M-triangle visual mesh (needed only for viewing).
+
+        Example:
+            Initialization:
+                # Initialization of the class.
+                Cls = Scene_Cls(Load_Configuration(), with_environment=True, with_visual=False)
+
+            Features:
+                # Properties of the class.
+                Cls.Model, Cls.Data
+
+                # Functions of the class.
+                Cls.Check_Clearance(q)
+    """
+
+    def __init__(self, Cell_Configuration_Str: Cell_Configuration_Str, with_environment: bool = True,
+                 with_visual: bool = False) -> None:
+        # << PRIVATE >> #
+        self.__cfg = Cell_Configuration_Str
+        self.__gripper_joints, self.__gap, self.__residual, pad_span = Solve_Gripper_Opening(
+            self.__cfg.Tool_Model, self.__cfg.Opening)
+        spec = self.__Build_Spec(pad_span, with_environment, with_visual)
+        self.__model = spec.compile()
+        self.__data = mujoco.MjData(self.__model)
+        self.__robot_qpos = np.array([self.__model.jnt_qposadr[mujoco.mj_name2id(self.__model, mujoco.mjtObj.mjOBJ_JOINT, j)]
+                                      for j in CONST_ROBOT_JOINTS])
+        self.__flange = mujoco.mj_name2id(self.__model, mujoco.mjtObj.mjOBJ_SITE, CONST_FLANGE_SITE)
+        self.__overrides = {frozenset((a, b)): margin for a, b, margin in self.__cfg.Self_Pair_Overrides}
+        self.__Set_Gripper()
+        self.Set_Joints(np.zeros(6))
+        if with_environment:
+            self.__Check_Static_Base()
+
+    def __Build_Spec(self, pad_span: np.ndarray, with_environment: bool, with_visual: bool) -> mujoco.MjSpec:
+        """
+        Description:
+            Assemble the MjSpec: DH patch, robot collision hulls, coupling, gripper, exclusions,
+            environment.
+
+        Args:
+            (1) pad_span [Matrix<float> 32x3]: Pad-box corners in the gripper base frame (m).
+            (2 - 3) with_environment, with_visual [bool]: As in the constructor.
+
+        Returns:
+            (1) parameter [MjSpec]: The specification.
+        """
+
+        cfg = self.__cfg
+        spec = mujoco.MjSpec.from_file(cfg.Robot_Model)
+        bodies = {b.name: b for b in spec.bodies}
+        # 1\ Placement and DH patch. The Menagerie root carries 180 deg about z, which makes its
+        #    world frame the Polyscope base frame (SPEC 4.2); the base yaw is applied on top.
+        base = bodies['base']
+        base.pos = list(cfg.Base_Position)
+        q_menagerie = np.array(base.quat, dtype=float)
+        q_out = np.zeros(4)
+        mujoco.mju_mulQuat(q_out, np.array(Yaw_Quat(cfg.Base_Yaw)), q_menagerie)
+        base.quat = list(q_out)
+        for name, offset in CONST_DH_BODY_OFFSETS:
+            bodies[name].pos = list(offset)
+        flange = [s for s in spec.sites if s.name == CONST_FLANGE_SITE][0]
+        flange.pos = list(CONST_FLANGE_OFFSET)
+        # 2\ Joint ranges from the configuration.
+        joints = {j.name: j for j in spec.joints}
+        for i, name in enumerate(CONST_ROBOT_JOINTS):
+            joints[name].range = [cfg.Joint_Limits_Min[i], cfg.Joint_Limits_Max[i]]
+        # 3\ Robot collision: the hull of every visual mesh (it contains the mesh); the Menagerie
+        #    capsules are removed (they need not contain it).
+        for geom in list(spec.geoms):
+            if geom.type == mujoco.mjtGeom.mjGEOM_MESH:
+                geom.parent.add_geom(type=mujoco.mjtGeom.mjGEOM_MESH, meshname=geom.meshname, pos=list(geom.pos),
+                                     quat=list(geom.quat), contype=1, conaffinity=1, group=CONST_COLLISION_GROUP,
+                                     margin=cfg.Clearance_Self, gap=0.0, rgba=[0.9, 0.3, 0.3, 0.3])
+                geom.contype, geom.conaffinity = 0, 0
+            else:
+                spec.delete(geom)
+        # 4\ Gripper: coupling cylinder instead of the Menagerie disc, shifted to the measured datum,
+        #    fixed joints, pad-span hull; attached at the flange with the mounting yaw.
+        tool = mujoco.MjSpec.from_file(cfg.Tool_Model)
+        tool_bodies = {b.name: b for b in tool.bodies}
+        mount = tool_bodies['base_mount']
+        for geom in list(mount.geoms):
+            tool.delete(geom)
+        half = cfg.Coupling_Thickness / 2.0
+        for contype, group, rgba in ((0, 2, [0.15, 0.15, 0.15, 1.0]), (1, CONST_COLLISION_GROUP, [0.9, 0.3, 0.3, 0.3])):
+            mount.add_geom(name='coupling' if contype else 'coupling_visual', type=mujoco.mjtGeom.mjGEOM_CYLINDER,
+                           size=[cfg.Coupling_Diameter / 2.0, half, 0.0], pos=[0.0, 0.0, half - CONST_MENAGERIE_MOUNT_Z],
+                           contype=contype, conaffinity=contype, group=group, rgba=rgba, margin=cfg.Clearance_Self)
+        gripper_base = tool_bodies['base']
+        shift = (cfg.Coupling_Thickness - cfg.Coupling_Spigot_Depth) - CONST_MENAGERIE_GRIPPER_DATUM
+        gripper_base.pos = [gripper_base.pos[0], gripper_base.pos[1], gripper_base.pos[2] + shift]
+        tool.add_mesh(name='pad_span', uservert=pad_span.flatten().tolist())
+        gripper_base.add_geom(name='pad_span', type=mujoco.mjtGeom.mjGEOM_MESH, meshname='pad_span', contype=1,
+                              conaffinity=1, group=CONST_COLLISION_GROUP, margin=cfg.Clearance_Self,
+                              rgba=[1.0, 0.5, 0.0, 0.3])
+        for geom in tool.geoms:
+            if geom.contype != 0 or geom.conaffinity != 0:
+                geom.margin, geom.gap = cfg.Clearance_Self, 0.0
+        for actuator in list(tool.actuators):
+            tool.delete(actuator)
+        # The gripper's contact options matter only for simulated grasping, which this kinematic
+        # scene never does; aligning them with the robot's avoids MuJoCo's attach-conflict warning.
+        tool.option.impratio, tool.option.cone = spec.option.impratio, spec.option.cone
+        mount_frame = flange.parent.add_frame(pos=list(flange.pos), quat=list(flange.quat))
+        yaw_frame = mount_frame.add_frame(quat=Yaw_Quat(cfg.Mount_Yaw))
+        yaw_frame.attach_body(mount, CONST_GRIPPER_PREFIX, '')
+        # 5\ Exclusions: only the configured ones (MuJoCo's parent/child filter is disabled).
+        spec.option.disableflags |= mujoco.mjtDisableBit.mjDSBL_FILTERPARENT
+        spec.option.disableflags |= mujoco.mjtDisableBit.mjDSBL_GRAVITY
+        known = set(b.name for b in spec.bodies)
+        pairs = list(cfg.Excluded_Pairs)
+        for group in cfg.Rigid_Groups:
+            pairs += [(a, b) for i, a in enumerate(group) for b in group[i + 1:]]
+        for a, b in pairs:
+            for name in (a, b):
+                if name not in known:
+                    raise Scene_Error_Cls('Self_Collision names the body "%s", which the scene does not have. Use one of: %s'
+                                          % (name, ', '.join(sorted(known))))
+            spec.add_exclude(bodyname1=a, bodyname2=b)
+        for a, b, _ in cfg.Self_Pair_Overrides:
+            for name in (a, b):
+                if name not in known:
+                    raise Scene_Error_Cls('Clearance.Self_Pair_Overrides names the body "%s", which the scene does not have.'
+                                          % name)
+        # 6\ Environment: static bodies env and env_stand; only base - env_stand is excluded, because
+        #    the base sits 0.2 mm above the stand profiles and never moves.
+        if with_environment:
+            collision_set = Read_Collision_Set(cfg.Collision_Set, CONST_PROJECT_ROOT)
+            env_bodies = {name: spec.worldbody.add_body(name=name) for name in ('env', 'env_stand')}
+            for i, (vertices, body) in enumerate(zip(collision_set.Pieces, collision_set.Bodies)):
+                spec.add_mesh(name='env_piece_%d' % i, uservert=vertices.flatten().tolist(),
+                              inertia=mujoco.mjtMeshInertia.mjMESH_INERTIA_SHELL)
+                env_bodies[body].add_geom(name='env_piece_%d' % i, type=mujoco.mjtGeom.mjGEOM_MESH,
+                                          meshname='env_piece_%d' % i, contype=1, conaffinity=1,
+                                          group=CONST_COLLISION_GROUP, margin=cfg.Clearance_Environment, gap=0.0,
+                                          rgba=[0.3, 0.6, 0.9, 0.3])
+            spec.add_exclude(bodyname1='base', bodyname2='env_stand')
+            self.__collision_manifest = collision_set.Manifest
+        else:
+            self.__collision_manifest = {}
+        if with_visual:
+            vertices, faces = Read_Binary_STL(cfg.Visual_Mesh)
+            spec.add_mesh(name='env_visual', uservert=vertices.flatten().tolist(), userface=faces.flatten().tolist(),
+                          inertia=mujoco.mjtMeshInertia.mjMESH_INERTIA_SHELL)
+            spec.worldbody.add_geom(name='env_visual', type=mujoco.mjtGeom.mjGEOM_MESH, meshname='env_visual',
+                                    contype=0, conaffinity=0, group=CONST_ENV_VISUAL_GROUP, rgba=[0.7, 0.7, 0.72, 1.0])
+        return spec
+
+    def __Set_Gripper(self) -> None:
+        """
+        Description:
+            Write the solved gripper joint angles into qpos; they never change afterwards.
+        """
+
+        for j in range(self.__model.njnt):
+            name = self.__model.joint(j).name
+            if name.startswith(CONST_GRIPPER_PREFIX):
+                self.__data.qpos[self.__model.jnt_qposadr[j]] = self.__gripper_joints[name[len(CONST_GRIPPER_PREFIX):]]
+
+    def __Check_Static_Base(self) -> None:
+        """
+        Description:
+            MuJoCo never collides two static bodies, so mj_collision cannot report base - env. The
+            base does not move: its clearance to env is checked once here, with mj_geomDistance.
+        """
+
+        violations = self.Static_Base_Clearance()
+        if violations:
+            raise Scene_Error_Cls('The robot base is within %.1f mm of the environment: %s. Check Robot.Base_Position '
+                                  'and Environment.Stand_Region.' % (self.__cfg.Clearance_Environment * 1e3,
+                                  '; '.join('%s %.2f mm' % (v.Body_2, v.Distance * 1e3) for v in violations)))
+
+    def Static_Base_Clearance(self) -> tp.List[Violation_Str]:
+        """
+        Description:
+            The base's clearance to the env body (not env_stand, which it sits on), by mj_geomDistance.
+
+        Returns:
+            (1) parameter [List<Violation_Str>]: The env pieces within Clearance.Environment.
+        """
+
+        m, d = self.__model, self.__data
+        mujoco.mj_kinematics(m, d)
+        base = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, 'base')
+        env = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, 'env')
+        margin = self.__cfg.Clearance_Environment
+        base_geoms = [g for g in range(m.ngeom) if m.geom_bodyid[g] == base and m.geom_contype[g]]
+        violations = []
+        for g in range(m.ngeom):
+            if m.geom_bodyid[g] != env:
+                continue
+            for b in base_geoms:
+                gap = np.linalg.norm(d.geom_xpos[g] - d.geom_xpos[b]) - m.geom_rbound[g] - m.geom_rbound[b]
+                if gap > margin:
+                    continue
+                distance = mujoco.mj_geomDistance(m, d, b, g, margin, None)
+                if distance < margin:
+                    violations.append(Violation_Str('base', m.geom(g).name, float(distance), margin))
+        return violations
+
+    @property
+    def Model(self) -> mujoco.MjModel:
+        """
+        Description:
+            The compiled model.
+
+        Returns:
+            (1) parameter [MjModel]: The model.
+        """
+
+        return self.__model
+
+    @property
+    def Data(self) -> mujoco.MjData:
+        """
+        Description:
+            The data the scene's configurations are written to.
+
+        Returns:
+            (1) parameter [MjData]: The data.
+        """
+
+        return self.__data
+
+    @property
+    def Gripper_Gap(self) -> tp.Tuple[float, float]:
+        """
+        Description:
+            The achieved pad-face gap and the equality residual of the opening solve.
+
+        Returns:
+            (1) parameter [Tuple<float> 1x2]: (gap (m), residual (m)).
+        """
+
+        return self.__gap, self.__residual
+
+    @property
+    def Collision_Manifest(self) -> tp.Dict:
+        """
+        Description:
+            The manifest of the environment collision set ({} without environment).
+
+        Returns:
+            (1) parameter [Dict]: The manifest.
+        """
+
+        return self.__collision_manifest
+
+    def Set_Joints(self, q: tp.Sequence[float]) -> None:
+        """
+        Description:
+            Set the robot joints and update the kinematics (no dynamics).
+
+        Args:
+            (1) q [Vector<float> 1x6]: Joint angles (rad), base to wrist 3; never wrapped.
+        """
+
+        self.__data.qpos[self.__robot_qpos] = np.asarray(q, dtype=float)
+        mujoco.mj_kinematics(self.__model, self.__data)
+
+    def Flange_Pose(self) -> np.ndarray:
+        """
+        Description:
+            The flange in the world frame, for the current joints.
+
+        Returns:
+            (1) parameter [Matrix<float> 4x4]: The pose.
+        """
+
+        T = np.eye(4)
+        T[:3, :3] = self.__data.site_xmat[self.__flange].reshape(3, 3)
+        T[:3, 3] = self.__data.site_xpos[self.__flange]
+        return T
+
+    def Base_Frame(self) -> np.ndarray:
+        """
+        Description:
+            The Polyscope base frame in the world frame (configured position and yaw).
+
+        Returns:
+            (1) parameter [Matrix<float> 4x4]: The pose.
+        """
+
+        T = np.eye(4)
+        c, s = math.cos(self.__cfg.Base_Yaw), math.sin(self.__cfg.Base_Yaw)
+        T[:3, :3] = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+        T[:3, 3] = self.__cfg.Base_Position
+        return T
+
+    def Pair_Margin(self, body_1: str, body_2: str, geom_margin: float) -> float:
+        """
+        Description:
+            The margin of a body pair: the configured pair override if any, else the margin MuJoCo
+            used for the contact (the larger of the two geom margins).
+
+        Args:
+            (1 - 2) body_1, body_2 [string]: The bodies.
+            (3) geom_margin [float]: The contact's margin (m).
+
+        Returns:
+            (1) parameter [float]: The margin (m).
+        """
+
+        return self.__overrides.get(frozenset((body_1, body_2)), geom_margin)
+
+    def Check_Clearance(self, q: tp.Sequence[float]) -> tp.List[Violation_Str]:
+        """
+        Description:
+            Every body pair closer than its margin at q, with the smallest distance per pair. A
+            contact is generated by MuJoCo for every geom pair closer than its margin.
+
+        Args:
+            (1) q [Vector<float> 1x6]: Joint angles (rad).
+
+        Returns:
+            (1) parameter [List<Violation_Str>]: The violations, sorted by distance (empty = clear).
+        """
+
+        m, d = self.__model, self.__data
+        self.Set_Joints(q)
+        mujoco.mj_collision(m, d)
+        worst: tp.Dict[tp.Tuple[str, str], Violation_Str] = {}
+        for i in range(d.ncon):
+            contact = d.contact[i]
+            b1, b2 = m.body(m.geom_bodyid[contact.geom1]).name, m.body(m.geom_bodyid[contact.geom2]).name
+            margin = self.Pair_Margin(b1, b2, float(max(m.geom_margin[contact.geom1], m.geom_margin[contact.geom2])))
+            if contact.dist >= margin:
+                continue
+            key = tuple(sorted((b1, b2)))
+            if key not in worst or contact.dist < worst[key].Distance:
+                worst[key] = Violation_Str(key[0], key[1], float(contact.dist), margin)
+        return sorted(worst.values(), key=lambda v: v.Distance)
+
+    def Tool_Length(self) -> float:
+        """
+        Description:
+            The largest distance of a gripper collision vertex from the flange origin (bounding
+            hull vertices of mesh geoms, corners of primitives).
+
+        Returns:
+            (1) parameter [float]: The length (m).
+        """
+
+        m, d = self.__model, self.__data
+        flange = self.Flange_Pose()
+        best = 0.0
+        for g in range(m.ngeom):
+            if not m.geom_contype[g] or not m.body(m.geom_bodyid[g]).name.startswith(CONST_GRIPPER_PREFIX):
+                continue
+            for point in self.__Geom_Points(g):
+                best = max(best, float(np.linalg.norm(point - flange[:3, 3])))
+        return best
+
+    def __Geom_Points(self, g: int) -> np.ndarray:
+        """
+        Description:
+            World points bounding a collision geom: its mesh vertices, or its primitive's box corners.
+
+        Args:
+            (1) g [int]: The geom id.
+
+        Returns:
+            (1) parameter [Matrix<float> Nx3]: The points (m).
+        """
+
+        m, d = self.__model, self.__data
+        R, p = d.geom_xmat[g].reshape(3, 3), d.geom_xpos[g]
+        if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_MESH:
+            mesh = m.geom_dataid[g]
+            local = m.mesh_vert[m.mesh_vertadr[mesh]:m.mesh_vertadr[mesh] + m.mesh_vertnum[mesh]]
+        else:
+            size = m.geom_size[g]
+            if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_CYLINDER:
+                size = np.array([size[0], size[0], size[1]])
+            local = np.array([[sx, sy, sz] for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]) * size
+        return local @ R.T + p
+
+    def Reach_Bound(self) -> float:
+        """
+        Description:
+            An upper bound on the distance of any robot or gripper collision vertex from the
+            shoulder point, in any configuration (triangle inequality along the chain): the sum of
+            the body offsets from the shoulder to each body, plus that body's largest vertex
+            radius. Used for the crop sphere (SPEC 7.1).
+
+        Returns:
+            (1) parameter [float]: The bound (m).
+        """
+
+        m = self.__model
+        shoulder = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, 'shoulder_link')
+        base = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, 'base')
+        best = 0.0
+        for g in range(m.ngeom):
+            b = int(m.geom_bodyid[g])
+            if not m.geom_contype[g] or b == 0 or m.body(b).name.startswith('env'):
+                continue
+            # Chain length from the shoulder to body b.
+            chain, node = 0.0, b
+            while node not in (shoulder, base, 0):
+                chain += float(np.linalg.norm(m.body_pos[node]))
+                node = int(m.body_parentid[node])
+            if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_MESH:
+                mesh = m.geom_dataid[g]
+                local = m.mesh_vert[m.mesh_vertadr[mesh]:m.mesh_vertadr[mesh] + m.mesh_vertnum[mesh]]
+                R = np.zeros(9)
+                mujoco.mju_quat2Mat(R, m.geom_quat[g])
+                radius = float(np.max(np.linalg.norm(local @ R.reshape(3, 3).T + m.geom_pos[g], axis=1)))
+            else:
+                radius = float(np.linalg.norm(m.geom_pos[g])) + float(m.geom_rbound[g])
+            if b == base:
+                # The base is fixed: its distance from the shoulder point is bounded directly.
+                radius += CONST_DH_D[0]
+            best = max(best, chain + radius)
+        return best
+
+    def Shoulder_Point(self) -> np.ndarray:
+        """
+        Description:
+            The shoulder point (base frame (0, 0, d1)) in the world frame: the crop-sphere centre.
+
+        Returns:
+            (1) parameter [Vector<float> 1x3]: The point (m).
+        """
+
+        return (self.Base_Frame() @ np.array([0.0, 0.0, CONST_DH_D[0], 1.0]))[:3]
+
+    def Crop_Radius(self) -> float:
+        """
+        Description:
+            The crop-sphere radius: reach bound + environment clearance + CONST_CROP_PAD (SPEC 7.1).
+
+        Returns:
+            (1) parameter [float]: The radius (m).
+        """
+
+        return self.Reach_Bound() + self.__cfg.Clearance_Environment + CONST_CROP_PAD
+
+    def Segment_Samples(self, q_a: tp.Sequence[float], q_b: tp.Sequence[float]) -> np.ndarray:
+        """
+        Description:
+            Joint-linear samples of the segment q_a -> q_b, as movej moves, dense enough that no
+            point of the robot moves more than Clearance.Environment / 4 between samples. The step
+            bound is sum_i |dq_i| * lever_i, lever_i = the largest distance of any collision vertex
+            downstream of joint i from that joint's origin (chain sum + radius).
+
+        Args:
+            (1 - 2) q_a, q_b [Vector<float> 1x6]: Segment ends (rad).
+
+        Returns:
+            (1) parameter [Matrix<float> Kx6]: The samples including both ends.
+        """
+
+        dq = np.abs(np.asarray(q_b, dtype=float) - np.asarray(q_a, dtype=float))
+        sweep = float(np.dot(dq, self.Joint_Levers()))
+        count = max(1, int(math.ceil(sweep / (self.__cfg.Clearance_Environment / 4.0))))
+        t = np.linspace(0.0, 1.0, count + 1)[:, None]
+        return np.asarray(q_a, dtype=float) + t * (np.asarray(q_b, dtype=float) - np.asarray(q_a, dtype=float))
+
+    def Joint_Levers(self) -> np.ndarray:
+        """
+        Description:
+            For each robot joint, an upper bound on the distance of any downstream collision vertex
+            from the joint's body origin.
+
+        Returns:
+            (1) parameter [Vector<float> 1x6]: The levers (m).
+        """
+
+        m = self.__model
+        levers = np.zeros(6)
+        for i, name in enumerate(CONST_ROBOT_JOINTS):
+            body = int(m.jnt_bodyid[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_JOINT, name)])
+            for g in range(m.ngeom):
+                b = int(m.geom_bodyid[g])
+                if not m.geom_contype[g] or b == 0:
+                    continue
+                chain, node = 0.0, b
+                while node not in (body, 0):
+                    chain += float(np.linalg.norm(m.body_pos[node]))
+                    node = int(m.body_parentid[node])
+                if node != body:
+                    continue
+                levers[i] = max(levers[i], chain + float(np.linalg.norm(m.geom_pos[g])) + float(m.geom_rbound[g]))
+        return levers
+
+    def Check_Segment(self, q_a: tp.Sequence[float], q_b: tp.Sequence[float]) -> tp.Tuple[int, tp.List[tp.Tuple[int, Violation_Str]]]:
+        """
+        Description:
+            Check every sample of a joint-linear segment.
+
+        Args:
+            (1 - 2) q_a, q_b [Vector<float> 1x6]: Segment ends (rad).
+
+        Returns:
+            (1) parameter [Tuple<int, List<Tuple<int, Violation_Str>>>]: The number of samples and
+                                                                          every (sample, violation).
+        """
+
+        samples = self.Segment_Samples(q_a, q_b)
+        found = []
+        for k, q in enumerate(samples):
+            found += [(k, v) for v in self.Check_Clearance(q)]
+        return len(samples), found
+
+    def Minimum_Distance(self, body_1: str, body_2: str, q: tp.Sequence[float], distmax: float = 1.0) -> float:
+        """
+        Description:
+            The smallest signed distance between two bodies' collision geoms at q (mj_geomDistance;
+            capped at distmax).
+
+        Args:
+            (1 - 2) body_1, body_2 [string]: The bodies.
+            (3) q [Vector<float> 1x6]: Joint angles (rad).
+            (4) distmax [float]: The cap (m).
+
+        Returns:
+            (1) parameter [float]: The distance (m).
+        """
+
+        m, d = self.__model, self.__data
+        self.Set_Joints(q)
+        a = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, body_1)
+        b = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, body_2)
+        best = distmax
+        for g1 in range(m.ngeom):
+            if m.geom_bodyid[g1] != a or not m.geom_contype[g1]:
+                continue
+            for g2 in range(m.ngeom):
+                if m.geom_bodyid[g2] != b or not m.geom_contype[g2]:
+                    continue
+                best = min(best, mujoco.mj_geomDistance(m, d, g1, g2, best, None))
+        return best
+
+
+def Check_Learned_Point(scene: Scene_Cls, cfg: Cell_Configuration_Str, point: Robot_Point_Str) -> tp.Tuple[float, float]:
+    """
+    Description:
+        Accept a learned point only if its _q and _p agree within the sanity bound and it keeps
+        every clearance margin. Otherwise raise, naming everything found (SPEC 9.4, 9.7).
+
+    Args:
+        (1) scene [Scene_Cls(object)]: The scene with the environment.
+        (2) cfg [Cell_Configuration_Str(object)]: The configuration.
+        (3) point [Robot_Point_Str(object)]: The point.
+
+    Returns:
+        (1) parameter [Tuple<float> 1x2]: Its kinematic residual (m, rad).
+    """
+
+    scene.Set_Joints(np.zeros(6))
+    orientation_bound = Orientation_Sanity_Bound(cfg.FK_Sanity_Bound_Position, scene.Tool_Length())
+    residual = Check_FK_Consistency(point.Name, point.Q, point.P, cfg.TCP_Offset, cfg.FK_Sanity_Bound_Position,
+                                    orientation_bound)
+    violations = scene.Check_Clearance(point.Q)
+    if violations:
+        raise Clearance_Error_Cls('Point %s violates %d clearance margin(s): %s. Learned points are never accepted '
+                                  'inside a margin; re-teach the point or review the cell model.'
+                                  % (point.Name, len(violations), '; '.join(
+                                      '%s - %s %.2f mm (margin %.1f mm)' % (v.Body_1, v.Body_2, v.Distance * 1e3,
+                                                                            v.Margin * 1e3) for v in violations)))
+    return residual
