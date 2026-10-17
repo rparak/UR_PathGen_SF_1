@@ -1,0 +1,7 @@
+# SF1 learned points, values verbatim from the robot export (test/URScript/data/SF1_Positions_original.urscript).
+# Names follow the project convention: home -> home_safe (A), drop_rotate_1 -> drop_rot_01 (B).
+# _p: TCP pose [m, rad rotation vector] in the Polyscope base frame; _q: joints [rad], base to wrist 3.
+global home_safe_p=p[.238739153619, -.175248184859, .472678665244, 2.218804439569, -2.220766336909, .005958014905]
+global home_safe_q=[2.4439792468911037E-5, -0.785396472816803, -2.094330072402954, -1.8325640163817347, 1.5708248615264893, 1.098817665479146E-5]
+global drop_rot_01_p=p[.702750032831, .304908453934, .601746000573, -1.178088968154, -1.218990569788, -1.196227307052]
+global drop_rot_01_q=[2.917997121810913, -1.3577392858317872, 1.4622281233416956, -0.03949482858691411, -0.2542222181903284, 1.5013701915740967]
