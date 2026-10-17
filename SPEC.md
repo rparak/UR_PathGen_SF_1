@@ -277,7 +277,7 @@ collides two static (jointless, world-welded) bodies.** That matters for the sce
 ### 4.6 Base yaw from the taught points (*measured*, 2026-10-17)
 
 The owner's program `sf1_plc_v4.script` (sha256 `ecec8e53…8eae`; its 156 global `_p`/`_q` lines are
-committed verbatim as `test/fixtures/sf1_plc_v4_positions.urscript`) contains grasp and drop points
+committed verbatim as `Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript`) contains grasp and drop points
 whose targets are known. World TCP (DH FK · TCP of `_q`, base at `Base_Position`), checked by a
 vertical ray through the STL triangles:
 
@@ -384,6 +384,9 @@ CAD/Collision/SF1_Environment_Collision.npz   convex pieces (vertices, faces, pi
 CAD/Collision/SF1_Environment_Collision.json  manifest (§7.6)
 Configuration/Cell_SF1.yaml                   cell configuration (§8)
 Data/Positions/SF1_Positions.urscript         the learned points under the project names (§10.3)
+Data/Programs/sf1_plc_v4/                     extracts of the owner's program, verbatim, with its sha256:
+                                              its 156 global _p/_q lines, and the rotation sequence of
+                                              cases 17 and 18 (§10.1)
 models/MANIFEST.json                          Menagerie commit, licence, sha256 of every vendored file
 models/universal_robots_ur10e/                xml, assets/, LICENSE, README.md, CHANGELOG.md (no png)
 models/robotiq_2f85/                          same
@@ -751,6 +754,16 @@ global <name>_q=[j0, j1, j2, j3, j4, j5]      # rad: base, shoulder, elbow, wris
   `-0.5` → `-.500000000000`), `-0` written as `0`. Their `_p` comes from DH FK · TCP with
   `Normalize_Rotvec` and is informational (§10.4).
 
+**Program excerpt** (`Data/Programs/sf1_plc_v4/sf1_plc_v4_cases_17_18.script`, read by
+`Read_Program_Excerpt` only): lines of the robot program kept verbatim, indentation included. Column-0
+`#` lines before the first block are the header (source, sha256); a column-0 `# case <n>:` line opens
+a case. Each program line is classified as a movej to a learned point
+(`movej(get_inverse_kin(<name>_p, qnear=<name>_q), …)`), a movel to a learned pose, a gripper
+action (`rq_set_pos_spd_for(0 | 255, …)`: open / close) or other (URCap boilerplate, Polyscope
+markers). Strict: an unknown gripper position, a repeated or empty case is an error. The extracts are
+compared with the program, byte for byte, when `SF1_PLC_V4_SCRIPT` names it; otherwise that test is
+skipped.
+
 ### 10.2 Encoder noise
 
 `2.44E-5` rad in `home_q` is encoder noise from teaching. It is read and written unchanged.
@@ -791,7 +804,7 @@ synthetic point with a joint at 4.0 rad that must come out as 4.0.
 
 | Test file | What it pins |
 |---|---|
-| `test/URScript/test_core.py` | exact float values of all 24 numbers; byte-identical round trip; `.238`, `-.175`, `E-5` tokens; strict errors (malformed, missing pair, duplicate, wrong length, line number in message); generated-point format; no wrapping (4.0 rad); `movej` line uses `_q` and `r=0`; renamed file tokens == original export; the `sf1_plc_v4` extract is read strictly with every token, and equals its source lines 2453–2608 byte for byte with the recorded sha256 when `SF1_PLC_V4_SCRIPT` names the program (otherwise skipped, never passed) |
+| `test/URScript/test_core.py` | exact float values of all 24 numbers; byte-identical round trip; `.238`, `-.175`, `E-5` tokens; strict errors (malformed, missing pair, duplicate, wrong length, line number in message); generated-point format; no wrapping (4.0 rad); `movej` line uses `_q` and `r=0`; renamed file tokens == original export; the case extract reads in program order, equals its source lines 3407–3463 / 3490–3546 when `SF1_PLC_V4_SCRIPT` is set (otherwise skipped), and a malformed excerpt is refused; the `sf1_plc_v4` positions extract is read strictly with every token, and equals its source lines 2453–2608 byte for byte with the recorded sha256 when `SF1_PLC_V4_SCRIPT` names the program (otherwise skipped, never passed) |
 | `test/Configuration/test_core.py` | shipped file loads; each REQUIRED field missing → named failure; invalid values (wrong length, limits outside ±360°, min ≥ max, coupling spigot depth ≥ thickness, negative clearance or sanity bound, a component override beyond 150 mm, without a source or named twice, a zone margin above `Clearance.Environment`, a zone box with Min ≥ Max, a zero endpoint radius) fail; all problems listed at once; unknown key → WARNING |
 | `test/Kinematics/test_core.py` | `FK_DH(q) · TCP_config` vs `_p`: regression pin (§9.4) of 1.72 mm / 0.261° and 4.02 mm / 0.376° (±0.01 mm / ±0.001°); diagnostic derived TCP pinned the same way and never read by any check; both points within the sanity bound; `Check_Learned_Point` rejects a point beyond it (perturbed `_q`) with the numbers in the message; configured TCP == (0, 0, 0.174, 0, 0, 0); geodesic angle 0 between r and its π-equivalent; `Normalize_Rotvec` rule incl. near-π |
 | `test/Scene/test_core.py` | scene compiles; base body world position == `Base_Position` exactly and yaw == `Base_Yaw`; **at `Base_Yaw` = 90° (a temporary copy of the configuration) `home_safe`'s TCP lands at `Base_Position` + (−y, x, z) of its `_p` within 3 mm, in MuJoCo and through the base frame (the file is in degrees; read as radians the test fails)**; **MuJoCo flange FK (after the MjSpec offset override) == DH flange FK within 1e-9 m / 1e-9 rad (atan2 geodesic, §9.5) for 1000 seeded random joint vectors within the limits**, plus A and B; pad-span hull present in the gripper rigid group; fingers open along flange ±x at `Mount_Yaw` = 0; visual mesh has no hull (`mesh_graphadr = −1`); base↔env build check runs; loader rejects an elbow limit beyond ±180°; gripper opening == `Tool.Opening` ± 0.5 mm, equality residual < 0.1 mm; coupling cylinder present (visual + collision), Menagerie `base_mount` mesh geoms absent, vendored files byte-identical to `models/MANIFEST.json`; pad end from the flange face 163.3 mm open and 176.8 mm closed (± 0.5 mm, manual chain) and the 50 mm values 154.39 / 173.23 mm (± 0.05 mm, regression); exclusion set == configuration expansion + `base–env_stand`, filterparent disabled; joint ranges == `Joint_Position_Limits`; **placement (§4.6): `pick_obj_1..8` on the pallet table, `unload_obj_1..8` on the side table (between the plate top and the highest part), `bench_drop_1..8` inside object (a); the same check at `Base_Yaw` = 0 refuses all 24**; A and B pass `Check_Clearance`, and **any violation fails the test, listing every pair with its distance and margin** (no report-only path); B (`drop_rot_01`) is a strict xfail while the STL does not match the cell at the rotation station (`KNOWN_ISSUES.md`), so it turns red once the geometry is fixed; `hover_unload_2` (clear) pushed into the side table is reported as a collision; a collision set whose recorded component overrides differ from the configuration is refused; the station zone applies to a generated configuration only within `Endpoint_Radius` of a station point (DH distances); a segment kind other than taught/generated is refused |

@@ -1,0 +1,120 @@
+# Lines of the owner's robot program sf1_plc_v4.script, verbatim: the rotation sequence of cases 17 and 18,
+# home to home. Source sha256: ecec8e53007d93acd5cf3da5b545f588a02dbc1b9c26497c82282c37bcfb8eae
+# An extract only: the program itself (Robotiq URCap code, network settings) is not committed.
+# A line starting with '# case <n>:' at column 0 opens the lines of that case; program lines keep their indentation.
+# case 17: lines 3407-3463
+        movej(get_inverse_kin(home_p, qnear=home_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
+        $ 295 "Waypoint_1" "breakAfter"
+        movej(get_inverse_kin(Waypoint_1_p, qnear=Waypoint_1_q), a=1.3962634015954636, v=1.0471975511965976, r=0.05)
+        $ 296 "drop_rotate_1" "breakAfter"
+        movej(get_inverse_kin(drop_rotate_1_p, qnear=drop_rotate_1_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 297 "MoveL"
+        $ 298 "Waypoint_4" "breakAfter"
+        movel(Waypoint_4_p, a=1.2, v=0.25)
+        # begin: URCap Program Node
+        #   Source: Robotiq_Grippers, 2.4.0.45103, Robotiq Inc.
+        #   Type: Gripper
+        $ 299 "Gripper Open (1)"
+        if not(gripper_connected[0]):
+          popup("Gripper 1 must be connected to run this program.", "No connection", False, True, True)
+        end
+        if not(rq_is_gripper_activated("1")):
+          popup("Gripper 1 is not activated. Go to Installation tab > Gripper to activate it and run the program again.", "Not activated", False, True, True)
+        end
+        rq_set_pos_spd_for(0, 255, 255, "1")
+        rq_wait_pos_spe_for_request(0, 255, 255, "1")
+        rq_go_to("1")
+        rq_wait("1")
+        # end: URCap Program Node
+        $ 300 "Waypoint_5" "breakAfter"
+        movej(get_inverse_kin(Waypoint_5_p, qnear=Waypoint_5_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 301 "Waypoint_1" "breakAfter"
+        movej(get_inverse_kin(Waypoint_1_p, qnear=Waypoint_1_q), a=1.3962634015954636, v=1.0471975511965976, r=0.05)
+        $ 302 "Waypoint_2" "breakAfter"
+        movej(get_inverse_kin(Waypoint_2_p, qnear=Waypoint_2_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
+        $ 303 "Waypoint_3" "breakAfter"
+        movej(get_inverse_kin(Waypoint_3_p, qnear=Waypoint_3_q), a=1.3962634015954636, v=1.0471975511965976, r=0.05)
+        $ 304 "Waypoint_18" "breakAfter"
+        movej(get_inverse_kin(Waypoint_18_p, qnear=Waypoint_18_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 305 "pick_rotate_1" "breakAfter"
+        movej(get_inverse_kin(pick_rotate_1_p, qnear=pick_rotate_1_q), a=1.3962634015954636, v=1.0471975511965976)
+        # begin: URCap Program Node
+        #   Source: Robotiq_Grippers, 2.4.0.45103, Robotiq Inc.
+        #   Type: Gripper
+        $ 306 "Gripper Close (1)"
+        if not(gripper_connected[0]):
+          popup("Gripper 1 must be connected to run this program.", "No connection", False, True, True)
+        end
+        if not(rq_is_gripper_activated("1")):
+          popup("Gripper 1 is not activated. Go to Installation tab > Gripper to activate it and run the program again.", "Not activated", False, True, True)
+        end
+        rq_set_pos_spd_for(255, 255, 255, "1")
+        rq_wait_pos_spe_for_request(255, 255, 255, "1")
+        rq_go_to("1")
+        rq_wait("1")
+        # end: URCap Program Node
+        $ 307 "MoveL"
+        $ 308 "Waypoint_6" "breakAfter"
+        movel(Waypoint_6_p, a=1.2, v=0.25)
+        $ 309 "Waypoint_2" "breakAfter"
+        movej(get_inverse_kin(Waypoint_2_p, qnear=Waypoint_2_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
+        $ 310 "home" "breakAfter"
+        movej(get_inverse_kin(home_p, qnear=home_q), a=1.3962634015954636, v=1.0471975511965976)
+# case 18: lines 3490-3546
+        movej(get_inverse_kin(home_p, qnear=home_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 326 "Waypoint_1" "breakAfter"
+        movej(get_inverse_kin(Waypoint_1_p, qnear=Waypoint_1_q), a=1.3962634015954636, v=1.0471975511965976, r=0.05)
+        $ 327 "drop_rotate_2" "breakAfter"
+        movej(get_inverse_kin(drop_rotate_2_p, qnear=drop_rotate_2_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 328 "MoveL"
+        $ 329 "Waypoint_7" "breakAfter"
+        movel(Waypoint_7_p, a=1.2, v=0.25)
+        # begin: URCap Program Node
+        #   Source: Robotiq_Grippers, 2.4.0.45103, Robotiq Inc.
+        #   Type: Gripper
+        $ 330 "Gripper Open (1)"
+        if not(gripper_connected[0]):
+          popup("Gripper 1 must be connected to run this program.", "No connection", False, True, True)
+        end
+        if not(rq_is_gripper_activated("1")):
+          popup("Gripper 1 is not activated. Go to Installation tab > Gripper to activate it and run the program again.", "Not activated", False, True, True)
+        end
+        rq_set_pos_spd_for(0, 255, 255, "1")
+        rq_wait_pos_spe_for_request(0, 255, 255, "1")
+        rq_go_to("1")
+        rq_wait("1")
+        # end: URCap Program Node
+        $ 331 "Waypoint_5" "breakAfter"
+        movej(get_inverse_kin(Waypoint_5_p, qnear=Waypoint_5_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 332 "Waypoint_1" "breakAfter"
+        movej(get_inverse_kin(Waypoint_1_p, qnear=Waypoint_1_q), a=1.3962634015954636, v=1.0471975511965976, r=0.05)
+        $ 333 "Waypoint_2" "breakAfter"
+        movej(get_inverse_kin(Waypoint_2_p, qnear=Waypoint_2_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
+        $ 334 "Waypoint_3" "breakAfter"
+        movej(get_inverse_kin(Waypoint_3_p, qnear=Waypoint_3_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 335 "Waypoint_11" "breakAfter"
+        movej(get_inverse_kin(Waypoint_11_p, qnear=Waypoint_11_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 336 "pick_rotate_2" "breakAfter"
+        movej(get_inverse_kin(pick_rotate_2_p, qnear=pick_rotate_2_q), a=1.3962634015954636, v=1.0471975511965976)
+        # begin: URCap Program Node
+        #   Source: Robotiq_Grippers, 2.4.0.45103, Robotiq Inc.
+        #   Type: Gripper
+        $ 337 "Gripper Close (1)"
+        if not(gripper_connected[0]):
+          popup("Gripper 1 must be connected to run this program.", "No connection", False, True, True)
+        end
+        if not(rq_is_gripper_activated("1")):
+          popup("Gripper 1 is not activated. Go to Installation tab > Gripper to activate it and run the program again.", "Not activated", False, True, True)
+        end
+        rq_set_pos_spd_for(255, 255, 255, "1")
+        rq_wait_pos_spe_for_request(255, 255, 255, "1")
+        rq_go_to("1")
+        rq_wait("1")
+        # end: URCap Program Node
+        $ 338 "MoveL"
+        $ 339 "Waypoint_8" "breakAfter"
+        movel(Waypoint_8_p, a=1.2, v=0.25)
+        $ 340 "Waypoint_2" "breakAfter"
+        movej(get_inverse_kin(Waypoint_2_p, qnear=Waypoint_2_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
+        $ 341 "home" "breakAfter"
+        movej(get_inverse_kin(home_p, qnear=home_q), a=1.3962634015954636, v=1.0471975511965976)

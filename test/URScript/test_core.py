@@ -30,7 +30,7 @@ import pytest
 # Custom Lib.:
 #   ../src/URScript/Core — the reader and writer under test
 from URScript.Core import (Read_URScript, Write_URScript, Write_Movej_Sequence, Make_Generated_Point, Make_Document,
-                           Format_Generated, URScript_Error_Cls)
+                           Format_Generated, URScript_Error_Cls, Read_Program_Excerpt)
 
 """
 Description:
@@ -60,7 +60,7 @@ CONST_VALUES = {
                        -0.2542222181903284, 1.5013701915740967]),
 }
 
-# The owner's robot program the extract test/fixtures/sf1_plc_v4_positions.urscript comes from: its
+# The owner's robot program the extracts in Data/Programs/sf1_plc_v4/ come from: its
 # sha256 and the 1-based line range of its global _p/_q lines (measured 2026-10-17). The program is
 # not committed; the comparison runs only when SF1_PLC_V4_SCRIPT names it.
 #   Unit [string], [Tuple<int>]
@@ -70,6 +70,18 @@ CONST_PLC_ENV = 'SF1_PLC_V4_SCRIPT'
 # Header lines of the extract before the verbatim lines.
 #   Unit [int]
 CONST_PLC_HEADER = 4
+# The program lines of the rotation sequence of cases 17 and 18 (home to home), 1-based, inclusive.
+#   Unit [Dict<int, Tuple<int>>]
+CONST_PLC_CASE_LINES = {17: (3407, 3463), 18: (3490, 3546)}
+# The rotation sequence in program order, typed from the Polyscope program tree (moves and gripper).
+#   Unit [Dict<int, List<Tuple<string, string>>>]
+CONST_PLC_CASE_ORDER = {
+    case: [('movej', 'home'), ('movej', 'Waypoint_1'), ('movej', drop), ('movel', below), ('gripper', 'open'),
+           ('movej', 'Waypoint_5'), ('movej', 'Waypoint_1'), ('movej', 'Waypoint_2'), ('movej', 'Waypoint_3'),
+           ('movej', approach), ('movej', pick), ('gripper', 'close'), ('movel', above), ('movej', 'Waypoint_2'),
+           ('movej', 'home')]
+    for case, drop, below, approach, pick, above in ((17, 'drop_rotate_1', 'Waypoint_4', 'Waypoint_18', 'pick_rotate_1', 'Waypoint_6'),
+                                                     (18, 'drop_rotate_2', 'Waypoint_7', 'Waypoint_11', 'pick_rotate_2', 'Waypoint_8'))}
 
 def _Read_File(root, *parts):
     with open(os.path.join(root, *parts), encoding='utf-8') as handle:
@@ -136,7 +148,7 @@ def test_the_plc_extract_is_its_source_verbatim(root):
     with open(source, 'rb') as handle:
         program = handle.read()
     assert hashlib.sha256(program).hexdigest() == CONST_PLC_SHA256
-    with open(os.path.join(root, 'test', 'fixtures', 'sf1_plc_v4_positions.urscript'), 'rb') as handle:
+    with open(os.path.join(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_positions.urscript'), 'rb') as handle:
         extract = handle.read().split(b'\n')[CONST_PLC_HEADER:]
     assert extract == program.split(b'\n')[CONST_PLC_LINES[0] - 1:CONST_PLC_LINES[1]] + [b'']
 
@@ -148,12 +160,62 @@ def test_the_plc_extract_is_read_with_every_token(root):
         drop_rotate_1 keeps the export's tokens (the same point as the robot export typed here).
     """
 
-    document = Read_URScript(_Read_File(root, 'test', 'fixtures', 'sf1_plc_v4_positions.urscript'))
+    document = Read_URScript(_Read_File(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_positions.urscript'))
     assert len(document.Points) == (CONST_PLC_LINES[1] - CONST_PLC_LINES[0] + 1) // 2
     export = Read_URScript(CONST_EXPORT).Points
     for name in ('home', 'drop_rotate_1'):
         assert document.Points[name].P_Tokens == export[name].P_Tokens
         assert document.Points[name].Q_Tokens == export[name].Q_Tokens
+
+
+def test_the_case_extract_is_its_source_verbatim(root):
+    """
+    Description:
+        With SF1_PLC_V4_SCRIPT naming the owner's program, every line of each case in the case
+        extract is the program's line of the recorded range, byte for byte, and the program has the
+        recorded sha256. Without the program the test is skipped, never passed.
+    """
+
+    source = os.environ.get(CONST_PLC_ENV, '')
+    if not source:
+        pytest.skip('%s is not set: the extract cannot be compared with sf1_plc_v4.script.' % CONST_PLC_ENV)
+    with open(source, 'rb') as handle:
+        program = handle.read()
+    assert hashlib.sha256(program).hexdigest() == CONST_PLC_SHA256
+    lines = program.decode('utf-8').split('\n')
+    cases = Read_Program_Excerpt(_Read_File(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_cases_17_18.script'))
+    assert sorted(cases) == sorted(CONST_PLC_CASE_LINES)
+    for case, (first, last) in CONST_PLC_CASE_LINES.items():
+        assert [line.Raw for line in cases[case]] == lines[first - 1:last]
+
+
+def test_the_case_extract_reads_in_program_order(root):
+    """
+    Description:
+        The reader returns, for each case, the moves to learned points and the gripper actions in the
+        order of the program tree.
+    """
+
+    cases = Read_Program_Excerpt(_Read_File(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_cases_17_18.script'))
+    for case, order in CONST_PLC_CASE_ORDER.items():
+        assert [(line.Kind, line.Target) for line in cases[case] if line.Kind != 'other'] == order
+
+
+@pytest.mark.parametrize('text, fragment', [
+    ('movej(get_inverse_kin(home_p, qnear=home_q))\n', 'before the first'),
+    ('# case 17: x\n  rq_set_pos_spd_for(128, 255, 255, "1")\n', 'position 128'),
+    ('# case 17: x\n  sleep(1)\n# case 17: y\n  sleep(1)\n', 'second time'),
+    ('# case 17: x\n', 'no lines'),
+])
+def test_a_malformed_program_excerpt_is_refused(text, fragment):
+    """
+    Description:
+        The excerpt reader is strict: a line before the first case, an unknown gripper position, a
+        repeated case and an empty case are refused, naming the problem.
+    """
+
+    with pytest.raises(URScript_Error_Cls, match=fragment):
+        Read_Program_Excerpt(text)
 
 
 def test_the_renamed_points_keep_every_token(root):

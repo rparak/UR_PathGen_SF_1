@@ -81,7 +81,7 @@ def plc_points():
     """
 
     from URScript.Core import Read_URScript
-    with open(os.path.join(CONST_ROOT, 'test', 'fixtures', 'sf1_plc_v4_positions.urscript'), encoding='utf-8') as handle:
+    with open(os.path.join(CONST_ROOT, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_positions.urscript'), encoding='utf-8') as handle:
         return Read_URScript(handle.read()).Points
 
 

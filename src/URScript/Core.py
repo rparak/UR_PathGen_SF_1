@@ -40,6 +40,10 @@ Description:
     Every number keeps its original token, so a learned point is written back exactly as it was
     read (encoder noise such as 2.44E-5 included). Joint values are never wrapped: UR joints span
     +-2*pi and movej goes to the exact value. Generated points get a fixed precision.
+
+    Also the only reader of a program excerpt (lines of a robot program kept verbatim, opened per
+    case by a '# case <n>:' line at column 0) and the only writer of a motion sequence (movej lines
+    of generated points, program lines copied verbatim, comments).
 """
 # A number as Polyscope writes it: '.238...', '-.175...', '2.44E-5', '-0.785...'.
 #   Unit [string]
@@ -48,6 +52,16 @@ CONST_NUMBER = r'-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?'
 #   Unit [Pattern]
 CONST_POSE_LINE = re.compile(r'^global\s+([A-Za-z_][A-Za-z0-9_]*)_p\s*=\s*p\[(.*)\]\s*$')
 CONST_JOINT_LINE = re.compile(r'^global\s+([A-Za-z_][A-Za-z0-9_]*)_q\s*=\s*\[(.*)\]\s*$')
+# Program-excerpt lines: a block marker, a movej to a learned point by its pose with qnear (as
+# Polyscope writes it), a movel to a learned pose, and a Robotiq gripper position command.
+#   Unit [Pattern]
+CONST_CASE_MARKER = re.compile(r'^# case (\d+):')
+CONST_PROGRAM_MOVEJ = re.compile(r'^\s*movej\(get_inverse_kin\(([A-Za-z_]\w*)_p, qnear=\1_q\)(?:, a=[^,()]+, v=[^,()]+(?:, r=[^,()]+)?)?\)\s*$')
+CONST_PROGRAM_MOVEL = re.compile(r'^\s*movel\(([A-Za-z_]\w*)_p(?:, a=[^,()]+, v=[^,()]+)?\)\s*$')
+CONST_PROGRAM_GRIPPER = re.compile(r'^\s*rq_set_pos_spd_for\((\d+), \d+, \d+, "\d+"\)\s*$')
+# Robotiq position commands of the program: 0 opens fully, 255 closes (on the part).
+#   Unit [Dict<string, string>]
+CONST_GRIPPER_ACTIONS = {'0': 'open', '255': 'close'}
 # Decimal places of a generated value: 1e-12 m / rad, far below anything the robot resolves.
 #   Unit [int]
 CONST_GENERATED_DECIMALS = 12
@@ -81,6 +95,24 @@ class Robot_Point_Str:
     #   Unit [List<string> 1x6]
     P_Tokens: tp.List[str] = field(default_factory=list)
     Q_Tokens: tp.List[str] = field(default_factory=list)
+
+
+@dataclass
+class Program_Line_Str:
+    """
+    Description:
+        One line of a program excerpt: what it does and its text as in the program.
+    """
+
+    # 'movej', 'movel', 'gripper' or 'other' (URCap boilerplate, Polyscope markers, comments).
+    #   Unit [string]
+    Kind: str = ''
+    # The target point of a move, 'open' / 'close' for the gripper, '' otherwise.
+    #   Unit [string]
+    Target: str = ''
+    # The line exactly as in the program, indentation included.
+    #   Unit [string]
+    Raw: str = ''
 
 
 @dataclass
@@ -167,6 +199,54 @@ def Read_URScript(text: str) -> URScript_Document_Str:
             raise URScript_Error_Cls('%s has no %s%s. Every point needs both its pose (_p) and its joints (_q).'
                                      % (name, name, missing))
     return document
+
+
+def Read_Program_Excerpt(text: str) -> tp.Dict[int, tp.List[Program_Line_Str]]:
+    """
+    Description:
+        Parse a program excerpt into its cases. Before the first '# case <n>:' line only column-0
+        comments are allowed; inside a case every line is a program line, classified as a movej or
+        movel to a learned point, a gripper open/close or other. Strict: an unknown gripper position,
+        a repeated case or a case without lines is an error.
+
+    Args:
+        (1) text [string]: The file content.
+
+    Returns:
+        (1) parameter [Dict<int, List<Program_Line_Str>>]: The lines of each case, in program order.
+    """
+
+    cases: tp.Dict[int, tp.List[Program_Line_Str]] = {}
+    current = None
+    for number, raw in enumerate(text.split('\n')[:-1] if text.endswith('\n') else text.split('\n'), start=1):
+        marker = CONST_CASE_MARKER.match(raw)
+        if marker is not None:
+            current = int(marker.group(1))
+            if current in cases:
+                raise URScript_Error_Cls('Line %d opens case %d a second time.' % (number, current))
+            cases[current] = []
+            continue
+        if current is None:
+            if not raw.startswith('#'):
+                raise URScript_Error_Cls('Line %d comes before the first "# case <n>:" line and is not a comment: %s'
+                                         % (number, raw))
+            continue
+        movej, movel, gripper = CONST_PROGRAM_MOVEJ.match(raw), CONST_PROGRAM_MOVEL.match(raw), CONST_PROGRAM_GRIPPER.match(raw)
+        if movej is not None:
+            cases[current].append(Program_Line_Str('movej', movej.group(1), raw))
+        elif movel is not None:
+            cases[current].append(Program_Line_Str('movel', movel.group(1), raw))
+        elif gripper is not None:
+            if gripper.group(1) not in CONST_GRIPPER_ACTIONS:
+                raise URScript_Error_Cls('Line %d sets the gripper to position %s; only 0 (open) and 255 (close) are '
+                                         'known.' % (number, gripper.group(1)))
+            cases[current].append(Program_Line_Str('gripper', CONST_GRIPPER_ACTIONS[gripper.group(1)], raw))
+        else:
+            cases[current].append(Program_Line_Str('other', '', raw))
+    for case, lines in cases.items():
+        if not lines:
+            raise URScript_Error_Cls('Case %d has no lines.' % case)
+    return cases
 
 
 def Format_Generated(value: float) -> str:
