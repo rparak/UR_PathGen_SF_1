@@ -214,3 +214,32 @@ Pinned by `test/URScript/test_core.py::test_movej_uses_joint_targets_and_no_blen
 included) are what the robot knows.
 
 Pinned by `test/URScript/test_core.py::test_the_renamed_points_keep_every_token`.
+
+## `Robot.Base_Yaw` is 180°, decided by where the taught points land
+
+**Decision.** `Robot.Base_Yaw` = 180.0° (owner, 2026-10-17; confirmed by the taught points of
+`sf1_plc_v4.script` and photos of the real cell). A placement test checks that the grasp and drop
+points land on what they handle; at 0° it refuses all of them.
+
+*Corrected 2026-10-17: 0° was configured and recorded as confirmed.* That value was an assumption.
+The test meant to catch a wrong yaw (`drop_rot_01` above the side table) encoded the same
+assumption, so it passed. FK vs `_p` is blind to the yaw, and clearance does not decide it either:
+at 0° both learned points and the ±45° demo were clear, because the robot then swept empty space.
+
+**Why.** At 180° `pick_obj_1..8` land on the pallet-table plate below the tops of the parts,
+`unload_obj_1..8` on the side-table plate, and `bench_drop_1..8` inside machine (a) (grinder
+loading). At 0° the first two groups land in empty space and the third beyond the STL (SPEC §4.6).
+The owner sees the robot at home facing the machine.
+
+**Alternatives.** Keeping 0° and testing clearance only: rejected, clearance cannot tell an empty
+cell from a correct one. Deriving the yaw from a clearance optimum: rejected, it would fit the model
+instead of measuring the cell. Tests that now fail only because the STL does not match the cell at
+the rotation station are strict xfails (`KNOWN_ISSUES.md`): they turn red as soon as the geometry
+is fixed, so the failure stays visible.
+
+**Revisit if** the touch-probed cell disagrees with the placement, or `Robot.Base_Position` x/y
+turns out to be off (it is not verified against the STL).
+
+Pinned by `test/Scene/test_core.py::test_the_taught_points_land_where_they_handle_parts`,
+`test/Scene/test_core.py::test_the_placement_check_refuses_a_base_yaw_of_0_deg` and
+`test/Scene/test_core.py::test_a_base_yaw_of_90_deg_turns_a_known_point_by_90_deg`.

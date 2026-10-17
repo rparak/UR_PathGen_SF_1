@@ -65,6 +65,16 @@ Description:
 CONST_SIDE_TABLE_X = (0.34, 0.93)
 CONST_SIDE_TABLE_Y = (-0.455, 0.455)
 CONST_SIDE_TABLE_TOP = 0.781
+# Top face of the side-table and pallet-table plates (STL components 1061 and 1060, both 0.715 -
+# 0.721 m) and the pallet table's x/y extent (component 1060), measured 2026-10-17, world frame.
+#   Unit [float] (m)
+CONST_TABLE_PLATE_TOP = 0.721
+CONST_PALLET_TABLE_X = (-0.295, 0.295)
+CONST_PALLET_TABLE_Y = (-1.411, -0.501)
+# Rotation-station geometry: the STL does not match the cell there (KNOWN_ISSUES.md); a test that
+# fails only because of it is a strict xfail, so it turns red once the geometry is fixed.
+#   Unit [string]
+CONST_STATION_XFAIL = 'KNOWN_ISSUES: STL does not match the cell at the rotation station'
 # Object (a), the machine behind the robot (SPEC 4.1): bounding box, world frame.
 #   Unit [Vector<float> 1x3] (m)
 CONST_OBJECT_A_MIN = (-1.609, -0.422, -0.002)
@@ -136,6 +146,20 @@ def test_the_base_sits_at_the_configured_pose(robot_scene, cfg):
     assert expected[2, 3] > 0.0 and cfg.Base_Position[2] == 0.7152
 
 
+def _Scene_With_Yaw(tmp_path, yaw):
+    """
+    Description:
+        A robot-only scene from a copy of the shipped configuration with another Robot.Base_Yaw (deg).
+    """
+
+    with open(CONST_DEFAULT_CONFIG_FILE, encoding='utf-8') as handle:
+        data = yaml.safe_load(handle)
+    data['Robot']['Base_Yaw'] = yaw
+    path = tmp_path / ('cell_yaw_%g.yaml' % yaw)
+    path.write_text(yaml.safe_dump(data), encoding='utf-8')
+    return Scene_Cls(Load_Configuration(str(path)), with_environment=False)
+
+
 def test_a_base_yaw_of_90_deg_turns_a_known_point_by_90_deg(cfg, points, tmp_path):
     """
     Description:
@@ -145,12 +169,7 @@ def test_a_base_yaw_of_90_deg_turns_a_known_point_by_90_deg(cfg, points, tmp_pat
         (SPEC 4.3). The value read as radians would turn the point by 90 rad (~ 116.6 deg).
     """
 
-    with open(CONST_DEFAULT_CONFIG_FILE, encoding='utf-8') as handle:
-        data = yaml.safe_load(handle)
-    data['Robot']['Base_Yaw'] = 90.0
-    path = tmp_path / 'cell_yaw_90.yaml'
-    path.write_text(yaml.safe_dump(data), encoding='utf-8')
-    scene = Scene_Cls(Load_Configuration(str(path)), with_environment=False)
+    scene = _Scene_With_Yaw(tmp_path, 90.0)
     x, y, z = points['home_safe'].P[:3]
     expected = np.array(cfg.Base_Position) + np.array([-y, x, z])
     scene.Set_Joints(points['home_safe'].Q)
@@ -295,46 +314,78 @@ def test_joint_ranges_are_the_configured_limits(robot_scene, cfg):
     assert cfg.Joint_Limits_Max[2] == pytest.approx(math.pi)
 
 
-def test_drop_point_lies_above_the_side_table_and_outside_object_a(robot_scene, cfg, points):
+def _Placement_Problems(scene, cfg, plc_points):
     """
     Description:
-        The world-yaw check that FK vs _p cannot do: drop_rot_01's TCP in the world frame is over
-        the side table, above its highest part, and outside the machine behind the robot.
+        Where the taught grasp and drop points of sf1_plc_v4.script land in the world, against what
+        they handle: pick_obj_1..8 between the pallet-table plate and the top of the parts on it,
+        unload_obj_1..8 the same on the side table, bench_drop_1..8 inside machine (a). Returns one
+        line per point that lands elsewhere.
     """
 
-    tcp = (robot_scene.Base_Frame() @ TCP_Pose(points['drop_rot_01'].Q, cfg.TCP_Offset))[:3, 3]
-    assert CONST_SIDE_TABLE_X[0] < tcp[0] < CONST_SIDE_TABLE_X[1]
-    assert CONST_SIDE_TABLE_Y[0] < tcp[1] < CONST_SIDE_TABLE_Y[1]
-    assert tcp[2] > CONST_SIDE_TABLE_TOP
-    assert not all(CONST_OBJECT_A_MIN[k] <= tcp[k] <= CONST_OBJECT_A_MAX[k] for k in range(3))
+    problems = []
+    for i in range(1, 9):
+        for name, x, y in (('pick_obj_%d' % i, CONST_PALLET_TABLE_X, CONST_PALLET_TABLE_Y),
+                           ('unload_obj_%d' % i, CONST_SIDE_TABLE_X, CONST_SIDE_TABLE_Y)):
+            tcp = (scene.Base_Frame() @ TCP_Pose(plc_points[name].Q, cfg.TCP_Offset))[:3, 3]
+            if not (x[0] < tcp[0] < x[1] and y[0] < tcp[1] < y[1] and CONST_TABLE_PLATE_TOP < tcp[2] < CONST_SIDE_TABLE_TOP):
+                problems.append('%s at %s' % (name, np.round(tcp, 3)))
+        tcp = (scene.Base_Frame() @ TCP_Pose(plc_points['bench_drop_%d' % i].Q, cfg.TCP_Offset))[:3, 3]
+        if not all(CONST_OBJECT_A_MIN[k] < tcp[k] < CONST_OBJECT_A_MAX[k] for k in range(3)):
+            problems.append('bench_drop_%d at %s' % (i, np.round(tcp, 3)))
+    return problems
 
 
-def test_a_and_b_keep_every_clearance_margin(scene, cfg, points):
+def test_the_taught_points_land_where_they_handle_parts(robot_scene, cfg, plc_points):
+    """
+    Description:
+        The world-yaw check that FK vs _p cannot do: at the configured base pose every grasp point
+        lands on its table and every machine drop inside machine (a).
+    """
+
+    assert _Placement_Problems(robot_scene, cfg, plc_points) == []
+
+
+def test_the_placement_check_refuses_a_base_yaw_of_0_deg(cfg, plc_points, tmp_path):
+    """
+    Description:
+        The placement check discriminates: at Base_Yaw = 0 (the earlier, wrong value) all 24 points
+        land elsewhere.
+    """
+
+    assert len(_Placement_Problems(_Scene_With_Yaw(tmp_path, 0.0), cfg, plc_points)) == 24
+
+
+@pytest.mark.parametrize('name', ['home_safe', pytest.param('drop_rot_01', marks=pytest.mark.xfail(
+    strict=True, reason=CONST_STATION_XFAIL))])
+def test_a_and_b_keep_every_clearance_margin(scene, cfg, points, name):
     """
     Description:
         A and B against the full environment and self-collision. Any violation fails, listing
         every pair with its distance and margin.
     """
 
-    for name in ('home_safe', 'drop_rot_01'):
-        violations = scene.Check_Clearance(points[name].Q)
-        assert not violations, '%s: %s' % (name, '; '.join('%s - %s %.2f mm (margin %.1f mm)' % (
-            v.Body_1, v.Body_2, v.Distance * 1e3, v.Margin * 1e3) for v in violations))
-        Check_Learned_Point(scene, cfg, points[name])
+    violations = scene.Check_Clearance(points[name].Q)
+    assert not violations, '%s: %s' % (name, '; '.join('%s - %s %.2f mm (margin %.1f mm)' % (
+        v.Body_1, v.Body_2, v.Distance * 1e3, v.Margin * 1e3) for v in violations))
+    Check_Learned_Point(scene, cfg, points[name])
 
 
-def test_a_pose_pushed_into_the_side_table_is_a_collision(scene, cfg, points):
+def test_a_pose_pushed_into_the_side_table_is_a_collision(scene, cfg, plc_points):
     """
     Description:
-        Lowering drop_rot_01 by the shoulder until the TCP is below the side table top inside its
-        extent is reported as a collision with the environment, and Check_Learned_Point refuses it.
+        hover_unload_2 (over the side table, clear) lowered by the shoulder until the TCP is below
+        the side table top inside its extent is reported as a collision with the environment, and
+        Check_Learned_Point refuses it.
     """
 
-    q = np.array(points['drop_rot_01'].Q)
-    for delta in np.linspace(0.0, 1.0, 201):
+    q = np.array(plc_points['hover_unload_2'].Q)
+    assert scene.Check_Clearance(q) == []
+    for delta in sorted(np.linspace(-1.0, 1.0, 401), key=abs):
         trial = q + np.array([0.0, delta, 0.0, 0.0, 0.0, 0.0])
         tcp = (scene.Base_Frame() @ TCP_Pose(trial, cfg.TCP_Offset))[:3, 3]
-        if tcp[2] < 0.70 and CONST_SIDE_TABLE_X[0] < tcp[0] < CONST_SIDE_TABLE_X[1]:
+        if (tcp[2] < 0.70 and CONST_SIDE_TABLE_X[0] < tcp[0] < CONST_SIDE_TABLE_X[1]
+                and CONST_SIDE_TABLE_Y[0] < tcp[1] < CONST_SIDE_TABLE_Y[1]):
             break
     else:
         pytest.fail('No shoulder offset lowers the TCP into the side table; the test setup is wrong.')
@@ -342,8 +393,9 @@ def test_a_pose_pushed_into_the_side_table_is_a_collision(scene, cfg, points):
     assert any(v.Body_2.startswith('env') or v.Body_1.startswith('env') for v in violations)
     assert min(v.Distance for v in violations) < 0.0
     # A consistent point (its _p is the FK of its _q), so it is the clearance check that refuses it.
-    point = dataclasses.replace(points['drop_rot_01'], Q=list(trial), P=Matrix_To_Pose(TCP_Pose(trial, cfg.TCP_Offset)))
-    with pytest.raises(Clearance_Error_Cls, match='drop_rot_01 violates'):
+    point = dataclasses.replace(plc_points['hover_unload_2'], Q=list(trial),
+                                P=Matrix_To_Pose(TCP_Pose(trial, cfg.TCP_Offset)))
+    with pytest.raises(Clearance_Error_Cls, match='hover_unload_2 violates'):
         Check_Learned_Point(scene, cfg, point)
 
 
@@ -448,11 +500,13 @@ def test_contacts_beyond_the_configured_margin_are_not_violations(scene, cfg):
         MuJoCo generates contacts up to the sum of both geom margins (25 / 10 mm); Check_Clearance
         must filter by the configured margin (20 / 5 mm). Two poses found by seeded random search:
         a robot - environment contact at 21-24 mm and a robot - robot contact at 6-9 mm are present
-        in MuJoCo's contact list, and neither is a violation.
+        in MuJoCo's contact list, and neither is a violation. The robot - environment pose depends
+        on the base pose; it was found at Base_Yaw = 180 deg (seed 20261017, uniform within the
+        joint limits, rounded to 1e-4 rad, sample 11354).
     """
 
     m, d = scene.Model, scene.Data
-    for q, pair, band in (([0.9263, -2.1894, -2.0539, -1.2618, 5.6555, -5.5791], ('env', 'wrist_2_link'), (0.021, 0.024)),
+    for q, pair, band in (([1.7008, -2.3569, -1.4656, 3.8491, -0.3363, 2.5634], ('env', 'wrist_2_link'), (0.021, 0.024)),
                           ([-2.4298, -1.9392, 1.2995, -4.1812, -0.7126, 1.3425], ('forearm_link', 'wrist_2_link'),
                            (0.006, 0.009))):
         assert scene.Check_Clearance(q) == []

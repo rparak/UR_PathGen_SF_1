@@ -55,6 +55,10 @@ CONST_STL_FACES = 1757948
 # Connected components by manifold edge, as measured independently with trimesh (SPEC 4.1).
 #   Unit [int]
 CONST_STL_COMPONENTS = 2756
+# Rotation-station geometry: the STL does not match the cell there (KNOWN_ISSUES.md); a test that
+# fails only because of it is a strict xfail, so it turns red once the geometry is fixed.
+#   Unit [string]
+CONST_STATION_XFAIL = 'KNOWN_ISSUES: STL does not match the cell at the rotation station'
 
 
 @pytest.fixture(scope='module')
@@ -232,7 +236,9 @@ def test_a_collinear_component_is_thickened_in_two_directions():
     assert np.max(line @ hull.equations[:, :3].T + hull.equations[:, 3]) <= 1e-12
 
 
-def test_no_robot_body_at_a_or_b_is_inside_a_flagged_piece(scene, collision, points):
+@pytest.mark.parametrize('name', ['home_safe', pytest.param('drop_rot_01', marks=pytest.mark.xfail(
+    strict=True, reason=CONST_STATION_XFAIL))])
+def test_no_robot_body_at_a_or_b_is_inside_a_flagged_piece(scene, collision, points, name):
     """
     Description:
         At A and B no robot or gripper collision geom penetrates a flagged open-shell piece.
@@ -242,9 +248,8 @@ def test_no_robot_body_at_a_or_b_is_inside_a_flagged_piece(scene, collision, poi
     flagged = ['env_piece_%d' % i for i in collision.Manifest['flagged_open_shells']['pieces']]
     robot = [g for g in range(m.ngeom) if m.geom_contype[g] and not m.body(m.geom_bodyid[g]).name.startswith('env')
              and m.geom_bodyid[g] != 0]
-    for name in ('home_safe', 'drop_rot_01'):
-        scene.Set_Joints(points[name].Q)
-        for piece in flagged:
-            e = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, piece)
-            for g in robot:
-                assert mujoco.mj_geomDistance(m, d, g, e, 0.05, None) > 0.0, (name, piece, m.geom(g).name)
+    scene.Set_Joints(points[name].Q)
+    for piece in flagged:
+        e = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, piece)
+        for g in robot:
+            assert mujoco.mj_geomDistance(m, d, g, e, 0.05, None) > 0.0, (name, piece, m.geom(g).name)

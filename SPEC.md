@@ -274,6 +274,26 @@ collides two static (jointless, world-welded) bodies.** That matters for the sce
 | Reading, splitting and hulling the STL | 5.5 s |
 | Stand components inside `Stand_Region` | 839, of which **270 are degenerate** (planar: no 3-D hull, MuJoCo refuses them) |
 
+### 4.6 Base yaw from the taught points (*measured*, 2026-10-17)
+
+The owner's program `sf1_plc_v4.script` (sha256 `ecec8e53…8eae`; its 156 global `_p`/`_q` lines are
+committed verbatim as `test/fixtures/sf1_plc_v4_positions.urscript`) contains grasp and drop points
+whose targets are known. World TCP (DH FK · TCP of `_q`, base at `Base_Position`), checked by a
+vertical ray through the STL triangles:
+
+| Points | At 180° | At 0° |
+|---|---|---|
+| `pick_obj_1..8` | x [−0.21, 0.22], y −0.96, z 0.757–0.763: on the pallet-table plate (component 1060, x [−0.295, 0.295], y [−1.411, −0.501], top 0.721), below the part tops at 0.7705–0.7735 | x [−0.22, 0.21], y +0.96: nothing in the STL |
+| `unload_obj_1..8` | x 0.42–0.85, y 0.00, z 0.756–0.761: on the side-table plate (component 1061, top 0.721), parts up to 0.7735 | x −0.42 … −0.85, y 0: nothing in the STL |
+| `bench_drop_1..8` | (−1.12, −0.08, 1.08): inside machine (a) | x 1.12, beyond the STL (x max 0.934) |
+
+At 180° every point lands where it handles a part; at 0° none does. The owner also sees the robot
+at home facing the machine. With 180°, the regrasp at the rotation station collides with the model
+(`KNOWN_ISSUES.md`): the STL does not match the cell there. The grasp points themselves are inside
+the margin of the modelled parts they grasp (−12 to −20 mm), and the machine drops are 150 mm inside
+the hull of machine (a): both are expected for points that handle parts, and neither is a learned
+point of the planner.
+
 ## 5. Platform
 
 - macOS on Apple silicon (primary, verified here) and Ubuntu Linux (unverified).
@@ -420,7 +440,7 @@ field without a reader.
 | `Environment.Stand_Region.Min/Max` | box selecting the stand components (§7.5) | m | REQUIRED |
 | `Robot.Model` | `models/universal_robots_ur10e/ur10e.xml` | path | REQUIRED |
 | `Robot.Base_Position` | Polyscope base origin in the STL/world frame: `[0.0, 0.0, 0.7152]` | m | REQUIRED |
-| `Robot.Base_Yaw` | rotation of the Polyscope base frame about world z: `0.0` (confirmed) | deg | REQUIRED |
+| `Robot.Base_Yaw` | rotation of the Polyscope base frame about world z: `180.0` (owner, 2026-10-17; confirmed by the taught points of `sf1_plc_v4.script` and photos of the cell, §4.6). *Corrected 2026-10-17: was `0.0`, which put every taught grasp point in empty space* | deg | REQUIRED |
 | `Robot.Joint_Position_Limits.Min/Max` | joint position limits, 6 each. Shipped: ±360° for base, shoulder, wrists; **±180° for the elbow** (Menagerie default, owner). Load rejects: any joint beyond ±360°, and **the elbow beyond ±180°**, because that limit is the precondition for excluding `upper_arm_link–forearm_link` (§9.6). The Polyscope safety limits may be tighter (`KNOWN_ISSUES.md`) | deg | REQUIRED |
 | `Tool.Model` | `models/robotiq_2f85/2f85.xml` | path | REQUIRED |
 | `Tool.Coupling.Thickness` | coupling thickness: `0.0169` (manual rev. 2020/02/11 p. 119, Fig. 5-5) | m | REQUIRED |
@@ -456,6 +476,9 @@ feature that needs envelope checking. Until then it is not a parameter.
 - World = STL frame. Polyscope base frame = world translated by `Robot.Base_Position` and rotated
   by `Robot.Base_Yaw` about z. The Menagerie root (with its built-in 180°) is placed at exactly that
   pose; §4.2 shows that the Menagerie world frame already equals the Polyscope base frame.
+- `Robot.Base_Yaw` = 180°: the base frame's +x points to world −x, towards machine (a). FK vs `_p`
+  cannot see the yaw; the placement of the taught points decides it (§4.6). *Corrected 2026-10-17:
+  0° was configured until then.*
 - Flange frame = DH frame 6 (z out of the flange).
 - TCP = flange · `Tool.TCP_Offset`.
 
@@ -685,12 +708,12 @@ synthetic point with a joint at 4.0 rad that must come out as 4.0.
 
 | Test file | What it pins |
 |---|---|
-| `test/URScript/test_core.py` | exact float values of all 24 numbers; byte-identical round trip; `.238`, `-.175`, `E-5` tokens; strict errors (malformed, missing pair, duplicate, wrong length, line number in message); generated-point format; no wrapping (4.0 rad); `movej` line uses `_q` and `r=0`; renamed file tokens == original export |
+| `test/URScript/test_core.py` | exact float values of all 24 numbers; byte-identical round trip; `.238`, `-.175`, `E-5` tokens; strict errors (malformed, missing pair, duplicate, wrong length, line number in message); generated-point format; no wrapping (4.0 rad); `movej` line uses `_q` and `r=0`; renamed file tokens == original export; the `sf1_plc_v4` extract is read strictly with every token, and equals its source lines 2453–2608 byte for byte with the recorded sha256 when `SF1_PLC_V4_SCRIPT` names the program (otherwise skipped, never passed) |
 | `test/Configuration/test_core.py` | shipped file loads; each REQUIRED field missing → named failure; invalid values (wrong length, limits outside ±360°, min ≥ max, coupling spigot depth ≥ thickness, negative clearance or sanity bound) fail; all problems listed at once; unknown key → WARNING |
 | `test/Kinematics/test_core.py` | `FK_DH(q) · TCP_config` vs `_p`: regression pin (§9.4) of 1.72 mm / 0.261° and 4.02 mm / 0.376° (±0.01 mm / ±0.001°); diagnostic derived TCP pinned the same way and never read by any check; both points within the sanity bound; `Check_Learned_Point` rejects a point beyond it (perturbed `_q`) with the numbers in the message; configured TCP == (0, 0, 0.174, 0, 0, 0); geodesic angle 0 between r and its π-equivalent; `Normalize_Rotvec` rule incl. near-π |
-| `test/Scene/test_core.py` | scene compiles; base body world position == `Base_Position` exactly and yaw == `Base_Yaw`; **at `Base_Yaw` = 90° (a temporary copy of the configuration) `home_safe`'s TCP lands at `Base_Position` + (−y, x, z) of its `_p` within 3 mm, in MuJoCo and through the base frame (the file is in degrees; read as radians the test fails)**; **MuJoCo flange FK (after the MjSpec offset override) == DH flange FK within 1e-9 m / 1e-9 rad (atan2 geodesic, §9.5) for 1000 seeded random joint vectors within the limits**, plus A and B; pad-span hull present in the gripper rigid group; fingers open along flange ±x at `Mount_Yaw` = 0; visual mesh has no hull (`mesh_graphadr = −1`); base↔env build check runs; loader rejects an elbow limit beyond ±180°; gripper opening == `Tool.Opening` ± 0.5 mm, equality residual < 0.1 mm; coupling cylinder present (visual + collision), Menagerie `base_mount` mesh geoms absent, vendored files byte-identical to `models/MANIFEST.json`; pad end from the flange face 163.3 mm open and 176.8 mm closed (± 0.5 mm, manual chain) and the 50 mm values 154.39 / 173.23 mm (± 0.05 mm, regression); exclusion set == configuration expansion + `base–env_stand`, filterparent disabled; joint ranges == `Joint_Position_Limits`; **drop_rot_01 TCP in world lies above the side table (inside its x/y extent, above its highest part) and outside object (a)**; A and B pass `Check_Clearance`, and **any violation fails the test, listing every pair with its distance and margin** (no report-only path); a pose pushed into the side table is reported as a collision |
+| `test/Scene/test_core.py` | scene compiles; base body world position == `Base_Position` exactly and yaw == `Base_Yaw`; **at `Base_Yaw` = 90° (a temporary copy of the configuration) `home_safe`'s TCP lands at `Base_Position` + (−y, x, z) of its `_p` within 3 mm, in MuJoCo and through the base frame (the file is in degrees; read as radians the test fails)**; **MuJoCo flange FK (after the MjSpec offset override) == DH flange FK within 1e-9 m / 1e-9 rad (atan2 geodesic, §9.5) for 1000 seeded random joint vectors within the limits**, plus A and B; pad-span hull present in the gripper rigid group; fingers open along flange ±x at `Mount_Yaw` = 0; visual mesh has no hull (`mesh_graphadr = −1`); base↔env build check runs; loader rejects an elbow limit beyond ±180°; gripper opening == `Tool.Opening` ± 0.5 mm, equality residual < 0.1 mm; coupling cylinder present (visual + collision), Menagerie `base_mount` mesh geoms absent, vendored files byte-identical to `models/MANIFEST.json`; pad end from the flange face 163.3 mm open and 176.8 mm closed (± 0.5 mm, manual chain) and the 50 mm values 154.39 / 173.23 mm (± 0.05 mm, regression); exclusion set == configuration expansion + `base–env_stand`, filterparent disabled; joint ranges == `Joint_Position_Limits`; **placement (§4.6): `pick_obj_1..8` on the pallet table, `unload_obj_1..8` on the side table (between the plate top and the highest part), `bench_drop_1..8` inside object (a); the same check at `Base_Yaw` = 0 refuses all 24**; A and B pass `Check_Clearance`, and **any violation fails the test, listing every pair with its distance and margin** (no report-only path); B (`drop_rot_01`) is a strict xfail while the STL does not match the cell at the rotation station (`KNOWN_ISSUES.md`), so it turns red once the geometry is fixed; `hover_unload_2` (clear) pushed into the side table is reported as a collision |
 | `test/Scene/test_margin.py` | margin accuracy on **mesh hull vs mesh hull** (robot geom on a joint, so not static): a robot link hull at 3 orientations vs a box-hull face, and box-hull edge vs edge; at 10 mm a violation is reported, at 30 mm none; reported distance error < 0.5 mm (prototype: 0.000 mm, §4.5) |
-| `test/Collision/test_core.py` | manifest STL hash == sha256 of the file; `R_crop` ≥ the bound recomputed from the current scene, and no robot collision vertex leaves the sphere over 1000 seeded random `q`; conservativeness violations == 0 at `eps` (vertices + 1 sample/cm² for CoACD components, hull-only exempt); degenerate components thickened and containing the original; excess metrics present and equal to a recomputation on a fixed sample; no robot body at A/B inside a flagged open-shell piece; mismatched hash → `Collision_Error_Cls` |
+| `test/Collision/test_core.py` | manifest STL hash == sha256 of the file; `R_crop` ≥ the bound recomputed from the current scene, and no robot collision vertex leaves the sphere over 1000 seeded random `q`; conservativeness violations == 0 at `eps` (vertices + 1 sample/cm² for CoACD components, hull-only exempt); degenerate components thickened and containing the original; excess metrics present and equal to a recomputation on a fixed sample; no robot body at A/B inside a flagged open-shell piece (B a strict xfail while the STL does not match the cell at the rotation station); mismatched hash → `Collision_Error_Cls` |
 | `test/Example/test_demo.py` | headless demo runs N steps without exception; only the chosen joint changes, monotonically between turning points; it stays within `Joint_Position_Limits`; the pre-check runs on the dense segment samples of §9.7; the label equals the check result ("clearance checked" iff no violation, otherwise "VISUAL ONLY — UNCHECKED"); the shipped motion's label is pinned |
 | `test/Install/test_install.py` | `bash -n`; sourced steps under a hermetic `PATH`: OS detection (Darwin arm64, Linux), Python 3.11 resolution (`python3` never called), hash verification fails on a tampered model file, every log line in the log format |
 | `.claude/skills/project-style-rpx/scripts/test_check_style.py` | the checker itself (outside `test/`) |
@@ -738,7 +761,7 @@ unverified is marked *Unsettled*.
 | # | Risk | Handling |
 |---|---|---|
 | 1 | Mesh collision = convex hull | crop → hull per component → CoACD only where coarse; surface metrics (§7) |
-| 2 | Units / frames | STL in m (measured); base pose and yaw REQUIRED fields; Menagerie 180° verified (§4.2); base-position test; drop-above-side-table test catches a wrong world yaw, which FK vs `_p` cannot |
+| 2 | Units / frames | STL in m (measured); base pose and yaw REQUIRED fields; Menagerie 180° verified (§4.2); base-position test; a 90° yaw test pins degrees in the file; the placement test of the taught points (§4.6) catches a wrong world yaw, which FK vs `_p` cannot (it caught the earlier 0°) |
 | 3 | Models | Menagerie pinned commit, BSD-3/BSD-2, vendored, hash manifest; Menagerie offsets patched to DH (16.5 mm flange error found) |
 | 4 | Sim vs real kinematics | DH truth; configured TCP (Polyscope = Robotiq manual), derived TCP diagnostic only (§9.3); coupling from the manual, measured on the robot (§9.3); regression pin + sanity bound (§9.4); no calibration file → residual in the clearance budget (§9.8) |
 | 5 | A→B configuration change (base ~167°, elbow −120° → +83.8°) | `movej` only, joint targets only; `movel` is never emitted |
@@ -859,6 +882,6 @@ Measured on the development Mac (M2 Pro), Python 3.11, mujoco 3.16.0.
   262.7 mm.
 - **MuJoCo FK vs DH** over 1000 random `q`: ≤ 1e-15 m, ≤ 1e-15 rad.
 - **`base – upper_arm_link` true minimum:** 2.3237 mm (grid 2.3263 mm).
-- **A and B against the full environment:** no violation.
+- **A and B against the full environment:** no violation. *Corrected 2026-10-17: measured at `Base_Yaw` = 0. At 180° A is clear and B penetrates the rotation-station model by 27.4 mm (`KNOWN_ISSUES.md`); the closest-pair line above is also from 0°.*
 - **Demo** (base ±45° around `home_safe`): 1234 joint-linear samples, every margin kept, label
-  **"clearance checked"**.
+  **"clearance checked"**. At 180° (2026-10-17) the same: 1234 samples, every margin kept.

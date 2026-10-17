@@ -23,6 +23,8 @@
 
 # System (Default)
 import os
+# Hashlib (Secure hashes)
+import hashlib
 # Pytest (Testing framework) [pip3 install pytest]
 import pytest
 # Custom Lib.:
@@ -58,6 +60,16 @@ CONST_VALUES = {
                        -0.2542222181903284, 1.5013701915740967]),
 }
 
+# The owner's robot program the extract test/fixtures/sf1_plc_v4_positions.urscript comes from: its
+# sha256 and the 1-based line range of its global _p/_q lines (measured 2026-10-17). The program is
+# not committed; the comparison runs only when SF1_PLC_V4_SCRIPT names it.
+#   Unit [string], [Tuple<int>]
+CONST_PLC_SHA256 = 'ecec8e53007d93acd5cf3da5b545f588a02dbc1b9c26497c82282c37bcfb8eae'
+CONST_PLC_LINES = (2453, 2608)
+CONST_PLC_ENV = 'SF1_PLC_V4_SCRIPT'
+# Header lines of the extract before the verbatim lines.
+#   Unit [int]
+CONST_PLC_HEADER = 4
 
 def _Read_File(root, *parts):
     with open(os.path.join(root, *parts), encoding='utf-8') as handle:
@@ -108,6 +120,40 @@ def test_the_fixture_is_the_robot_export(root):
     """
 
     assert _Read_File(root, 'test', 'URScript', 'data', 'SF1_Positions_original.urscript') == CONST_EXPORT
+
+
+def test_the_plc_extract_is_its_source_verbatim(root):
+    """
+    Description:
+        With SF1_PLC_V4_SCRIPT naming the owner's program, the program has the recorded sha256 and the
+        extract's lines after its header are the program's lines 2453-2608, byte for byte. Without
+        the program the test is skipped, never passed.
+    """
+
+    source = os.environ.get(CONST_PLC_ENV, '')
+    if not source:
+        pytest.skip('%s is not set: the extract cannot be compared with sf1_plc_v4.script.' % CONST_PLC_ENV)
+    with open(source, 'rb') as handle:
+        program = handle.read()
+    assert hashlib.sha256(program).hexdigest() == CONST_PLC_SHA256
+    with open(os.path.join(root, 'test', 'fixtures', 'sf1_plc_v4_positions.urscript'), 'rb') as handle:
+        extract = handle.read().split(b'\n')[CONST_PLC_HEADER:]
+    assert extract == program.split(b'\n')[CONST_PLC_LINES[0] - 1:CONST_PLC_LINES[1]] + [b'']
+
+
+def test_the_plc_extract_is_read_with_every_token(root):
+    """
+    Description:
+        The strict reader takes the extract as it is: 78 points, each with _p and _q, and
+        drop_rotate_1 keeps the export's tokens (the same point as the robot export typed here).
+    """
+
+    document = Read_URScript(_Read_File(root, 'test', 'fixtures', 'sf1_plc_v4_positions.urscript'))
+    assert len(document.Points) == (CONST_PLC_LINES[1] - CONST_PLC_LINES[0] + 1) // 2
+    export = Read_URScript(CONST_EXPORT).Points
+    for name in ('home', 'drop_rotate_1'):
+        assert document.Points[name].P_Tokens == export[name].P_Tokens
+        assert document.Points[name].Q_Tokens == export[name].Q_Tokens
 
 
 def test_the_renamed_points_keep_every_token(root):

@@ -74,6 +74,18 @@ def points():
 
 
 @pytest.fixture(scope='session')
+def plc_points():
+    """
+    Description:
+        Every learned point of the owner's program sf1_plc_v4.script (the committed extract).
+    """
+
+    from URScript.Core import Read_URScript
+    with open(os.path.join(CONST_ROOT, 'test', 'fixtures', 'sf1_plc_v4_positions.urscript'), encoding='utf-8') as handle:
+        return Read_URScript(handle.read()).Points
+
+
+@pytest.fixture(scope='session')
 def robot_scene(cfg):
     """
     Description:

@@ -35,8 +35,11 @@ Robot:
   # Origin of the Polyscope base frame in the world (STL) frame: the base sits at z = 715.2 mm on
   # the table (owner). REQUIRED. [m]
   Base_Position: [0.0, 0.0, 0.7152]
-  # Rotation of the Polyscope base frame about the world z axis (owner: 0, confirmed). REQUIRED. [deg]
-  Base_Yaw: 0.0
+  # Rotation of the Polyscope base frame about the world z axis (owner, 2026-10-17; confirmed by the
+  # taught points of sf1_plc_v4.script and photos of the real cell: at 180 the grasp points land on
+  # the pallet and side tables and the machine drops inside machine (a); at 0 none does). An earlier
+  # value of 0 was wrong (docs/design-decisions.md). REQUIRED. [deg]
+  Base_Yaw: 180.0
   # Joint position limits in the order base, shoulder, elbow, wrist 1, wrist 2, wrist 3.
   # Hardware range +-360 deg, except the elbow: +-180 deg (Menagerie default, owner). The elbow
   # limit is the precondition for excluding upper_arm_link - forearm_link from self-collision;
