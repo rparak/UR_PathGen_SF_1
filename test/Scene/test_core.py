@@ -45,7 +45,7 @@ from scipy.optimize import minimize
 import yaml
 # Custom Lib.:
 #   ../src/Scene/Core — the scene under test
-from Scene.Core import Scene_Cls, Scene_Error_Cls, Clearance_Error_Cls, Check_Learned_Point
+from Scene.Core import Scene_Cls, Scene_Error_Cls, Clearance_Error_Cls, Check_Learned_Point, Van_Der_Corput_Order
 #   ../src/Kinematics/Core — the kinematic refusal
 from Kinematics.Core import Kinematics_Error_Cls
 #   ../src/Kinematics/Core — the DH truth
@@ -429,6 +429,42 @@ def test_the_station_zone_applies_within_the_endpoint_radius(robot_scene, cfg, p
     assert not robot_scene.Station_Zone_Active(below, [drop])
     assert robot_scene.Station_Zone_Active(below, [drop, below])
     assert not robot_scene.Station_Zone_Active(drop, [])
+
+
+def test_a_generated_configuration_above_the_workspace_is_refused(robot_scene, cfg, points):
+    """
+    Description:
+        The arm upright with the tool pointing up puts the TCP above the workspace's 2.35 m (DH FK,
+        not the scene): the generated rule reports the robot bodies above it, the largest excursion
+        being the pad end's,
+        the taught rule does not apply the box, and home_safe lies inside it.
+    """
+
+    up = [0.0, -math.pi / 2.0, 0.0, math.pi, -math.pi / 2.0, 0.0]
+    tcp_z = (robot_scene.Base_Frame() @ TCP_Pose(up, cfg.TCP_Offset))[2, 3]
+    assert tcp_z > cfg.Workspace_Max[2]
+    violations = robot_scene.Workspace_Violations(up)
+    assert violations and all(v.Body_2 == 'workspace' and v.Margin == 0.0 for v in violations)
+    # The highest robot point is the pad end, 173.23 mm from the flange at 50 mm (SPEC 4.4), 0.77 mm
+    # short of the 174 mm TCP.
+    expected = tcp_z - cfg.Workspace_Max[2] - (cfg.TCP_Offset[2] - CONST_PAD_END_50 * 1e-3)
+    assert abs(max(-v.Distance for v in violations) - expected) < 1e-4
+    assert any(v.Body_2 == 'workspace' for v in robot_scene.Check_Configuration(up, 'generated'))
+    assert not any(v.Body_2 == 'workspace' for v in robot_scene.Check_Configuration(up, 'taught'))
+    assert robot_scene.Workspace_Violations(points['home_safe'].Q) == []
+
+
+def test_the_van_der_corput_order_visits_every_sample_once():
+    """
+    Description:
+        The early exit visits the same samples as the full check: for any count the order is a
+        permutation of range(n), both ends first and the middle third.
+    """
+
+    for n in (1, 2, 3, 9, 37, 1000, 2306):
+        order = Van_Der_Corput_Order(n)
+        assert sorted(order) == list(range(n))
+    assert Van_Der_Corput_Order(9)[:3] == [0, 8, 4]
 
 
 def test_a_segment_is_taught_or_generated(robot_scene, points):

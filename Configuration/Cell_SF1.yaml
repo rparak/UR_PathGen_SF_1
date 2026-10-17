@@ -116,6 +116,14 @@ Clearance:
     Max: [-0.55, -0.20, 1.85]
     Environment: 0.005
     Endpoint_Radius: 0.050
+  # The box a generated segment must keep every robot collision geom inside (world frame); taught
+  # segments are not held to it. Space outside the STL is not modelled, so a new path may use only
+  # space proved free by the taught program: x and y are the STL's extents (SPEC 4.1), z min the
+  # STL's floor, z max 2.35 m, the highest point the taught rotation sequence reaches (2.322 m,
+  # 2026-10-17) rounded up. REQUIRED, both. [m]
+  Workspace:
+    Min: [-1.609, -1.413, -0.002]
+    Max: [0.934, 1.045, 2.35]
 
 # Self-collision filtering. MuJoCo's automatic parent/child filter is disabled; only these apply.
 Self_Collision:

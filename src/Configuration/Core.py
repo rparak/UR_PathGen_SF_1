@@ -70,7 +70,8 @@ CONST_SCHEMA = {
     'Tool': {'Model': None, 'Coupling': {'Thickness': None, 'Diameter': None, 'Spigot_Depth': None},
              'Mount_Yaw': None, 'Opening': None, 'TCP_Offset': None},
     'Clearance': {'Environment': None, 'Self': None, 'Self_Pair_Overrides': None,
-                  'Station_Zone': {'Min': None, 'Max': None, 'Environment': None, 'Endpoint_Radius': None}},
+                  'Station_Zone': {'Min': None, 'Max': None, 'Environment': None, 'Endpoint_Radius': None},
+                  'Workspace': {'Min': None, 'Max': None}},
     'Self_Collision': {'Excluded_Pairs': None, 'Rigid_Groups': None},
     'Kinematics': {'FK_Sanity_Bound': {'Position': None}},
 }
@@ -156,6 +157,11 @@ class Cell_Configuration_Str:
     # fixed station point.
     #   Unit [float] (m)
     Station_Zone_Endpoint_Radius: float = 0.0
+    # Lower and upper corner of the box a generated segment must keep every robot collision geom
+    # inside, world frame.
+    #   Unit [Vector<float> 1x3] (m)
+    Workspace_Min: tp.List[float] = field(default_factory=list)
+    Workspace_Max: tp.List[float] = field(default_factory=list)
     # Body pairs never checked.
     #   Unit [List<Tuple<string, string>>]
     Excluded_Pairs: tp.List[tp.Tuple[str, str]] = field(default_factory=list)
@@ -483,6 +489,10 @@ def Load_Configuration(config_path: str = CONST_DEFAULT_CONFIG_FILE) -> Cell_Con
         reader.Fail('Clearance.Station_Zone.Environment (%r) must not exceed Clearance.Environment (%r): the zone only '
                     'reduces the margin.' % (cfg.Station_Zone_Environment, cfg.Clearance_Environment))
     cfg.Station_Zone_Endpoint_Radius = reader.Number('Clearance.Station_Zone.Endpoint_Radius', positive=True)
+    cfg.Workspace_Min = reader.Vector('Clearance.Workspace.Min', 3)
+    cfg.Workspace_Max = reader.Vector('Clearance.Workspace.Max', 3)
+    if any(lo >= hi for lo, hi in zip(cfg.Workspace_Min, cfg.Workspace_Max)):
+        reader.Fail('Clearance.Workspace.Min must be below Max on every axis.')
     cfg.Excluded_Pairs = [(a, b) for a, b in reader.Names('Self_Collision.Excluded_Pairs', 2)]
     cfg.Rigid_Groups = reader.Names('Self_Collision.Rigid_Groups', None)
     cfg.FK_Sanity_Bound_Position = reader.Number('Kinematics.FK_Sanity_Bound.Position', positive=True)

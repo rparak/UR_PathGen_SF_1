@@ -312,3 +312,36 @@ once.
 Pinned by `test/Scene/test_station.py::test_the_taught_rotation_sequence_keeps_its_margins`,
 `test/Scene/test_station.py::test_the_corrections_are_recorded_and_configured` and
 `test/Scene/test_station.py::test_the_zone_covers_the_corrected_station_and_nothing_far`.
+
+## A generated segment stays inside the space the taught program proved free
+
+**Decision.** `Clearance.Workspace` (x/y: the STL's extents; z: up to 2.35 m) bounds every robot
+collision geom of a generated segment; taught segments are not held to it.
+
+**Why.** The space outside the STL is not modelled, and an optimiser treats it as free: 24 % of random
+configurations within the joint limits leave the STL's box, by up to 585 mm. The taught rotation
+sequence reaches 2.322 m, 300 mm above the STL's top, so that height is proved free by the robot
+itself; nothing higher or outside the STL's x/y extents is (owner, 2026-10-17).
+
+**Alternatives.** The STL's box alone: rejected, it forbids the taught path. No box: rejected, a path
+through the cable trays above the cell would be reported clear.
+
+**Revisit if** the space around the cell is modelled, or a taught path reaches higher.
+
+Pinned by `test/Scene/test_core.py::test_a_generated_configuration_above_the_workspace_is_refused`.
+
+## The planner's edge check stops at the first violation, with the full check's verdict
+
+**Decision.** `Segment_Valid` checks the same samples with the same rule as `Check_Segment`, in van der
+Corput order, and stops at the first violation. The written path is re-checked with the full check.
+
+**Why.** One generated check of a 2306-sample segment costs about 0.65 s; RRT-Connect and shortcutting
+need thousands. A colliding edge usually fails in its middle, which the order visits third.
+
+**Alternatives.** Coarser sampling for edges: rejected, it changes the verdict. A distance-field
+approximation: rejected, it is a second geometry to keep consistent.
+
+**Revisit if** the per-sample rule changes in a way that makes order matter.
+
+Pinned by `test/Scene/test_station.py::test_the_early_exit_check_agrees_with_the_full_check` and
+`test/Scene/test_core.py::test_the_van_der_corput_order_visits_every_sample_once`.

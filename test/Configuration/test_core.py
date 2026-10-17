@@ -49,6 +49,7 @@ CONST_REQUIRED = ['Environment.Visual_Mesh', 'Environment.Collision_Set', 'Envir
                   'Tool.Opening', 'Tool.TCP_Offset', 'Clearance.Environment', 'Clearance.Self',
                   'Clearance.Self_Pair_Overrides', 'Clearance.Station_Zone.Min', 'Clearance.Station_Zone.Max',
                   'Clearance.Station_Zone.Environment', 'Clearance.Station_Zone.Endpoint_Radius',
+                  'Clearance.Workspace.Min', 'Clearance.Workspace.Max',
                   'Self_Collision.Excluded_Pairs', 'Self_Collision.Rigid_Groups',
                   'Kinematics.FK_Sanity_Bound.Position']
 
@@ -128,6 +129,7 @@ def test_a_missing_required_field_fails_naming_it(tmp_path, field):
     ('Clearance.Station_Zone.Environment', 0.021, 'must not exceed Clearance.Environment'),
     ('Clearance.Station_Zone.Max', [-0.85, -0.20, 1.85], 'below Max'),
     ('Clearance.Station_Zone.Endpoint_Radius', 0.0, 'greater than 0'),
+    ('Clearance.Workspace.Max', [0.934, 1.045, -0.002], 'Workspace.Min must be below Max'),
 ])
 def test_an_invalid_value_fails_and_never_falls_back(tmp_path, field, value, fragment):
     """

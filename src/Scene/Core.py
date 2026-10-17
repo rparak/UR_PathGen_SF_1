@@ -204,6 +204,35 @@ def Solve_Gripper_Opening(tool_model: str, opening: float) -> tp.Tuple[tp.Dict[s
     return __gripper_cache[key]
 
 
+def Van_Der_Corput_Order(n: int) -> tp.List[int]:
+    """
+    Description:
+        The indices 0 .. n-1, both ends first, then the middle, then the quarters and so on (the
+        base-2 van der Corput sequence), each exactly once.
+
+    Args:
+        (1) n [int]: The number of samples.
+
+    Returns:
+        (1) parameter [List<int>]: A permutation of range(n).
+    """
+
+    if n <= 2:
+        return list(range(n))
+    order, seen = [0, n - 1], {0, n - 1}
+    denominator = 2
+    # Terminates: once denominator >= 2 (n - 1) the grid spacing is at most 0.5 sample, so every
+    # index is the rounding of a grid point.
+    while len(order) < n:
+        for numerator in range(1, denominator, 2):
+            k = int(round(numerator * (n - 1) / denominator))
+            if k not in seen:
+                seen.add(k)
+                order.append(k)
+        denominator *= 2
+    return order
+
+
 def Yaw_Quat(angle: float) -> tp.List[float]:
     """
     Description:
@@ -259,6 +288,12 @@ class Scene_Cls(object):
         self.__overrides = {frozenset((a, b)): margin for a, b, margin in self.__cfg.Self_Pair_Overrides}
         self.__zone_geoms = {mujoco.mj_name2id(self.__model, mujoco.mjtObj.mjOBJ_GEOM, 'env_piece_%d' % i)
                              for i in self.__zone_pieces}
+        # Robot collision geoms (the static base included) for the workspace check of generated segments.
+        m = self.__model
+        self.__robot_geoms = np.array([g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0
+                                       and not m.body(m.geom_bodyid[g]).name.startswith('env')])
+        self.__robot_local = [self.__Geom_Local(g) for g in self.__robot_geoms]
+        self.__robot_rbound = np.array([float(np.max(np.linalg.norm(local, axis=1))) for local in self.__robot_local])
         self.__Set_Gripper()
         self.Set_Joints(np.zeros(6))
         if with_environment:
@@ -616,8 +651,23 @@ class Scene_Cls(object):
             (1) parameter [Matrix<float> Nx3]: The points (m).
         """
 
-        m, d = self.__model, self.__data
-        R, p = d.geom_xmat[g].reshape(3, 3), d.geom_xpos[g]
+        d = self.__data
+        return self.__Geom_Local(g) @ d.geom_xmat[g].reshape(3, 3).T + d.geom_xpos[g]
+
+    def __Geom_Local(self, g: int) -> np.ndarray:
+        """
+        Description:
+            Points bounding a collision geom in its own frame: its mesh vertices, or its primitive's
+            box corners.
+
+        Args:
+            (1) g [int]: The geom id.
+
+        Returns:
+            (1) parameter [Matrix<float> Nx3]: The points (m).
+        """
+
+        m = self.__model
         if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_MESH:
             mesh = m.geom_dataid[g]
             local = m.mesh_vert[m.mesh_vertadr[mesh]:m.mesh_vertadr[mesh] + m.mesh_vertnum[mesh]]
@@ -626,7 +676,7 @@ class Scene_Cls(object):
             if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_CYLINDER:
                 size = np.array([size[0], size[0], size[1]])
             local = np.array([[sx, sy, sz] for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]) * size
-        return local @ R.T + p
+        return np.array(local, dtype=float)
 
     def Reach_Bound(self) -> float:
         """
@@ -749,6 +799,91 @@ class Scene_Cls(object):
 
         return list(self.__zone_pieces)
 
+    def Station_TCPs(self, station_q: tp.Sequence[tp.Sequence[float]]) -> np.ndarray:
+        """
+        Description:
+            The world TCP positions of the fixed station points, computed once per check.
+
+        Args:
+            (1) station_q [List<Vector<float> 1x6>]: The joints of the fixed station points (rad).
+
+        Returns:
+            (1) parameter [Matrix<float> Nx3]: The positions (m).
+        """
+
+        frame = self.Base_Frame()
+        return np.array([(frame @ TCP_Pose(p, self.__cfg.TCP_Offset))[:3, 3] for p in station_q]).reshape(-1, 3)
+
+    def Workspace_Violations(self, q: tp.Sequence[float]) -> tp.List[Violation_Str]:
+        """
+        Description:
+            Every robot body with a collision geom outside Clearance.Workspace at q: the space outside
+            the STL is not modelled, and a generated segment may use only space the taught program
+            proved free. The distance is minus the largest excursion, the margin 0.
+
+        Args:
+            (1) q [Vector<float> 1x6]: Joint angles (rad).
+
+        Returns:
+            (1) parameter [List<Violation_Str>]: The violations, one per body (empty = inside).
+        """
+
+        self.Set_Joints(q)
+        return self.__Workspace_Current()
+
+    def __Workspace_Current(self) -> tp.List[Violation_Str]:
+        """
+        Description:
+            Workspace_Violations for the joints already set. A geom whose bounding sphere lies inside
+            the box is inside; only the others are checked point by point.
+
+        Returns:
+            (1) parameter [List<Violation_Str>]: The violations, one per body.
+        """
+
+        m, d = self.__model, self.__data
+        lo, hi = np.asarray(self.__cfg.Workspace_Min), np.asarray(self.__cfg.Workspace_Max)
+        centres = d.geom_xpos[self.__robot_geoms]
+        outside = np.any((centres - self.__robot_rbound[:, None] < lo) | (centres + self.__robot_rbound[:, None] > hi), axis=1)
+        worst: tp.Dict[str, float] = {}
+        for i in np.flatnonzero(outside):
+            g = int(self.__robot_geoms[i])
+            points = self.__robot_local[i] @ d.geom_xmat[g].reshape(3, 3).T + d.geom_xpos[g]
+            excursion = float(np.max(np.maximum(points - hi, lo - points)))
+            if excursion > 0.0:
+                body = m.body(m.geom_bodyid[g]).name
+                worst[body] = max(worst.get(body, 0.0), excursion)
+        return [Violation_Str(body, 'workspace', -e, 0.0) for body, e in sorted(worst.items(), key=lambda x: -x[1])]
+
+    def Check_Configuration(self, q: tp.Sequence[float], kind: str = 'generated',
+                            station_tcps: tp.Optional[np.ndarray] = None) -> tp.List[Violation_Str]:
+        """
+        Description:
+            The clearance rule of one configuration of a segment (SPEC 9.7). Taught: the zone margin
+            at the zone pieces. Generated: the global margins, the zone margin only while the TCP
+            lies within Endpoint_Radius of a station point's TCP, and every robot geom inside
+            Clearance.Workspace.
+
+        Args:
+            (1) q [Vector<float> 1x6]: Joint angles (rad).
+            (2) kind [string]: 'taught' or 'generated'.
+            (3) station_tcps [Matrix<float> Nx3]: The station points' TCPs (Station_TCPs); none = no
+                                                  neighbourhood.
+
+        Returns:
+            (1) parameter [List<Violation_Str>]: The violations (empty = the configuration is valid).
+        """
+
+        if kind not in ('taught', 'generated'):
+            raise Scene_Error_Cls('A segment is either "taught" or "generated", not %r.' % (kind,))
+        if kind == 'taught':
+            return self.Check_Clearance(q, station_zone=True)
+        tcps = np.zeros((0, 3)) if station_tcps is None else station_tcps
+        tcp = (self.Base_Frame() @ TCP_Pose(q, self.__cfg.TCP_Offset))[:3, 3]
+        near = bool(len(tcps)) and bool(np.min(np.linalg.norm(tcps - tcp, axis=1)) <= self.__cfg.Station_Zone_Endpoint_Radius)
+        # Check_Clearance has set the joints.
+        return self.Check_Clearance(q, station_zone=near) + self.__Workspace_Current()
+
     def Station_Zone_Active(self, q: tp.Sequence[float], station_q: tp.Sequence[tp.Sequence[float]]) -> bool:
         """
         Description:
@@ -792,11 +927,38 @@ class Scene_Cls(object):
         if kind not in ('taught', 'generated'):
             raise Scene_Error_Cls('A segment is either "taught" or "generated", not %r.' % (kind,))
         samples = self.Segment_Samples(q_a, q_b)
+        tcps = self.Station_TCPs(station_q)
         found = []
         for k, q in enumerate(samples):
-            zone = kind == 'taught' or self.Station_Zone_Active(q, station_q)
-            found += [(k, v) for v in self.Check_Clearance(q, station_zone=zone)]
+            found += [(k, v) for v in self.Check_Configuration(q, kind, tcps)]
         return len(samples), found
+
+    def Segment_Valid(self, q_a: tp.Sequence[float], q_b: tp.Sequence[float], kind: str = 'generated',
+                      station_q: tp.Sequence[tp.Sequence[float]] = ()) -> bool:
+        """
+        Description:
+            Whether Check_Segment would find no violation, stopping at the first violating sample.
+            The same samples and the same rule as Check_Segment, visited in van der Corput order
+            (ends, middle, quarters, ...) so that a colliding segment is usually rejected early; the
+            verdict is identical by construction and pinned by a test.
+
+        Args:
+            (1 - 2) q_a, q_b [Vector<float> 1x6]: Segment ends (rad).
+            (3) kind [string]: 'taught' or 'generated'.
+            (4) station_q [List<Vector<float> 1x6>]: The joints of the fixed station points (rad).
+
+        Returns:
+            (1) parameter [bool]: True when every sample is valid.
+        """
+
+        if kind not in ('taught', 'generated'):
+            raise Scene_Error_Cls('A segment is either "taught" or "generated", not %r.' % (kind,))
+        samples = self.Segment_Samples(q_a, q_b)
+        tcps = self.Station_TCPs(station_q)
+        for k in Van_Der_Corput_Order(len(samples)):
+            if self.Check_Configuration(samples[k], kind, tcps):
+                return False
+        return True
 
     def Minimum_Distance(self, body_1: str, body_2: str, q: tp.Sequence[float], distmax: float = 1.0) -> float:
         """

@@ -23,6 +23,8 @@
 
 # Dataclasses (Data Classes)
 import dataclasses
+# Numpy (Array computing) [pip3 install numpy]
+import numpy as np
 # Pytest (Testing framework) [pip3 install pytest]
 import pytest
 # Custom Lib.:
@@ -76,6 +78,10 @@ CONST_OVERRIDES = [(1154, [-0.0326, -0.0116, 0.0036], 'derived from sf1_plc_v4.s
 #   Unit [int]
 CONST_POST, CONST_TOP_PROFILE, CONST_SIDE_TABLE, CONST_PALLET_TABLE = 2710, 2699, 1061, 1060
 CONST_MACHINE_INTERIOR, CONST_RIGHT_PROFILE = 1638, 2709
+# Near-margin segments for the early-exit equivalence: from each taught point of the sequence to a
+# seeded perturbation of it (normal, sigma per joint), at the segment's opening.
+#   Unit [int], [float] (rad), [int]
+CONST_EQUIVALENCE_SEED, CONST_EQUIVALENCE_SIGMA, CONST_EQUIVALENCE_PER_POINT = 20261017, 0.15, 3
 
 
 @pytest.fixture(scope='module')
@@ -170,3 +176,25 @@ def test_the_zone_covers_the_corrected_station_and_nothing_far(scenes, cfg, root
     assert CONST_TOP_PROFILE in zone
     assert CONST_SIDE_TABLE not in zone and CONST_PALLET_TABLE not in zone
     assert CONST_MACHINE_INTERIOR not in zone and CONST_RIGHT_PROFILE not in zone
+
+
+def test_the_early_exit_check_agrees_with_the_full_check(scenes, plc_points):
+    """
+    Description:
+        Segment_Valid stops at the first violating sample; its verdict equals "Check_Segment finds no
+        violation" on seeded segments from every taught point of the sequence to perturbations of it
+        (generated rule, station points as the fixed points), and both verdicts occur.
+    """
+
+    rng = np.random.default_rng(CONST_EQUIVALENCE_SEED)
+    verdicts = []
+    for case in sorted(CONST_SEQUENCES):
+        for a, _, state in CONST_SEQUENCES[case]:
+            q = np.array(plc_points[a].Q)
+            for _ in range(CONST_EQUIVALENCE_PER_POINT):
+                target = q + rng.normal(0.0, CONST_EQUIVALENCE_SIGMA, 6)
+                full = not scenes[state].Check_Segment(q, target, kind='generated', station_q=_Station_Q(plc_points))[1]
+                fast = scenes[state].Segment_Valid(q, target, kind='generated', station_q=_Station_Q(plc_points))
+                assert fast == full, (case, a, list(target))
+                verdicts.append(full)
+    assert any(verdicts) and not all(verdicts)
