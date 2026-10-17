@@ -1,0 +1,110 @@
+## =========================================================================== ##
+# Description:
+#   Cell configuration of the SF1 workcell: a Universal Robots UR10e with a Robotiq 2F-85
+#   gripper on a coupling, standing on a table, surrounded by the environment in
+#   CAD/SF1_Environment.stl.
+#
+#   Read only by src/Configuration/Core.py (Load_Configuration); nothing writes it.
+#   Every field is REQUIRED: the loader fails, naming every missing or invalid field at once.
+#   A key the loader does not know is reported as a WARNING.
+#   Paths are relative to the repository root.
+#
+#   Frames: the world frame is the STL frame (metres). The Polyscope base frame (the frame of
+#   every *_p pose) is the world frame translated by Robot.Base_Position and rotated by
+#   Robot.Base_Yaw about z.
+## =========================================================================== ##
+
+# The environment: its visual mesh and its committed convex collision set.
+Environment:
+  # The workcell mesh, shown as is and never used for collision (MuJoCo would collide with its
+  # single convex hull). REQUIRED. [path]
+  Visual_Mesh: CAD/SF1_Environment.stl
+  # The convex decomposition built by Example/build_collision.py (manifest beside it). REQUIRED. [path]
+  Collision_Set: CAD/Collision/SF1_Environment_Collision.npz
+  # Box selecting the robot stand: STL components whose bounding box lies fully inside it go to
+  # the body env_stand, the only environment body excluded from collision with the robot base
+  # (the base sits 0.2 mm above the stand profiles, measured, SPEC 4.1). REQUIRED, both. [m]
+  Stand_Region:
+    Min: [-0.35, -0.55, -0.01]
+    Max: [0.35, 0.55, 0.716]
+
+# The robot and its placement.
+Robot:
+  # MuJoCo Menagerie UR10e, vendored unchanged (models/MANIFEST.json). REQUIRED. [path]
+  Model: models/universal_robots_ur10e/ur10e.xml
+  # Origin of the Polyscope base frame in the world (STL) frame: the base sits at z = 715.2 mm on
+  # the table (owner). REQUIRED. [m]
+  Base_Position: [0.0, 0.0, 0.7152]
+  # Rotation of the Polyscope base frame about the world z axis (owner: 0, confirmed). REQUIRED. [deg]
+  Base_Yaw: 0.0
+  # Joint position limits in the order base, shoulder, elbow, wrist 1, wrist 2, wrist 3.
+  # Hardware range +-360 deg, except the elbow: +-180 deg (Menagerie default, owner). The elbow
+  # limit is the precondition for excluding upper_arm_link - forearm_link from self-collision;
+  # the loader rejects an elbow limit beyond +-180 deg. The Polyscope safety limits of the cell
+  # may be tighter (KNOWN_ISSUES.md). REQUIRED, both. [deg]
+  Joint_Position_Limits:
+    Min: [-360.0, -360.0, -180.0, -360.0, -360.0, -360.0]
+    Max: [360.0, 360.0, 180.0, 360.0, 360.0, 360.0]
+
+# The tool: coupling, gripper and TCP.
+Tool:
+  # MuJoCo Menagerie Robotiq 2F-85, vendored unchanged (models/MANIFEST.json). REQUIRED. [path]
+  Model: models/robotiq_2f85/2f85.xml
+  # Robotiq coupling GRP-ES-CPL-062: thickness, outer diameter and the depth of the bore that
+  # receives the gripper (Robotiq 2F-85 & 2F-140 for Universal Robots, Instruction Manual rev.
+  # 2020/02/11, p. 119, Fig. 5-5). Flange face to gripper body = 16.9 - 2.9 = 14.0 mm, measured on
+  # the robot by the owner (2026-10-17). REQUIRED, all three. [m]
+  Coupling:
+    Thickness: 0.0169
+    Diameter: 0.075
+    Spigot_Depth: 0.0029
+  # Rotation of the gripper about the flange z axis relative to the Menagerie default. 0 = the
+  # standard dowel-pin-indexed mounting; at 0 the fingers open along flange +-x. A documented
+  # assumption, not measured (owner; KNOWN_ISSUES.md). REQUIRED. [deg]
+  Mount_Yaw: 0.0
+  # Inner pad-face gap held during transit: the gripper holds a 50 x 50 mm part (owner). REQUIRED. [m]
+  Opening: 0.050
+  # TCP in the flange frame [x, y, z, rx, ry, rz]: the Polyscope TCP of SF1 (owner, 2026-10-17),
+  # identical to the Robotiq value (Instruction Manual rev. 2020/02/11, p. 127, section 5.2.3).
+  # Configured, never derived from *_p. REQUIRED. [m, rad (rotation vector)]
+  TCP_Offset: [0.0, 0.0, 0.174, 0.0, 0.0, 0.0]
+
+# Minimum distances a configuration must keep.
+Clearance:
+  # Robot and gripper to the environment. It must also cover the unmodelled cables and the
+  # kinematic error of nominal DH (budget: SPEC 9.8). REQUIRED. [m]
+  Environment: 0.020
+  # Between robot and gripper bodies that are not excluded. REQUIRED. [m]
+  Self: 0.005
+  # Pair-specific self margins [body, body, margin]. base - upper_arm_link passes within 2.3 mm
+  # but never touches (SPEC 4.5, owner Q9 (a)); test/Scene/test_core.py establishes the true
+  # minimum of every entry and fails if it is not > 0. REQUIRED (may be empty). [m]
+  Self_Pair_Overrides:
+    - [base, upper_arm_link, 0.0]
+
+# Self-collision filtering. MuJoCo's automatic parent/child filter is disabled; only these apply.
+Self_Collision:
+  # Adjacent links whose hulls touch at the joint, never checked. REQUIRED. [body names]
+  Excluded_Pairs:
+    - [base, shoulder_link]
+    - [shoulder_link, upper_arm_link]
+    - [upper_arm_link, forearm_link]
+    - [forearm_link, wrist_1_link]
+    - [wrist_1_link, wrist_2_link]
+    - [wrist_2_link, wrist_3_link]
+    - [wrist_3_link, gripper_base_mount]
+  # Groups of bodies rigid to each other; every pair inside a group is excluded. The gripper is
+  # rigid at its fixed opening. REQUIRED. [body names]
+  Rigid_Groups:
+    - [gripper_base_mount, gripper_base, gripper_right_driver, gripper_right_coupler,
+       gripper_right_spring_link, gripper_right_follower, gripper_right_pad, gripper_right_silicone_pad,
+       gripper_left_driver, gripper_left_coupler, gripper_left_spring_link, gripper_left_follower,
+       gripper_left_pad, gripper_left_silicone_pad]
+
+# Kinematic checks of learned points.
+Kinematics:
+  # The most a learned point's DH FK * TCP may differ from its *_p before it is refused: half of
+  # Clearance.Environment, independent of the measured residuals (SPEC 9.4). The orientation
+  # bound is derived from it. REQUIRED. [m]
+  FK_Sanity_Bound:
+    Position: 0.010
