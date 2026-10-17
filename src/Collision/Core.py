@@ -164,24 +164,40 @@ def Read_Binary_STL(path: str) -> tp.Tuple[np.ndarray, np.ndarray]:
     return corners[first].astype(np.float64), inverse.reshape(-1, 3).astype(np.int64)
 
 
-def Connected_Components(n_vertices: int, faces: np.ndarray) -> tp.Tuple[int, np.ndarray]:
+def Connected_Components(faces: np.ndarray) -> tp.Tuple[int, np.ndarray]:
     """
     Description:
-        Label faces by connected component (faces sharing a vertex are connected).
+        Label faces by connected component, where two faces are connected when they share a
+        manifold edge (an edge of exactly two faces).
+
+        Note:
+            Not by a shared vertex, and not through a non-manifold edge (three or more faces): CAD
+            parts that merely touch (the profiles of the robot stand meet along such edges) would
+            merge into one component whose hull fills the whole frame. Measured: by shared vertex
+            2270 components, by any shared edge 2428, by manifold edge 2756 (as trimesh splits, the
+            count of SPEC 4.1). With the first two, the stand frame was one 21 440-face component
+            whose fallback hull extended 297 mm beyond it.
 
     Args:
-        (1) n_vertices [int]: Number of vertices.
-        (2) faces [Matrix<int> Mx3]: The faces.
+        (1) faces [Matrix<int> Mx3]: The faces.
 
     Returns:
         (1) parameter [Tuple<int, Vector<int> 1xM>]: Number of components and the label of each face.
     """
 
-    rows = np.concatenate([faces[:, 0], faces[:, 1]])
-    cols = np.concatenate([faces[:, 1], faces[:, 2]])
-    graph = coo_matrix((np.ones(len(rows), dtype=np.int8), (rows, cols)), shape=(n_vertices, n_vertices))
-    count, labels = connected_components(graph, directed=False)
-    return count, labels[faces[:, 0]]
+    n_faces = len(faces)
+    edges = np.sort(np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]]), axis=1)
+    _, edge_id, edge_count = np.unique(edges, axis=0, return_inverse=True, return_counts=True)
+    edge_id = edge_id.ravel()
+    face_id = np.tile(np.arange(n_faces), 3)
+    manifold = edge_count[edge_id] == 2
+    # Bipartite graph: faces 0..M-1, edges M..M+E-1; a face is linked to its manifold edges only.
+    size = n_faces + len(edge_count)
+    graph = coo_matrix((np.ones(int(manifold.sum()), dtype=np.int8), (face_id[manifold], n_faces + edge_id[manifold])),
+                       shape=(size, size))
+    _, labels = connected_components(graph, directed=False)
+    _, compact = np.unique(labels[:n_faces], return_inverse=True)
+    return int(compact.max()) + 1, compact
 
 
 def Thicken_Degenerate(vertices: np.ndarray) -> tp.Tuple[np.ndarray, str]:
@@ -377,7 +393,7 @@ def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequ
 
     # 1\ Components and the crop.
     t0 = time.time()
-    n_components, face_label = Connected_Components(len(vertices), faces)
+    n_components, face_label = Connected_Components(faces)
     order = np.argsort(face_label, kind='stable')
     bounds = np.searchsorted(face_label[order], np.arange(n_components + 1))
     centre_v = np.asarray(centre, dtype=float)
