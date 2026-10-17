@@ -27,6 +27,12 @@ Environment:
   Stand_Region:
     Min: [-0.35, -0.55, -0.01]
     Max: [0.35, 0.55, 0.716]
+  # Rigid translations of STL components applied before the collision set is built, for geometry
+  # the real cell contradicts. Each entry: Component (STL component id, as the build numbers them),
+  # Translation [x, y, z] in the world frame (at most 150 mm), Source (where the value comes from).
+  # The visual mesh is never changed; the manifest records the overrides and the scene refuses a
+  # set built with others. REQUIRED (may be empty). [-, m, text]
+  Component_Overrides: []
 
 # The robot and its placement.
 Robot:
@@ -84,6 +90,21 @@ Clearance:
   # minimum of every entry and fails if it is not > 0. REQUIRED (may be empty). [m]
   Self_Pair_Overrides:
     - [base, upper_arm_link, 0.0]
+  # The rotation station, whose geometry is fitted to the taught program, not measured
+  # (KNOWN_ISSUES.md). Environment pieces whose bounding box meets the box [Min, Max] (world frame)
+  # get the margin Environment instead of Clearance.Environment: always for taught segments, and
+  # for a generated sample only while its TCP lies within Endpoint_Radius of a fixed station point.
+  # Box: around the left window profile, the station and the window's top-left corner, the only
+  # region where the taught program (cases 17 and 18) comes closer than 20 mm after the
+  # correction. Environment 5 mm: the taught segments keep >= 5.2 mm after the fit; it covers eps
+  # (1 mm) and the measured kinematic error at the drop (4.0 mm), nothing for cables (SPEC 9.8).
+  # Endpoint_Radius 50 mm: every taught sample under 20 mm near the station has its TCP within
+  # 44 mm of a station point (owner, 2026-10-17). REQUIRED, all four. [m]
+  Station_Zone:
+    Min: [-0.85, -0.40, 1.00]
+    Max: [-0.55, -0.20, 1.85]
+    Environment: 0.005
+    Endpoint_Radius: 0.050
 
 # Self-collision filtering. MuJoCo's automatic parent/child filter is disabled; only these apply.
 Self_Collision:

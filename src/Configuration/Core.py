@@ -57,14 +57,20 @@ CONST_ELBOW_LIMIT = 180.0
 # The index of the elbow joint in a joint vector.
 #   Unit [int]
 CONST_ELBOW_INDEX = 2
+# The largest translation a component override may apply: corrections derived from the taught
+# program are bounded (owner, 2026-10-17), so a large one is a configuration error, not a fit.
+#   Unit [float] (m)
+CONST_OVERRIDE_TRANSLATION_MAX = 0.150
 # The known keys, as nested dictionaries; a leaf is None. Used to report unknown keys.
 #   Unit [Dict]
 CONST_SCHEMA = {
-    'Environment': {'Visual_Mesh': None, 'Collision_Set': None, 'Stand_Region': {'Min': None, 'Max': None}},
+    'Environment': {'Visual_Mesh': None, 'Collision_Set': None, 'Stand_Region': {'Min': None, 'Max': None},
+                    'Component_Overrides': None},
     'Robot': {'Model': None, 'Base_Position': None, 'Base_Yaw': None, 'Joint_Position_Limits': {'Min': None, 'Max': None}},
     'Tool': {'Model': None, 'Coupling': {'Thickness': None, 'Diameter': None, 'Spigot_Depth': None},
              'Mount_Yaw': None, 'Opening': None, 'TCP_Offset': None},
-    'Clearance': {'Environment': None, 'Self': None, 'Self_Pair_Overrides': None},
+    'Clearance': {'Environment': None, 'Self': None, 'Self_Pair_Overrides': None,
+                  'Station_Zone': {'Min': None, 'Max': None, 'Environment': None, 'Endpoint_Radius': None}},
     'Self_Collision': {'Excluded_Pairs': None, 'Rigid_Groups': None},
     'Kinematics': {'FK_Sanity_Bound': {'Position': None}},
 }
@@ -95,6 +101,10 @@ class Cell_Configuration_Str:
     #   Unit [Vector<float> 1x3] (m)
     Stand_Region_Min: tp.List[float] = field(default_factory=list)
     Stand_Region_Max: tp.List[float] = field(default_factory=list)
+    # Rigid translations applied to STL components before the collision set is built
+    # (component, translation, source).
+    #   Unit [List<Tuple<int, List<float> 1x3, string>>] (-, m, -)
+    Component_Overrides: tp.List[tp.Tuple[int, tp.List[float], str]] = field(default_factory=list)
     # The robot MJCF.
     #   Unit [string]
     Robot_Model: str = ''
@@ -134,6 +144,18 @@ class Cell_Configuration_Str:
     # Pair-specific self margins (body, body, margin).
     #   Unit [List<Tuple<string, string, float>>] (m)
     Self_Pair_Overrides: tp.List[tp.Tuple[str, str, float]] = field(default_factory=list)
+    # Station zone: lower and upper corner of the box, world frame; environment pieces whose
+    # bounding box meets it get the zone margin where the zone applies.
+    #   Unit [Vector<float> 1x3] (m)
+    Station_Zone_Min: tp.List[float] = field(default_factory=list)
+    Station_Zone_Max: tp.List[float] = field(default_factory=list)
+    # The environment margin of the zone pieces where the zone applies.
+    #   Unit [float] (m)
+    Station_Zone_Environment: float = 0.0
+    # A generated sample gets the zone margin only while its TCP lies within this distance of a
+    # fixed station point.
+    #   Unit [float] (m)
+    Station_Zone_Endpoint_Radius: float = 0.0
     # Body pairs never checked.
     #   Unit [List<Tuple<string, string>>]
     Excluded_Pairs: tp.List[tp.Tuple[str, str]] = field(default_factory=list)
@@ -172,6 +194,26 @@ def Unknown_Keys(data: tp.Any, schema: tp.Dict, prefix: str) -> tp.List[str]:
         elif isinstance(schema[key], dict):
             unknown += Unknown_Keys(value, schema[key], path + '.')
     return unknown
+
+
+def Valid_Component_Override(item: tp.Any) -> bool:
+    """
+    Description:
+        Whether one entry of Environment.Component_Overrides has exactly the keys Component (an id
+        >= 0), Translation (three finite numbers) and Source (non-empty text).
+
+    Args:
+        (1) item [Any]: The entry as read from YAML.
+
+    Returns:
+        (1) parameter [bool]: True when the entry is well formed.
+    """
+
+    return (isinstance(item, dict) and set(item) == {'Component', 'Translation', 'Source'}
+            and isinstance(item['Component'], int) and not isinstance(item['Component'], bool) and item['Component'] >= 0
+            and isinstance(item['Translation'], list) and len(item['Translation']) == 3
+            and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in item['Translation'])
+            and isinstance(item['Source'], str) and item['Source'].strip() != '')
 
 
 class Field_Reader_Cls(object):
@@ -378,6 +420,21 @@ def Load_Configuration(config_path: str = CONST_DEFAULT_CONFIG_FILE) -> Cell_Con
     cfg.Stand_Region_Max = reader.Vector('Environment.Stand_Region.Max', 3)
     if any(lo >= hi for lo, hi in zip(cfg.Stand_Region_Min, cfg.Stand_Region_Max)):
         reader.Fail('Environment.Stand_Region.Min must be below Max on every axis.')
+    component_overrides = reader.Raw('Environment.Component_Overrides')
+    if component_overrides is not None:
+        if not isinstance(component_overrides, list) or not all(Valid_Component_Override(o) for o in component_overrides):
+            reader.Fail('Environment.Component_Overrides must be a list of {Component: id >= 0, Translation: [x, y, z], '
+                        'Source: text}, not %r.' % (component_overrides,))
+        else:
+            for o in component_overrides:
+                if math.sqrt(sum(v * v for v in o['Translation'])) > CONST_OVERRIDE_TRANSLATION_MAX:
+                    reader.Fail('Environment.Component_Overrides: component %d moves by more than %.0f mm; a correction '
+                                'derived from the taught program is bounded.' % (o['Component'], CONST_OVERRIDE_TRANSLATION_MAX * 1e3))
+            ids = [o['Component'] for o in component_overrides]
+            if len(set(ids)) != len(ids):
+                reader.Fail('Environment.Component_Overrides names a component more than once: %r.' % (ids,))
+            cfg.Component_Overrides = [(o['Component'], [float(v) for v in o['Translation']], o['Source'])
+                                       for o in component_overrides]
     cfg.Robot_Model = reader.Path('Robot.Model')
     cfg.Base_Position = reader.Vector('Robot.Base_Position', 3)
     cfg.Base_Yaw = math.radians(reader.Number('Robot.Base_Yaw'))
@@ -417,6 +474,15 @@ def Load_Configuration(config_path: str = CONST_DEFAULT_CONFIG_FILE) -> Cell_Con
             cfg.Self_Pair_Overrides = [(o[0], o[1], float(o[2])) for o in overrides]
         else:
             reader.Fail('Clearance.Self_Pair_Overrides must be a list of [body, body, margin >= 0], not %r.' % (overrides,))
+    cfg.Station_Zone_Min = reader.Vector('Clearance.Station_Zone.Min', 3)
+    cfg.Station_Zone_Max = reader.Vector('Clearance.Station_Zone.Max', 3)
+    if any(lo >= hi for lo, hi in zip(cfg.Station_Zone_Min, cfg.Station_Zone_Max)):
+        reader.Fail('Clearance.Station_Zone.Min must be below Max on every axis.')
+    cfg.Station_Zone_Environment = reader.Number('Clearance.Station_Zone.Environment', positive=True)
+    if cfg.Station_Zone_Environment > cfg.Clearance_Environment > 0.0:
+        reader.Fail('Clearance.Station_Zone.Environment (%r) must not exceed Clearance.Environment (%r): the zone only '
+                    'reduces the margin.' % (cfg.Station_Zone_Environment, cfg.Clearance_Environment))
+    cfg.Station_Zone_Endpoint_Radius = reader.Number('Clearance.Station_Zone.Endpoint_Radius', positive=True)
     cfg.Excluded_Pairs = [(a, b) for a, b in reader.Names('Self_Collision.Excluded_Pairs', 2)]
     cfg.Rigid_Groups = reader.Names('Self_Collision.Rigid_Groups', None)
     cfg.FK_Sanity_Bound_Position = reader.Number('Kinematics.FK_Sanity_Bound.Position', positive=True)

@@ -461,16 +461,35 @@ def Piece_Excess(hull: ConvexHull, original: tp.Any, trimesh: tp.Any, rng: np.ra
     return float(np.max(d))
 
 
+def Component_Overrides_Record(overrides: tp.Sequence[tp.Tuple[int, tp.Sequence[float], str]]) -> tp.List[tp.Dict]:
+    """
+    Description:
+        The manifest form of the component overrides, sorted by component, so that the build and
+        the check against the configuration compare the same thing.
+
+    Args:
+        (1) overrides [List<Tuple<int, Vector<float> 1x3, string>>]: (component, translation (m), source).
+
+    Returns:
+        (1) parameter [List<Dict>]: One record per override.
+    """
+
+    return [{'component': int(c), 'translation_m': [float(v) for v in t], 'source': str(src)}
+            for c, t, src in sorted(overrides, key=lambda o: o[0])]
+
+
 def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequence[float], radius: float,
                         stand_min: tp.Sequence[float], stand_max: tp.Sequence[float], hull_excess_max: float,
                         eps: float, seed: int,
+                        overrides: tp.Sequence[tp.Tuple[int, tp.Sequence[float], str]],
                         progress_cb: tp.Optional[tp.Callable[[str], None]] = None) -> Collision_Set_Str:
     """
     Description:
         Build the collision set (SPEC 7): crop the components to the reach sphere, hull each one
         (thickening degenerate ones), and decompose with CoACD only a component whose hull excess
         exceeds hull_excess_max; CoACD parts that fail the conservativeness check fall back to
-        the hull. Every measurement is recorded in the manifest.
+        the hull. An overridden component is translated rigidly before all of it, and checked
+        against its translated surface. Every measurement is recorded in the manifest.
 
     Args:
         (1 - 2) vertices, faces [Matrix<float> Nx3, Matrix<int> Mx3]: The environment STL (world frame).
@@ -479,7 +498,8 @@ def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequ
         (7) hull_excess_max [float]: Excess above which a hull is decomposed (m).
         (8) eps [float]: Conservativeness tolerance (m).
         (9) seed [int]: Seed of every random sample and of CoACD.
-        (10) progress_cb [function]: Optional sink for progress lines.
+        (10) overrides [List<Tuple<int, Vector<float> 1x3, string>>]: (component, translation (m), source).
+        (11) progress_cb [function]: Optional sink for progress lines.
 
     Returns:
         (1) parameter [Collision_Set_Str(object)]: The set (Manifest without the source fields,
@@ -498,12 +518,21 @@ def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequ
     order = np.argsort(face_label, kind='stable')
     bounds = np.searchsorted(face_label[order], np.arange(n_components + 1))
     centre_v = np.asarray(centre, dtype=float)
+    shift = {int(c): np.asarray(t, dtype=float) for c, t, _ in overrides}
+    unknown = sorted(c for c in shift if not 0 <= c < n_components)
+    if unknown:
+        raise Collision_Error_Cls('Environment.Component_Overrides names component(s) %s, but the STL has components '
+                                  '0 - %d. Fix the configuration.' % (unknown, n_components - 1))
     kept = []
     for c in range(n_components):
         f = faces[order[bounds[c]:bounds[c + 1]]]
         used = np.unique(f)
-        if np.min(np.linalg.norm(vertices[used] - centre_v, axis=1)) <= radius:
+        if np.min(np.linalg.norm(vertices[used] + shift.get(c, 0.0) - centre_v, axis=1)) <= radius:
             kept.append((c, used, f))
+    missing = sorted(c for c in shift if c not in {k[0] for k in kept})
+    if missing:
+        raise Collision_Error_Cls('Overridden component(s) %s lie outside the crop sphere; an override there has no '
+                                  'effect. Remove it from Environment.Component_Overrides.' % missing)
     timing['components_and_crop'] = time.time() - t0
     report('%d components, %d kept inside the %.3f m crop sphere (%.1f s).'
            % (n_components, len(kept), radius, timing['components_and_crop']))
@@ -516,7 +545,8 @@ def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequ
     checked: tp.List[tp.Dict] = []
     degenerate_kinds = {'planar': 0, 'collinear': 0, 'point': 0}
     for done, (c, used, f) in enumerate(kept):
-        V = vertices[used]
+        # Each component has its own vertex copy, so a translation never moves a neighbour.
+        V = vertices[used] + shift.get(c, 0.0)
         remap = np.full(len(vertices), -1, dtype=np.int64)
         remap[used] = np.arange(len(used))
         F = remap[f]
@@ -604,6 +634,7 @@ def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequ
         'flagged_open_shells': {'note': 'pieces whose excess exceeds hull_excess_max after fallback: their hull may '
                                         'fill space the robot could need (SPEC 7.4)',
                                 'pieces': flagged},
+        'component_overrides': Component_Overrides_Record(overrides),
         'runtime_s': {k: round(v, 2) for k, v in timing.items()},
     }
     return out

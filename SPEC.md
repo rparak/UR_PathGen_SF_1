@@ -426,6 +426,15 @@ metrics. `Read_Collision_Set` refuses a set whose recorded STL hash differs from
 (`Collision_Error_Cls`, with the sentence "rerun Example/build_collision.py"). Tests read the set and
 never run CoACD.
 
+**Component overrides.** `Environment.Component_Overrides` lists STL components whose geometry the
+real cell contradicts, each with a rigid translation (≤ 150 mm) and its source. The build translates
+the component's own vertex copy before the crop and the decomposition, so a neighbour sharing a
+vertex is not moved, and the conservativeness check runs against the translated surface. The
+manifest records the overrides (`component_overrides`); the scene refuses a set whose record differs
+from the configuration (`Scene_Error_Cls`, "Rebuild it with …"). A set built before overrides existed
+records none. The visual mesh is never changed, so at an overridden component the viewer shows the
+original surface and the collision set the corrected one.
+
 ## 8. Cell configuration — `Configuration/Cell_SF1.yaml`
 
 The loader rules follow `references/yaml.md` of the style skill. A REQUIRED field that is missing,
@@ -438,6 +447,7 @@ field without a reader.
 | `Environment.Visual_Mesh` | the STL, repository-relative | path | REQUIRED |
 | `Environment.Collision_Set` | the `.npz`, repository-relative | path | REQUIRED |
 | `Environment.Stand_Region.Min/Max` | box selecting the stand components (§7.5) | m | REQUIRED |
+| `Environment.Component_Overrides` | rigid translations of STL components before the build: `{Component, Translation [x, y, z] (world, ≤ 150 mm), Source}` each; may be empty (§7.6) | –, m, text | REQUIRED |
 | `Robot.Model` | `models/universal_robots_ur10e/ur10e.xml` | path | REQUIRED |
 | `Robot.Base_Position` | Polyscope base origin in the STL/world frame: `[0.0, 0.0, 0.7152]` | m | REQUIRED |
 | `Robot.Base_Yaw` | rotation of the Polyscope base frame about world z: `180.0` (owner, 2026-10-17; confirmed by the taught points of `sf1_plc_v4.script` and photos of the cell, §4.6). *Corrected 2026-10-17: was `0.0`, which put every taught grasp point in empty space* | deg | REQUIRED |
@@ -452,6 +462,9 @@ field without a reader.
 | `Clearance.Environment` | minimum robot/gripper ↔ environment distance: `0.020` | m | REQUIRED |
 | `Clearance.Self` | minimum distance between non-excluded robot/gripper bodies: `0.005` | m | REQUIRED |
 | `Clearance.Self_Pair_Overrides` | `[[base, upper_arm_link, 0.0]]` (Q9 (a)): a pair-specific self margin. Allowed only for a pair whose true minimum stays > 0: grid over the joints that move it, then scipy local minimisation from the 20 lowest cells; the test checks every entry and pins the refined minimum | m | REQUIRED |
+| `Clearance.Station_Zone.Min/Max` | world box of the station zone: environment pieces whose bounding box meets it are the zone pieces (§9.7) | m | REQUIRED |
+| `Clearance.Station_Zone.Environment` | margin of the zone pieces where the zone applies; > 0 and ≤ `Clearance.Environment` | m | REQUIRED |
+| `Clearance.Station_Zone.Endpoint_Radius` | a generated sample uses the zone margin only while its TCP lies within this distance of a fixed station point's TCP (§9.7) | m | REQUIRED |
 | `Self_Collision.Excluded_Pairs` | explicit body pairs never checked (§9.6) | — | REQUIRED |
 | `Self_Collision.Rigid_Groups` | groups of bodies rigid to each other; every pair inside a group is excluded (the gripper at fixed opening) | — | REQUIRED |
 | `Kinematics.FK_Sanity_Bound.Position` | the most a learned point's DH FK·TCP may differ from its `_p` before it is refused: `0.010` (§9.4) | m | REQUIRED |
@@ -618,6 +631,17 @@ along the path.
   joint-linear interpolation, as `movej` moves, sampled so that no point of the robot moves more than
   `Clearance.Environment / 4` between samples. The bound comes from joint step × lever arm (DH),
   not from a fixed sample count.
+- **Station zone (taught vs generated).** The zone pieces (§8 `Clearance.Station_Zone`) keep the
+  global geom margin, so MuJoCo still generates their contacts below 25 mm; `Check_Clearance(q,
+  station_zone=True)` filters a contact with a zone piece by the zone margin instead. `Check_Segment`
+  takes the kind of segment:
+  - **taught** (a segment of the robot program): the zone margin on every sample;
+  - **generated** (a planner's segment; the default): the global margins everywhere, except on a
+    sample whose TCP lies within `Endpoint_Radius` of the TCP of a fixed station point
+    (`Station_Zone_Active`), where the zone margin applies. The station geometry is fitted, not
+    measured, so a new path may not use it more tightly than the taught program does.
+
+  A learned point is taught: `Check_Learned_Point` applies the zone margin to the zone pieces.
 - **Start or goal inside the margin**: `Plan` (future) and `Check_Learned_Point` (milestone) raise
   `Clearance_Error_Cls`, which names the point, every violating pair, its distance and the margin.
   No silent pass, no silent failure, no override in the milestone. An override is a decision for a
@@ -709,9 +733,9 @@ synthetic point with a joint at 4.0 rad that must come out as 4.0.
 | Test file | What it pins |
 |---|---|
 | `test/URScript/test_core.py` | exact float values of all 24 numbers; byte-identical round trip; `.238`, `-.175`, `E-5` tokens; strict errors (malformed, missing pair, duplicate, wrong length, line number in message); generated-point format; no wrapping (4.0 rad); `movej` line uses `_q` and `r=0`; renamed file tokens == original export; the `sf1_plc_v4` extract is read strictly with every token, and equals its source lines 2453–2608 byte for byte with the recorded sha256 when `SF1_PLC_V4_SCRIPT` names the program (otherwise skipped, never passed) |
-| `test/Configuration/test_core.py` | shipped file loads; each REQUIRED field missing → named failure; invalid values (wrong length, limits outside ±360°, min ≥ max, coupling spigot depth ≥ thickness, negative clearance or sanity bound) fail; all problems listed at once; unknown key → WARNING |
+| `test/Configuration/test_core.py` | shipped file loads; each REQUIRED field missing → named failure; invalid values (wrong length, limits outside ±360°, min ≥ max, coupling spigot depth ≥ thickness, negative clearance or sanity bound, a component override beyond 150 mm, without a source or named twice, a zone margin above `Clearance.Environment`, a zone box with Min ≥ Max, a zero endpoint radius) fail; all problems listed at once; unknown key → WARNING |
 | `test/Kinematics/test_core.py` | `FK_DH(q) · TCP_config` vs `_p`: regression pin (§9.4) of 1.72 mm / 0.261° and 4.02 mm / 0.376° (±0.01 mm / ±0.001°); diagnostic derived TCP pinned the same way and never read by any check; both points within the sanity bound; `Check_Learned_Point` rejects a point beyond it (perturbed `_q`) with the numbers in the message; configured TCP == (0, 0, 0.174, 0, 0, 0); geodesic angle 0 between r and its π-equivalent; `Normalize_Rotvec` rule incl. near-π |
-| `test/Scene/test_core.py` | scene compiles; base body world position == `Base_Position` exactly and yaw == `Base_Yaw`; **at `Base_Yaw` = 90° (a temporary copy of the configuration) `home_safe`'s TCP lands at `Base_Position` + (−y, x, z) of its `_p` within 3 mm, in MuJoCo and through the base frame (the file is in degrees; read as radians the test fails)**; **MuJoCo flange FK (after the MjSpec offset override) == DH flange FK within 1e-9 m / 1e-9 rad (atan2 geodesic, §9.5) for 1000 seeded random joint vectors within the limits**, plus A and B; pad-span hull present in the gripper rigid group; fingers open along flange ±x at `Mount_Yaw` = 0; visual mesh has no hull (`mesh_graphadr = −1`); base↔env build check runs; loader rejects an elbow limit beyond ±180°; gripper opening == `Tool.Opening` ± 0.5 mm, equality residual < 0.1 mm; coupling cylinder present (visual + collision), Menagerie `base_mount` mesh geoms absent, vendored files byte-identical to `models/MANIFEST.json`; pad end from the flange face 163.3 mm open and 176.8 mm closed (± 0.5 mm, manual chain) and the 50 mm values 154.39 / 173.23 mm (± 0.05 mm, regression); exclusion set == configuration expansion + `base–env_stand`, filterparent disabled; joint ranges == `Joint_Position_Limits`; **placement (§4.6): `pick_obj_1..8` on the pallet table, `unload_obj_1..8` on the side table (between the plate top and the highest part), `bench_drop_1..8` inside object (a); the same check at `Base_Yaw` = 0 refuses all 24**; A and B pass `Check_Clearance`, and **any violation fails the test, listing every pair with its distance and margin** (no report-only path); B (`drop_rot_01`) is a strict xfail while the STL does not match the cell at the rotation station (`KNOWN_ISSUES.md`), so it turns red once the geometry is fixed; `hover_unload_2` (clear) pushed into the side table is reported as a collision |
+| `test/Scene/test_core.py` | scene compiles; base body world position == `Base_Position` exactly and yaw == `Base_Yaw`; **at `Base_Yaw` = 90° (a temporary copy of the configuration) `home_safe`'s TCP lands at `Base_Position` + (−y, x, z) of its `_p` within 3 mm, in MuJoCo and through the base frame (the file is in degrees; read as radians the test fails)**; **MuJoCo flange FK (after the MjSpec offset override) == DH flange FK within 1e-9 m / 1e-9 rad (atan2 geodesic, §9.5) for 1000 seeded random joint vectors within the limits**, plus A and B; pad-span hull present in the gripper rigid group; fingers open along flange ±x at `Mount_Yaw` = 0; visual mesh has no hull (`mesh_graphadr = −1`); base↔env build check runs; loader rejects an elbow limit beyond ±180°; gripper opening == `Tool.Opening` ± 0.5 mm, equality residual < 0.1 mm; coupling cylinder present (visual + collision), Menagerie `base_mount` mesh geoms absent, vendored files byte-identical to `models/MANIFEST.json`; pad end from the flange face 163.3 mm open and 176.8 mm closed (± 0.5 mm, manual chain) and the 50 mm values 154.39 / 173.23 mm (± 0.05 mm, regression); exclusion set == configuration expansion + `base–env_stand`, filterparent disabled; joint ranges == `Joint_Position_Limits`; **placement (§4.6): `pick_obj_1..8` on the pallet table, `unload_obj_1..8` on the side table (between the plate top and the highest part), `bench_drop_1..8` inside object (a); the same check at `Base_Yaw` = 0 refuses all 24**; A and B pass `Check_Clearance`, and **any violation fails the test, listing every pair with its distance and margin** (no report-only path); B (`drop_rot_01`) is a strict xfail while the STL does not match the cell at the rotation station (`KNOWN_ISSUES.md`), so it turns red once the geometry is fixed; `hover_unload_2` (clear) pushed into the side table is reported as a collision; a collision set whose recorded component overrides differ from the configuration is refused; the station zone applies to a generated configuration only within `Endpoint_Radius` of a station point (DH distances); a segment kind other than taught/generated is refused |
 | `test/Scene/test_margin.py` | margin accuracy on **mesh hull vs mesh hull** (robot geom on a joint, so not static): a robot link hull at 3 orientations vs a box-hull face, and box-hull edge vs edge; at 10 mm a violation is reported, at 30 mm none; reported distance error < 0.5 mm (prototype: 0.000 mm, §4.5) |
 | `test/Collision/test_core.py` | manifest STL hash == sha256 of the file; `R_crop` ≥ the bound recomputed from the current scene, and no robot collision vertex leaves the sphere over 1000 seeded random `q`; conservativeness violations == 0 at `eps` (vertices + 1 sample/cm² for CoACD components, hull-only exempt); degenerate components thickened and containing the original; excess metrics present and equal to a recomputation on a fixed sample; no robot body at A/B inside a flagged open-shell piece (B a strict xfail while the STL does not match the cell at the rotation station); mismatched hash → `Collision_Error_Cls` |
 | `test/Example/test_demo.py` | headless demo runs N steps without exception; only the chosen joint changes, monotonically between turning points; it stays within `Joint_Position_Limits`; the pre-check runs on the dense segment samples of §9.7; the label equals the check result ("clearance checked" iff no violation, otherwise "VISUAL ONLY — UNCHECKED"); the shipped motion's label is pinned |

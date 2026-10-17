@@ -243,3 +243,45 @@ turns out to be off (it is not verified against the STL).
 Pinned by `test/Scene/test_core.py::test_the_taught_points_land_where_they_handle_parts`,
 `test/Scene/test_core.py::test_the_placement_check_refuses_a_base_yaw_of_0_deg` and
 `test/Scene/test_core.py::test_a_base_yaw_of_90_deg_turns_a_known_point_by_90_deg`.
+
+## Contradicted geometry is corrected by a recorded component translation, not by editing the STL
+
+**Decision.** `Environment.Component_Overrides` translates whole STL components before the collision
+set is built (component id, translation ≤ 150 mm, source). The manifest records the overrides; the
+scene refuses a set whose record differs from the configuration. The visual mesh stays unchanged.
+
+**Why.** The STL is the owner's CAD and is hashed; editing it would hide which numbers were fitted.
+A translation applied to the component's own vertex copy keeps the hull conservative (the check runs
+against the translated surface) and the component ids stable, because the components are found
+before the translation.
+
+**Alternatives.** Moving pieces of the built set: rejected, CoACD piece ids change with every rebuild
+and a moved piece no longer contains its surface. Deleting or trimming a component: rejected, it
+removes geometry where nothing contradicts it. A larger margin elsewhere: rejected, it does not
+remove a contradiction.
+
+**Revisit if** the cell is measured (then the STL itself is corrected and the overrides removed), or
+a correction needs a rotation.
+
+Pinned by `test/Scene/test_core.py::test_a_set_built_with_other_overrides_is_refused` and
+`test/Configuration/test_core.py::test_an_invalid_value_fails_and_never_falls_back`.
+
+## The station zone is a region of the environment, applied fully to taught and near the station points to generated segments
+
+**Decision.** Environment pieces whose bounding box meets `Clearance.Station_Zone` get the zone
+margin. A taught segment uses it on every sample; a generated segment only on samples whose TCP lies
+within `Endpoint_Radius` of a fixed station point; elsewhere the global margin applies.
+
+**Why.** The uncertainty is in the geometry of one region, not in where the TCP is, so the reduction
+belongs to that region's pieces. The taught program is the evidence that the robot passes there; a
+generated path has no such evidence, so it may use the reduced margin only where it has to reach the
+same station points (owner, 2026-10-17).
+
+**Alternatives.** A TCP sphere for every check: rejected, it reduces the margin of every pair while
+the TCP is near (the elbow included) and does not cover a near region the TCP is far from (the
+window's top profile at 15.3 mm with the TCP 300 mm away). A lower global margin: rejected, it would
+consume the budget everywhere.
+
+**Revisit if** the station is measured, or the planner needs station points other than the taught ones.
+
+Pinned by `test/Scene/test_core.py::test_the_station_zone_applies_within_the_endpoint_radius`.

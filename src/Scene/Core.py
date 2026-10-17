@@ -35,9 +35,9 @@ import mujoco
 #   ../Configuration/Core — the cell configuration
 from Configuration.Core import Cell_Configuration_Str, CONST_PROJECT_ROOT
 #   ../Kinematics/Core — the DH truth and the learned-point check
-from Kinematics.Core import CONST_DH_D, Check_FK_Consistency, Orientation_Sanity_Bound
+from Kinematics.Core import CONST_DH_D, Check_FK_Consistency, Orientation_Sanity_Bound, TCP_Pose
 #   ../Collision/Core — the environment collision set and the STL reader
-from Collision.Core import Read_Collision_Set, Read_Binary_STL
+from Collision.Core import Read_Collision_Set, Read_Binary_STL, Component_Overrides_Record
 #   ../URScript/Core — the robot point structure
 from URScript.Core import Robot_Point_Str
 
@@ -257,6 +257,8 @@ class Scene_Cls(object):
                                       for j in CONST_ROBOT_JOINTS])
         self.__flange = mujoco.mj_name2id(self.__model, mujoco.mjtObj.mjOBJ_SITE, CONST_FLANGE_SITE)
         self.__overrides = {frozenset((a, b)): margin for a, b, margin in self.__cfg.Self_Pair_Overrides}
+        self.__zone_geoms = {mujoco.mj_name2id(self.__model, mujoco.mjtObj.mjOBJ_GEOM, 'env_piece_%d' % i)
+                             for i in self.__zone_pieces}
         self.__Set_Gripper()
         self.Set_Joints(np.zeros(6))
         if with_environment:
@@ -357,6 +359,16 @@ class Scene_Cls(object):
         #    the base sits 0.2 mm above the stand profiles and never moves.
         if with_environment:
             collision_set = Read_Collision_Set(cfg.Collision_Set, CONST_PROJECT_ROOT)
+            # A set built before overrides existed records none.
+            recorded = collision_set.Manifest.get('component_overrides', [])
+            if recorded != Component_Overrides_Record(cfg.Component_Overrides):
+                raise Scene_Error_Cls('The collision set %s was built with the component overrides %s, but the '
+                                      'configuration has %s. Rebuild it with: .venv/bin/python Example/build_collision.py'
+                                      % (cfg.Collision_Set, recorded, Component_Overrides_Record(cfg.Component_Overrides)))
+            # Station zone: every piece whose bounding box meets the configured box.
+            zone_lo, zone_hi = np.asarray(cfg.Station_Zone_Min), np.asarray(cfg.Station_Zone_Max)
+            self.__zone_pieces = [i for i, v in enumerate(collision_set.Pieces)
+                                  if np.all(v.max(axis=0) >= zone_lo) and np.all(v.min(axis=0) <= zone_hi)]
             env_bodies = {name: spec.worldbody.add_body(name=name) for name in ('env', 'env_stand')}
             for i, (vertices, body) in enumerate(zip(collision_set.Pieces, collision_set.Bodies)):
                 spec.add_mesh(name='env_piece_%d' % i, uservert=vertices.flatten().tolist(),
@@ -369,6 +381,7 @@ class Scene_Cls(object):
             self.__collision_manifest = collision_set.Manifest
         else:
             self.__collision_manifest = {}
+            self.__zone_pieces = []
         if with_visual:
             vertices, faces = Read_Binary_STL(cfg.Visual_Mesh)
             spec.add_mesh(name='env_visual', uservert=vertices.flatten().tolist(), userface=faces.flatten().tolist(),
@@ -535,16 +548,19 @@ class Scene_Cls(object):
 
         return self.__overrides.get(frozenset((body_1, body_2)), geom_margin)
 
-    def Check_Clearance(self, q: tp.Sequence[float]) -> tp.List[Violation_Str]:
+    def Check_Clearance(self, q: tp.Sequence[float], station_zone: bool = False) -> tp.List[Violation_Str]:
         """
         Description:
             Every body pair closer than its configured margin at q, with the smallest distance per
             pair. MuJoCo generates a contact while the gap is below the sum of the two geom margins
             (measured, mujoco 3.16), a superset of the configured margin, so each contact is filtered
-            here by the pair's configured margin.
+            here by the pair's configured margin. With station_zone, a contact with a station-zone
+            piece is filtered by Clearance.Station_Zone.Environment instead (its geom keeps the
+            global margin, so the contact is still generated).
 
         Args:
             (1) q [Vector<float> 1x6]: Joint angles (rad).
+            (2) station_zone [bool]: Apply the zone margin to the zone pieces.
 
         Returns:
             (1) parameter [List<Violation_Str>]: The violations, sorted by distance (empty = clear).
@@ -558,6 +574,8 @@ class Scene_Cls(object):
             contact = d.contact[i]
             b1, b2 = m.body(m.geom_bodyid[contact.geom1]).name, m.body(m.geom_bodyid[contact.geom2]).name
             margin = self.Pair_Margin(b1, b2, float(max(m.geom_margin[contact.geom1], m.geom_margin[contact.geom2])))
+            if station_zone and (contact.geom1 in self.__zone_geoms or contact.geom2 in self.__zone_geoms):
+                margin = self.__cfg.Station_Zone_Environment
             # MuJoCo generated this contact below the sum of the margins; only the configured one counts.
             if contact.dist >= margin:
                 continue
@@ -719,23 +737,65 @@ class Scene_Cls(object):
                 levers[i] = max(levers[i], chain + float(np.linalg.norm(m.geom_pos[g])) + float(m.geom_rbound[g]))
         return levers
 
-    def Check_Segment(self, q_a: tp.Sequence[float], q_b: tp.Sequence[float]) -> tp.Tuple[int, tp.List[tp.Tuple[int, Violation_Str]]]:
+    @property
+    def Zone_Pieces(self) -> tp.List[int]:
         """
         Description:
-            Check every sample of a joint-linear segment.
+            The collision-set pieces whose bounding box meets the station-zone box.
+
+        Returns:
+            (1) parameter [List<int>]: The piece indices.
+        """
+
+        return list(self.__zone_pieces)
+
+    def Station_Zone_Active(self, q: tp.Sequence[float], station_q: tp.Sequence[tp.Sequence[float]]) -> bool:
+        """
+        Description:
+            Whether a generated configuration may use the zone margin: its TCP lies within
+            Clearance.Station_Zone.Endpoint_Radius of the TCP of a fixed station point (SPEC 9.7).
+
+        Args:
+            (1) q [Vector<float> 1x6]: Joint angles (rad).
+            (2) station_q [List<Vector<float> 1x6>]: The joints of the fixed station points (rad).
+
+        Returns:
+            (1) parameter [bool]: True inside the neighbourhood of a station point.
+        """
+
+        frame = self.Base_Frame()
+        tcp = (frame @ TCP_Pose(q, self.__cfg.TCP_Offset))[:3, 3]
+        return any(np.linalg.norm(tcp - (frame @ TCP_Pose(p, self.__cfg.TCP_Offset))[:3, 3])
+                   <= self.__cfg.Station_Zone_Endpoint_Radius for p in station_q)
+
+    def Check_Segment(self, q_a: tp.Sequence[float], q_b: tp.Sequence[float], kind: str = 'generated',
+                      station_q: tp.Sequence[tp.Sequence[float]] = ()) -> tp.Tuple[int, tp.List[tp.Tuple[int, Violation_Str]]]:
+        """
+        Description:
+            Check every sample of a joint-linear segment. A taught segment (from the robot program)
+            uses the zone margin for the zone pieces on every sample. A generated segment keeps the
+            global margins, except on samples whose TCP lies within the endpoint radius of a fixed
+            station point: the station geometry is fitted, not measured, and a new path must not use
+            it more tightly than the taught program does.
 
         Args:
             (1 - 2) q_a, q_b [Vector<float> 1x6]: Segment ends (rad).
+            (3) kind [string]: 'taught' or 'generated'.
+            (4) station_q [List<Vector<float> 1x6>]: The joints of the fixed station points (rad);
+                                                      used by a generated segment only.
 
         Returns:
             (1) parameter [Tuple<int, List<Tuple<int, Violation_Str>>>]: The number of samples and
                                                                           every (sample, violation).
         """
 
+        if kind not in ('taught', 'generated'):
+            raise Scene_Error_Cls('A segment is either "taught" or "generated", not %r.' % (kind,))
         samples = self.Segment_Samples(q_a, q_b)
         found = []
         for k, q in enumerate(samples):
-            found += [(k, v) for v in self.Check_Clearance(q)]
+            zone = kind == 'taught' or self.Station_Zone_Active(q, station_q)
+            found += [(k, v) for v in self.Check_Clearance(q, station_zone=zone)]
         return len(samples), found
 
     def Minimum_Distance(self, body_1: str, body_2: str, q: tp.Sequence[float], distmax: float = 1.0) -> float:
@@ -772,7 +832,8 @@ def Check_Learned_Point(scene: Scene_Cls, cfg: Cell_Configuration_Str, point: Ro
     """
     Description:
         Accept a learned point only if its _q and _p agree within the sanity bound and it keeps
-        every clearance margin. Otherwise raise, naming everything found (SPEC 9.4, 9.7).
+        every clearance margin, the zone margin for the station-zone pieces (a learned point is
+        taught). Otherwise raise, naming everything found (SPEC 9.4, 9.7).
 
     Args:
         (1) scene [Scene_Cls(object)]: The scene with the environment.
@@ -787,7 +848,8 @@ def Check_Learned_Point(scene: Scene_Cls, cfg: Cell_Configuration_Str, point: Ro
     orientation_bound = Orientation_Sanity_Bound(cfg.FK_Sanity_Bound_Position, scene.Tool_Length())
     residual = Check_FK_Consistency(point.Name, point.Q, point.P, cfg.TCP_Offset, cfg.FK_Sanity_Bound_Position,
                                     orientation_bound)
-    violations = scene.Check_Clearance(point.Q)
+    # A learned point is taught: the zone margin applies to the zone pieces.
+    violations = scene.Check_Clearance(point.Q, station_zone=True)
     if violations:
         raise Clearance_Error_Cls('Point %s violates %d clearance margin(s): %s. Learned points are never accepted '
                                   'inside a margin; re-teach the point or review the cell model.'

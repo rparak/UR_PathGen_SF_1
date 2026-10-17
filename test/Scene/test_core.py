@@ -399,6 +399,52 @@ def test_a_pose_pushed_into_the_side_table_is_a_collision(scene, cfg, plc_points
         Check_Learned_Point(scene, cfg, point)
 
 
+def test_a_set_built_with_other_overrides_is_refused(cfg, tmp_path):
+    """
+    Description:
+        The scene compares the collision set's recorded component overrides with the configuration
+        and refuses a mismatch, naming the rebuild; a set never silently misses or keeps a correction.
+    """
+
+    with open(CONST_DEFAULT_CONFIG_FILE, encoding='utf-8') as handle:
+        data = yaml.safe_load(handle)
+    data['Environment']['Component_Overrides'] = list(data['Environment']['Component_Overrides']) + [
+        {'Component': 5, 'Translation': [0.001, 0.0, 0.0], 'Source': 'test'}]
+    path = tmp_path / 'cell_override.yaml'
+    path.write_text(yaml.safe_dump(data), encoding='utf-8')
+    with pytest.raises(Scene_Error_Cls, match='Rebuild it with'):
+        Scene_Cls(Load_Configuration(str(path)), with_environment=True)
+
+
+def test_the_station_zone_applies_within_the_endpoint_radius(robot_scene, cfg, plc_points):
+    """
+    Description:
+        A generated configuration may use the zone margin only while its TCP lies within
+        Endpoint_Radius (50 mm) of a fixed station point's TCP: Waypoint_4 is 60 mm below
+        drop_rotate_1 (outside), a configuration on the way whose TCP is 40 mm away is inside, and
+        each point is inside its own neighbourhood. Distances from DH FK, not from the scene.
+    """
+
+    drop, below = np.array(plc_points['drop_rotate_1'].Q), np.array(plc_points['Waypoint_4'].Q)
+    tcp = lambda q: TCP_Pose(q, cfg.TCP_Offset)[:3, 3]
+    assert np.linalg.norm(tcp(below) - tcp(drop)) > cfg.Station_Zone_Endpoint_Radius
+    t = min(np.linspace(0.0, 1.0, 1001), key=lambda x: abs(np.linalg.norm(tcp(drop + x * (below - drop)) - tcp(drop)) - 0.040))
+    assert robot_scene.Station_Zone_Active(drop + t * (below - drop), [drop])
+    assert not robot_scene.Station_Zone_Active(below, [drop])
+    assert robot_scene.Station_Zone_Active(below, [drop, below])
+    assert not robot_scene.Station_Zone_Active(drop, [])
+
+
+def test_a_segment_is_taught_or_generated(robot_scene, points):
+    """
+    Description:
+        The rule has two kinds only; anything else is refused rather than checked with some default.
+    """
+
+    with pytest.raises(Scene_Error_Cls, match='"taught" or "generated"'):
+        robot_scene.Check_Segment(points['home_safe'].Q, points['home_safe'].Q, kind='learned')
+
+
 def test_the_static_base_clearance_is_checked_at_build(scene, cfg):
     """
     Description:

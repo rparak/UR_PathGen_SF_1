@@ -43,11 +43,13 @@ Description:
 # Every field of the shipped file, as a dotted path.
 #   Unit [List<string>]
 CONST_REQUIRED = ['Environment.Visual_Mesh', 'Environment.Collision_Set', 'Environment.Stand_Region.Min',
-                  'Environment.Stand_Region.Max', 'Robot.Model', 'Robot.Base_Position', 'Robot.Base_Yaw',
+                  'Environment.Stand_Region.Max', 'Environment.Component_Overrides', 'Robot.Model', 'Robot.Base_Position', 'Robot.Base_Yaw',
                   'Robot.Joint_Position_Limits.Min', 'Robot.Joint_Position_Limits.Max', 'Tool.Model',
                   'Tool.Coupling.Thickness', 'Tool.Coupling.Diameter', 'Tool.Coupling.Spigot_Depth', 'Tool.Mount_Yaw',
                   'Tool.Opening', 'Tool.TCP_Offset', 'Clearance.Environment', 'Clearance.Self',
-                  'Clearance.Self_Pair_Overrides', 'Self_Collision.Excluded_Pairs', 'Self_Collision.Rigid_Groups',
+                  'Clearance.Self_Pair_Overrides', 'Clearance.Station_Zone.Min', 'Clearance.Station_Zone.Max',
+                  'Clearance.Station_Zone.Environment', 'Clearance.Station_Zone.Endpoint_Radius',
+                  'Self_Collision.Excluded_Pairs', 'Self_Collision.Rigid_Groups',
                   'Kinematics.FK_Sanity_Bound.Position']
 
 
@@ -82,6 +84,7 @@ def test_the_shipped_configuration_loads_in_si_units():
 
     cfg = Load_Configuration()
     assert cfg.Notes == []
+    assert cfg.Station_Zone_Environment == 0.005 and cfg.Station_Zone_Endpoint_Radius == 0.050
     assert cfg.Base_Position == [0.0, 0.0, 0.7152]
     assert cfg.TCP_Offset == [0.0, 0.0, 0.174, 0.0, 0.0, 0.0]
     assert cfg.Joint_Limits_Max[2] == pytest.approx(math.pi)
@@ -115,6 +118,16 @@ def test_a_missing_required_field_fails_naming_it(tmp_path, field):
     ('Self_Collision.Excluded_Pairs', [['base']], 'pairs'),
     ('Clearance.Self_Pair_Overrides', [['base', 'upper_arm_link', -1.0]], 'margin >= 0'),
     ('Robot.Model', 'models/none.xml', 'does not exist'),
+    ('Environment.Component_Overrides', [{'Component': 2710, 'Translation': [-0.151, 0.0, 0.0], 'Source': 'fit'}],
+     'more than 150 mm'),
+    ('Environment.Component_Overrides', [{'Component': 2710, 'Translation': [0.0, 0.0, 0.0], 'Source': ' '}],
+     'Source: text'),
+    ('Environment.Component_Overrides', [{'Component': 1, 'Translation': [0.0, 0.0, 0.0], 'Source': 'a'},
+                                         {'Component': 1, 'Translation': [0.0, 0.0, 0.0], 'Source': 'b'}],
+     'more than once'),
+    ('Clearance.Station_Zone.Environment', 0.021, 'must not exceed Clearance.Environment'),
+    ('Clearance.Station_Zone.Max', [-0.85, -0.20, 1.85], 'below Max'),
+    ('Clearance.Station_Zone.Endpoint_Radius', 0.0, 'greater than 0'),
 ])
 def test_an_invalid_value_fails_and_never_falls_back(tmp_path, field, value, fragment):
     """

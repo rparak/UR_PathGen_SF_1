@@ -83,9 +83,12 @@ def main():
     print('[INFO] Crop sphere: centre %s m, radius %.3f m (reach bound %.3f m).'
           % ([round(float(x), 4) for x in centre], radius, scene.Reach_Bound()))
     vertices, faces = Read_Binary_STL(cfg.Visual_Mesh)
+    for component, translation, source in cfg.Component_Overrides:
+        print('[INFO] Component %d is translated by %s mm before the build (%s).'
+              % (component, [round(v * 1e3, 1) for v in translation], source))
     print('[INFO] %s: %d vertices, %d faces.' % (os.path.relpath(cfg.Visual_Mesh, CONST_PROJECT_ROOT), len(vertices), len(faces)))
     result = Build_Collision_Set(vertices, faces, centre, radius, cfg.Stand_Region_Min, cfg.Stand_Region_Max,
-                                 CONST_HULL_EXCESS_MAX, CONST_EPS, CONST_SEED,
+                                 CONST_HULL_EXCESS_MAX, CONST_EPS, CONST_SEED, cfg.Component_Overrides,
                                  progress_cb=lambda message: print('[INFO] %s' % message, flush=True))
     result.Manifest['runtime_s']['total'] = round(time.time() - started, 2)
     os.makedirs(os.path.dirname(cfg.Collision_Set), exist_ok=True)
