@@ -4,7 +4,8 @@ Collision-free UR10e path generation for workcell SF1, verified in MuJoCo. The s
 `SPEC.md`; accepted limitations are in `KNOWN_ISSUES.md`; reasons behind choices are in
 `docs/design-decisions.md`.
 
-Talk to the owner in Czech; write every file of the project in English.
+Communicate with the owner in English only: reports, questions, summaries, commit messages and
+every file. The owner's notes may be in Czech or Slovak; answer in English anyway.
 
 ## Skills
 
