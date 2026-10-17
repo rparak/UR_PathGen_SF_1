@@ -60,6 +60,29 @@ generated path only while its TCP lies within 50 mm of a station point.
 - **What would close it:** measuring the post, the machine front and the station bracket on the
   real cell, then correcting the STL and removing the overrides.
 
+## Machine (a) interior is filled by open-shell hulls; real loading paths penetrate it; the model is not usable inside the machine
+
+The grinder-loading segments of `sf1_plc_v4.script` reach into machine (a), and the model there is a
+single convex hull: component 1638, the set's only fallback piece (CoACD missed eps by 1.12 mm, so
+its hull was kept), flagged as an open shell, 234.8 mm excess. Real segments penetrate it by up to
+154 mm: load2 ↔ load3 (−108.6 mm, in every case 1 – 21), load_hower / rect_pick_hower → load3,
+and the bench segments through Waypoint_9/10/12/13/14/15/16/17/19 to bench_drop_* / bench_sqr_pick
+(down to −154.1 mm; cases 1 – 8, 17, 18, 20, 21). Not corrected (out of scope, owner 2026-10-17).
+
+Two other kinds of penetration in the program are expected and not errors of the machine model:
+the grasp and unload points reach into the modelled parts on the pallet and side tables
+(components 191 – 206, one per case, down to −19.9 mm), and the fixtures there (components 2712 –
+2718, 236, 237, 243, 244) are touched by up to 3.3 mm.
+
+- **Impact:** no path inside machine (a) can be checked or planned; a result there means nothing.
+  The rotation-sequence segments S1 – S3 (home ↔ station) keep at least 90.2 mm to every one of these
+  pieces (closest: Waypoint_5 → Waypoint_1 to component 1638), and component 1638 is outside the
+  station zone.
+- **Evidence:** scratch replay of all 121 unique segments of the 21 cases on the rebuilt set,
+  2026-10-17 (joint-linear, 50 and 85 mm openings).
+- **What would close it:** a decomposition of component 1638 that passes the conservativeness check
+  (or a measured, simplified machine interior), then a replay of the loading segments.
+
 ## The carried part is not modelled
 
 The gripper holds a 50 × 50 mm part of negligible mass during transit (owner); it is not in the
