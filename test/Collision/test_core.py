@@ -40,7 +40,8 @@ from scipy.spatial import ConvexHull
 # Custom Lib.:
 #   ../src/Collision/Core — the collision set under test
 from Collision.Core import (Read_Collision_Set, Read_Binary_STL, Thicken_Degenerate, Connected_Components,
-                            Collision_Error_Cls, CONST_THICKEN, Component_Objects, Component_Translations)
+                            Collision_Error_Cls, CONST_THICKEN, Component_Objects, Component_Translations,
+                            Build_Collision_Set)
 
 """
 Description:
@@ -282,3 +283,44 @@ def test_no_robot_body_at_a_or_b_is_inside_a_flagged_piece(scene, collision, poi
         e = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, piece)
         for g in robot:
             assert mujoco.mj_geomDistance(m, d, g, e, 0.05, None) > 0.0, (name, piece, m.geom(g).name)
+
+
+def _Cube(lo, size):
+    corners = np.array([[x, y, z] for x in (0, 1) for y in (0, 1) for z in (0, 1)], dtype=float) * size + np.asarray(lo)
+    faces = [[0, 1, 3], [0, 3, 2], [4, 6, 7], [4, 7, 5], [0, 4, 5], [0, 5, 1], [2, 3, 7], [2, 7, 6],
+             [0, 2, 6], [0, 6, 4], [1, 5, 7], [1, 7, 3]]
+    return corners, np.array(faces)
+
+
+def test_a_build_records_the_moved_members_and_translates_their_pieces():
+    """
+    Description:
+        Build_Collision_Set on three synthetic 100 mm cubes, hull only (the excess limit is never
+        reached, so CoACD does not run): cubes 0 and 1 touch (one object), cube 2 stands apart. An
+        assembly override named by cube 1 moves the whole object by +50 mm z, a component override
+        moves cube 1 a further +20 mm x. The manifest records the assembly's members [0, 1] and
+        both overrides with their sources; each piece is its cube's hull translated by exactly the
+        sum of what applies to it, cube 2 untouched.
+    """
+
+    cubes = [_Cube((0.0, 0.0, 0.0), 0.1), _Cube((0.1, 0.0, 0.0), 0.1), _Cube((0.5, 0.0, 0.0), 0.1)]
+    vertices = np.concatenate([v for v, _ in cubes])
+    faces = np.concatenate([f + 8 * k for k, (_, f) in enumerate(cubes)])
+    assert Connected_Components(faces)[0] == 3
+    built = Build_Collision_Set(vertices, faces, centre=[0.0, 0.0, 0.0], radius=10.0, stand_min=[5.0, 5.0, 5.0],
+                                stand_max=[6.0, 6.0, 6.0], hull_excess_max=1.0, eps=0.001, seed=1,
+                                assemblies=[('pair', 1, [0.0, 0.0, 0.050], 'synthetic assembly')],
+                                overrides=[(1, [0.020, 0.0, 0.0], 'synthetic component')])
+    manifest = built.Manifest
+    assert manifest['assembly_components'] == {'pair': [0, 1]}
+    assert manifest['assembly_overrides'] == [{'name': 'pair', 'object_of': 1, 'translation_m': [0.0, 0.0, 0.05],
+                                               'source': 'synthetic assembly'}]
+    assert manifest['component_overrides'] == [{'component': 1, 'translation_m': [0.02, 0.0, 0.0],
+                                                'source': 'synthetic component'}]
+    assert built.Methods == ['hull'] * 3 and manifest['pieces_by_method']['coacd'] == 0
+    shift = {0: [0.0, 0.0, 0.050], 1: [0.020, 0.0, 0.050], 2: [0.0, 0.0, 0.0]}
+    for piece, component in zip(built.Pieces, built.Components):
+        original = cubes[component][0]
+        assert np.allclose(piece.min(axis=0), original.min(axis=0) + shift[component], atol=1e-12)
+        assert np.allclose(piece.max(axis=0), original.max(axis=0) + shift[component], atol=1e-12)
+    assert sorted(built.Components) == [0, 1, 2]
