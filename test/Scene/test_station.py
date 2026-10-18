@@ -206,6 +206,53 @@ def test_a_generated_segment_uses_the_zone_margin_near_a_station_point(scenes, c
     assert violations and all(v.Margin == cfg.Clearance_Environment for _, v in violations)
 
 
+def test_the_station_box_floor_is_the_closer_taught_end_capped_at_the_margin(scenes, cfg, points):
+    """
+    Description:
+        Station_Box_Floors gives each station box the closer end's exact distance (mj_geomDistance,
+        computed here), capped at Clearance.Environment: S2 (Waypoint_5 -> Waypoint_18, open) has
+        the holder's floor at Waypoint_18 (15.1 mm, SPEC 4.11), and home -> Waypoint_1 is farther
+        than the margin from every station box, so its floors are the margin.
+    """
+
+    scene = scenes[17, 'open']
+    m, d = scene.Model, scene.Data
+    robot = [g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0
+             and not m.body(m.geom_bodyid[g]).name.startswith('env') and m.body(m.geom_bodyid[g]).name != 'base']
+    def Exact(q, name):
+        box = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, 'env_box_' + name)
+        scene.Set_Joints(q)
+        return min(mujoco.mj_geomDistance(m, d, g, box, CONST_BOX_DISTMAX, None) for g in robot)
+    a, b = points['Waypoint_5'].Q, points['Waypoint_18'].Q
+    floors = scene.Station_Box_Floors(a, b)
+    assert set(floors) == set(CONST_STATION_BOXES)
+    for name in CONST_STATION_BOXES:
+        assert floors[name] == pytest.approx(min(Exact(a, name), Exact(b, name), cfg.Clearance_Environment), abs=1e-6)
+    assert floors['station_bracket'] == pytest.approx(0.0151, abs=0.0001)
+    assert scene.Station_Box_Floors(points['home'].Q, points['Waypoint_1'].Q) == {name: cfg.Clearance_Environment
+                                                                                   for name in CONST_STATION_BOXES}
+
+
+def test_a_generated_sample_closer_to_a_station_box_than_its_floor_violates(scenes, cfg, points):
+    """
+    Description:
+        The station-box rule: pick_rotate_1 (open) passes the holder at 5.5 mm, within the zone
+        margin near the station, so it keeps the generated rule without floors; with S2's floors
+        (15.1 mm, its closer taught end) it violates, naming the holder and the floor as the margin;
+        a floor at or below its distance does not. The taught rule ignores the floors.
+    """
+
+    scene, q = scenes[17, 'open'], points['pick_rotate_1'].Q
+    tcps = scene.Station_TCPs(_Station_Q(points))
+    floors = scene.Station_Box_Floors(points['Waypoint_5'].Q, points['Waypoint_18'].Q)
+    assert scene.Check_Configuration(q, 'generated', tcps) == []
+    violations = scene.Check_Configuration(q, 'generated', tcps, floors)
+    assert [(v.Body_2, v.Margin) for v in violations] == [('env_box_station_bracket', floors['station_bracket'])]
+    assert violations[0].Distance == pytest.approx(0.0055, abs=0.0001)
+    assert scene.Check_Configuration(q, 'generated', tcps, {name: 0.005 for name in floors}) == []
+    assert scene.Check_Configuration(q, 'taught', None) == []
+
+
 def test_the_corrections_are_recorded_and_configured(scenes, cfg):
     """
     Description:

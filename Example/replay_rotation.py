@@ -231,7 +231,8 @@ def Check_Moves(moves: tp.List[Move_Str], scenes: tp.Dict[str, Scene_Cls], cfg: 
     Description:
         Label every move by the rule of its kind, in the scene of its gripper state:
         CONST_LABEL_INVALID when a sample comes within Clearance.Environment of the machine (a)
-        interior (the model is not valid there), else violated or clear.
+        interior (the model is not valid there), else violated or clear. A generated move keeps the
+        station-box rule with the floors of its generated run (Run_Floors).
 
     Args:
         (1) moves [List<Move_Str>]: The moves; their Label is set.
@@ -244,20 +245,53 @@ def Check_Moves(moves: tp.List[Move_Str], scenes: tp.Dict[str, Scene_Cls], cfg: 
     """
 
     counts: tp.Dict[str, int] = {}
-    for move in moves:
+    floors = Run_Floors(moves, scenes)
+    for index, move in enumerate(moves):
         if move.Kind == 'gripper':
             continue
         scene = scenes[move.State]
         tcps = scene.Station_TCPs(station_q) if move.Rule == 'generated' else None
         violated = interior = False
         for q in Move_Samples(scene, move):
-            violations = scene.Check_Configuration(q, move.Rule, tcps)
+            violations = scene.Check_Configuration(q, move.Rule, tcps, floors.get(index))
             violated = violated or bool(violations)
             if any('env' in (v.Body_1, v.Body_2) for v in violations):
                 interior = interior or bool(scene.Components_Within(q, CONST_MACHINE_INTERIOR, cfg.Clearance_Environment))
         move.Label = CONST_LABEL_INVALID if interior else (CONST_LABEL_VIOLATED if violated else CONST_LABEL_CLEAR) % move.Rule
         counts[move.Label] = counts.get(move.Label, 0) + 1
     return counts
+
+
+def Run_Floors(moves: tp.List[Move_Str], scenes: tp.Dict[str, Scene_Cls]) -> tp.Dict[int, tp.Dict[str, float]]:
+    """
+    Description:
+        The station-box floors of every generated move: those of its generated run, the consecutive
+        generated moves of one section (S1, S2 or S3), from the run's first configuration to its
+        last target (Scene_Cls.Station_Box_Floors), in the scene of its gripper state.
+
+    Args:
+        (1) moves [List<Move_Str>]: The moves.
+        (2) scenes [Dict<string, Scene_Cls>]: The scene of each gripper state.
+
+    Returns:
+        (1) parameter [Dict<int, Dict<string, float>>]: Move index -> the floors of its run.
+    """
+
+    runs: tp.List[tp.List[int]] = []
+    for index, move in enumerate(moves):
+        if move.Kind == 'gripper' or move.Rule != 'generated':
+            continue
+        previous = moves[runs[-1][-1]] if runs else None
+        if previous is not None and runs[-1][-1] == index - 1 and previous.Section == move.Section and previous.State == move.State:
+            runs[-1].append(index)
+        else:
+            runs.append([index])
+    floors = {}
+    for run in runs:
+        first, last = moves[run[0]], moves[run[-1]]
+        run_floors = scenes[first.State].Station_Box_Floors(first.Configurations[0], last.Configurations[-1])
+        floors.update({index: run_floors for index in run})
+    return floors
 
 
 def Frames(moves: tp.List[Move_Str], speed: float) -> tp.List[tp.Tuple[int, float]]:
@@ -346,7 +380,8 @@ def Paths(points: tp.Dict, generated: tp.Dict, segment: str) -> tp.Dict[str, tp.
 def Label(scene: Scene_Cls, path: tp.List[np.ndarray], station_q: tp.List) -> tp.Tuple[str, int, int]:
     """
     Description:
-        Check every segment of a path with the full generated-rule check and choose its label.
+        Check every segment of a path with the full generated-rule check (the station-box rule with
+        the floors of the path's ends included) and choose its label.
 
     Args:
         (1) scene [Scene_Cls(object)]: The scene at the segment's opening.
@@ -358,8 +393,9 @@ def Label(scene: Scene_Cls, path: tp.List[np.ndarray], station_q: tp.List) -> tp
     """
 
     samples = violations = 0
+    floors = scene.Station_Box_Floors(path[0], path[-1])
     for a, b in zip(path[:-1], path[1:]):
-        count, found = scene.Check_Segment(a, b, kind='generated', station_q=station_q)
+        count, found = scene.Check_Segment(a, b, kind='generated', station_q=station_q, box_floors=floors)
         samples, violations = samples + count, violations + len(found)
     return (CONST_STRICT_CHECKED if not violations else CONST_STRICT_FAILED), samples, violations
 

@@ -186,7 +186,8 @@ def Measure(scene: Scene_Cls, path: tp.Sequence[np.ndarray], station_q: tp.Seque
     Description:
         The report measures of a path: via points, estimated duration, joint-path lengths, the
         smallest robot - environment distance with its robot body (everywhere, and outside the
-        station neighbourhood), the clearance penalty and the generated-rule violations.
+        station neighbourhood), the clearance penalty and the generated-rule violations (the
+        station-box rule with the floors of the path's ends included).
 
     Args:
         (1) scene [Scene_Cls(object)]: The scene at the path's opening.
@@ -201,8 +202,9 @@ def Measure(scene: Scene_Cls, path: tp.Sequence[np.ndarray], station_q: tp.Seque
     total, max_joint = Path_Length(path)
     tcps = scene.Station_TCPs(station_q)
     closest, body, far, far_body, penalty, violations = CONST_REPORT_DISTMAX, '', CONST_REPORT_DISTMAX, '', 0.0, 0
+    floors = scene.Station_Box_Floors(path[0], path[-1])
     for q_a, q_b in zip(path[:-1], path[1:]):
-        violations += len(scene.Check_Segment(q_a, q_b, kind='generated', station_q=station_q)[1])
+        violations += len(scene.Check_Segment(q_a, q_b, kind='generated', station_q=station_q, box_floors=floors)[1])
         for q in scene.Segment_Samples(q_a, q_b):
             distance, robot = scene.Environment_Distance(q, CONST_REPORT_DISTMAX)
             if distance < closest:

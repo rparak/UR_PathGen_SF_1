@@ -298,6 +298,9 @@ class Scene_Cls(object):
                               for i in self.__zone_pieces}
                              | {mujoco.mj_name2id(self.__model, mujoco.mjtObj.mjOBJ_GEOM, CONST_ADDED_BOX_PREFIX + name)
                                 for name in self.__zone_boxes})
+        # The geom of each station box (an added box that is a zone piece), for the station-box rule.
+        self.__station_box_geoms = {mujoco.mj_name2id(self.__model, mujoco.mjtObj.mjOBJ_GEOM, CONST_ADDED_BOX_PREFIX + name): name
+                                    for name in self.__zone_boxes}
         # Robot collision geoms (the static base included) for the workspace check of generated segments.
         m = self.__model
         self.__robot_geoms = np.array([g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0
@@ -974,19 +977,22 @@ class Scene_Cls(object):
         return best, body
 
     def Check_Configuration(self, q: tp.Sequence[float], kind: str = 'generated',
-                            station_tcps: tp.Optional[np.ndarray] = None) -> tp.List[Violation_Str]:
+                            station_tcps: tp.Optional[np.ndarray] = None,
+                            box_floors: tp.Optional[tp.Dict[str, float]] = None) -> tp.List[Violation_Str]:
         """
         Description:
             The clearance rule of one configuration of a segment (SPEC 9.7). Taught: the zone margin
             at the zone pieces. Generated: the global margins, the zone margin only while the TCP
-            lies within Endpoint_Radius of a station point's TCP, and every robot geom inside
-            Clearance.Workspace.
+            lies within Endpoint_Radius of a station point's TCP, every robot geom inside
+            Clearance.Workspace, and, with box_floors, the station-box rule: no station box closer
+            than its floor (Station_Box_Floors of the generated segment's ends).
 
         Args:
             (1) q [Vector<float> 1x6]: Joint angles (rad).
             (2) kind [string]: 'taught' or 'generated'.
             (3) station_tcps [Matrix<float> Nx3]: The station points' TCPs (Station_TCPs); none = no
                                                   neighbourhood.
+            (4) box_floors [Dict<string, float>]: The floor of each station box (m); none = no rule.
 
         Returns:
             (1) parameter [List<Violation_Str>]: The violations (empty = the configuration is valid).
@@ -997,8 +1003,57 @@ class Scene_Cls(object):
         if kind == 'taught':
             return self.Check_Clearance(q, station_zone=True)
         near = self.Near_Station(q, station_tcps)
-        # Check_Clearance has set the joints.
-        return self.Check_Clearance(q, station_zone=near) + self.__Workspace_Current()
+        # Check_Clearance has set the joints and run the collision pass the box rule reads.
+        violations = self.Check_Clearance(q, station_zone=near)
+        if box_floors:
+            for name, (distance, body) in self.__Station_Box_Current().items():
+                if distance < box_floors[name]:
+                    violations.append(Violation_Str(body, CONST_ADDED_BOX_PREFIX + name, distance, box_floors[name]))
+        return violations + self.__Workspace_Current()
+
+    def __Station_Box_Current(self) -> tp.Dict[str, tp.Tuple[float, str]]:
+        """
+        Description:
+            The smallest robot distance to each station box in the current collision pass, capped at
+            Clearance.Environment: MuJoCo reports every pair within the margin with its exact
+            distance for these meshes (test/Scene/test_margin.py).
+
+        Returns:
+            (1) parameter [Dict<string, Tuple<float, string>>]: Box name -> (distance (m), robot body).
+        """
+
+        m, d = self.__model, self.__data
+        found = {name: (self.__cfg.Clearance_Environment, '') for name in self.__station_box_geoms.values()}
+        for i in range(d.ncon):
+            contact = d.contact[i]
+            for box, robot in ((contact.geom1, contact.geom2), (contact.geom2, contact.geom1)):
+                name = self.__station_box_geoms.get(box)
+                if name is not None and contact.dist < found[name][0]:
+                    found[name] = (float(contact.dist), m.body(m.geom_bodyid[robot]).name)
+        return found
+
+    def Station_Box_Floors(self, q_a: tp.Sequence[float], q_b: tp.Sequence[float]) -> tp.Dict[str, float]:
+        """
+        Description:
+            The station-box rule's floor of each station box for a generated segment between two
+            taught ends: the closer end's distance to the box, capped at Clearance.Environment. A
+            generated sample may come no closer to a station box (the geometry is fitted to the
+            taught program, not measured) than the taught program does at the segment's ends.
+
+        Args:
+            (1 - 2) q_a, q_b [Vector<float> 1x6]: The taught ends (rad).
+
+        Returns:
+            (1) parameter [Dict<string, float>]: Box name -> floor (m).
+        """
+
+        floors = {}
+        for q in (q_a, q_b):
+            self.Set_Joints(q)
+            mujoco.mj_collision(self.__model, self.__data)
+            for name, (distance, _) in self.__Station_Box_Current().items():
+                floors[name] = min(floors.get(name, distance), distance)
+        return floors
 
     def Near_Station(self, q: tp.Sequence[float], station_tcps: tp.Optional[np.ndarray]) -> bool:
         """
@@ -1040,7 +1095,8 @@ class Scene_Cls(object):
                    <= self.__cfg.Station_Zone_Endpoint_Radius for p in station_q)
 
     def Check_Segment(self, q_a: tp.Sequence[float], q_b: tp.Sequence[float], kind: str = 'generated',
-                      station_q: tp.Sequence[tp.Sequence[float]] = ()) -> tp.Tuple[int, tp.List[tp.Tuple[int, Violation_Str]]]:
+                      station_q: tp.Sequence[tp.Sequence[float]] = (),
+                      box_floors: tp.Optional[tp.Dict[str, float]] = None) -> tp.Tuple[int, tp.List[tp.Tuple[int, Violation_Str]]]:
         """
         Description:
             Check every sample of a joint-linear segment. A taught segment (from the robot program)
@@ -1054,6 +1110,8 @@ class Scene_Cls(object):
             (3) kind [string]: 'taught' or 'generated'.
             (4) station_q [List<Vector<float> 1x6>]: The joints of the fixed station points (rad);
                                                       used by a generated segment only.
+            (5) box_floors [Dict<string, float>]: The station-box floors (Station_Box_Floors of the
+                                                  generated path's ends); none = no station-box rule.
 
         Returns:
             (1) parameter [Tuple<int, List<Tuple<int, Violation_Str>>>]: The number of samples and
@@ -1066,11 +1124,11 @@ class Scene_Cls(object):
         tcps = self.Station_TCPs(station_q)
         found = []
         for k, q in enumerate(samples):
-            found += [(k, v) for v in self.Check_Configuration(q, kind, tcps)]
+            found += [(k, v) for v in self.Check_Configuration(q, kind, tcps, box_floors)]
         return len(samples), found
 
     def Segment_Valid(self, q_a: tp.Sequence[float], q_b: tp.Sequence[float], kind: str = 'generated',
-                      station_q: tp.Sequence[tp.Sequence[float]] = ()) -> bool:
+                      station_q: tp.Sequence[tp.Sequence[float]] = (), box_floors: tp.Optional[tp.Dict[str, float]] = None) -> bool:
         """
         Description:
             Whether Check_Segment would find no violation, stopping at the first violating sample.
@@ -1082,6 +1140,7 @@ class Scene_Cls(object):
             (1 - 2) q_a, q_b [Vector<float> 1x6]: Segment ends (rad).
             (3) kind [string]: 'taught' or 'generated'.
             (4) station_q [List<Vector<float> 1x6>]: The joints of the fixed station points (rad).
+            (5) box_floors [Dict<string, float>]: The station-box floors; none = no station-box rule.
 
         Returns:
             (1) parameter [bool]: True when every sample is valid.
@@ -1092,7 +1151,7 @@ class Scene_Cls(object):
         samples = self.Segment_Samples(q_a, q_b)
         tcps = self.Station_TCPs(station_q)
         for k in Van_Der_Corput_Order(len(samples)):
-            if self.Check_Configuration(samples[k], kind, tcps):
+            if self.Check_Configuration(samples[k], kind, tcps, box_floors):
                 return False
         return True
 

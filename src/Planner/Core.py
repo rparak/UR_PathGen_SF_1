@@ -258,6 +258,8 @@ class Planner_Cls(object):
         self.__lo, self.__hi = np.array(limits[:, 0]), np.array(limits[:, 1])
         self.__valid_cache: tp.Dict[bytes, bool] = {}
         self.__penalty_cache: tp.Dict[bytes, float] = {}
+        # The station-box floors of the segment being planned (Plan); none outside a plan.
+        self.__box_floors: tp.Optional[tp.Dict[str, float]] = None
 
     def __Key(self, q_a: np.ndarray, q_b: np.ndarray) -> bytes:
         """
@@ -277,7 +279,8 @@ class Planner_Cls(object):
         """
         Description:
             Whether a generated segment keeps the generated rule (early exit; same verdict as the
-            full check). Remembered per segment.
+            full check), with the station-box floors of the segment being planned. Remembered per
+            segment.
 
         Args:
             (1 - 2) q_a, q_b [Vector<float> 1x6]: Segment ends (rad).
@@ -288,7 +291,8 @@ class Planner_Cls(object):
 
         key = self.__Key(q_a, q_b)
         if key not in self.__valid_cache:
-            self.__valid_cache[key] = self.__scene.Segment_Valid(q_a, q_b, kind='generated', station_q=self.__station_q)
+            self.__valid_cache[key] = self.__scene.Segment_Valid(q_a, q_b, kind='generated', station_q=self.__station_q,
+                                                                 box_floors=self.__box_floors)
         return self.__valid_cache[key]
 
     def Segment_Penalty(self, q_a: np.ndarray, q_b: np.ndarray) -> float:
@@ -498,8 +502,10 @@ class Planner_Cls(object):
             Plan one generated segment: the direct segment if it keeps the rule; otherwise every
             restart (generator [seed, restart]) runs RRT-Connect and shortcutting, the fastest paths
             are refined (generator [seed, 1000 + rank]), and the lowest cost wins, ties going to fewer
-            via points. The result is verified with the full check (Verify_Path). Raises when an end
-            breaks the rule, or no path with at most 5 via points is found within the budget.
+            via points. Every edge keeps the station-box rule with the floors of these two ends
+            (Scene_Cls.Station_Box_Floors). The result is verified with the full check (Verify_Path).
+            Raises when an end breaks the rule, or no path with at most 5 via points is found within
+            the budget.
 
         Args:
             (1 - 2) q_start, q_goal [Vector<float> 1x6]: The ends (rad); never wrapped.
@@ -510,6 +516,10 @@ class Planner_Cls(object):
         """
 
         start, goal = np.asarray(q_start, dtype=float), np.asarray(q_goal, dtype=float)
+        floors = self.__scene.Station_Box_Floors(start, goal)
+        if floors != self.__box_floors:
+            # The edge verdicts depend on the floors: forget those of another segment's plan.
+            self.__box_floors, self.__valid_cache = floors, {}
         for name, q in (('start', start), ('goal', goal)):
             violations = self.__scene.Check_Configuration(q, 'generated', self.__station_tcps)
             if violations:
@@ -548,8 +558,9 @@ class Planner_Cls(object):
         """
         Description:
             The independent final check: every segment with the full generated-rule check
-            (Check_Segment, no early exit, no cache), at most 5 via points, every configuration
-            within the joint limits. Raises naming the first problem.
+            (Check_Segment, no early exit, no cache), the station-box rule with the floors of the
+            path's own ends, at most 5 via points, every configuration within the joint limits.
+            Raises naming the first problem.
 
         Args:
             (1) path [List<Vector<float> 1x6>]: The configurations, ends included (rad).
@@ -560,8 +571,10 @@ class Planner_Cls(object):
         for q in path:
             if np.any(np.asarray(q) < self.__lo) or np.any(np.asarray(q) > self.__hi):
                 raise Planner_Error_Cls('A configuration of the path lies outside the joint limits: %s.' % (list(q),))
+        floors = self.__scene.Station_Box_Floors(path[0], path[-1])
         for index, (q_a, q_b) in enumerate(zip(path[:-1], path[1:])):
-            samples, violations = self.__scene.Check_Segment(q_a, q_b, kind='generated', station_q=self.__station_q)
+            samples, violations = self.__scene.Check_Segment(q_a, q_b, kind='generated', station_q=self.__station_q,
+                                                             box_floors=floors)
             if violations:
                 k, v = violations[0]
                 raise Planner_Error_Cls('Segment %d of the path breaks the generated rule at sample %d of %d: %s - %s '

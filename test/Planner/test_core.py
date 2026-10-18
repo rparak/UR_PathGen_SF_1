@@ -348,6 +348,41 @@ def test_an_impossible_plan_raises(cfg, program, kind):
         Planner_Cls(scene, station_q, 0.0, CONST_REDUCED).Verify_Path(path)
 
 
+def test_the_planner_keeps_the_station_box_rule_of_the_segment_it_plans(cfg, program, scenes):
+    """
+    Description:
+        Plan sets the station-box floors of its own two ends for every edge: before any plan the
+        approach Waypoint_18 -> pick_rotate_1 (holding, 17.8 mm from the holder, SPEC 4.11) keeps the
+        generated rule; after planning S3 (Waypoint_6 -> home, both ends farther than the margin
+        from the holder, so its floor is 20 mm) the same edge is refused.
+    """
+
+    points, _ = program
+    station_q = [points[name].Q for name in CONST_STATION_POINTS]
+    planner = Planner_Cls(scenes[CONST_OPENING['S3']], station_q, 0.0, CONST_REDUCED)
+    a, b = np.array(points['Waypoint_18'].Q), np.array(points['pick_rotate_1'].Q)
+    assert planner.Edge_Valid(a, b)
+    assert planner.Plan(points['Waypoint_6'].Q, points['home'].Q, CONST_REDUCED_SEED).Origin == 'direct'
+    assert not planner.Edge_Valid(a, b)
+
+
+def test_verify_path_refuses_a_path_closer_to_a_station_box_than_its_ends(cfg, program, scenes):
+    """
+    Description:
+        Verify_Path applies the station-box rule with the floors of the path's own ends: a path from
+        Waypoint_18 down to pick_rotate_1 and back (open; 5.5 mm from the holder at the pick, 15.1 mm
+        at its ends; every leg otherwise keeps the generated rule, as taught) is refused naming the
+        holder, independently of any plan.
+    """
+
+    points, _ = program
+    station_q = [points[name].Q for name in CONST_STATION_POINTS]
+    planner = Planner_Cls(scenes[CONST_OPENING['S2']], station_q, 0.0, CONST_REDUCED)
+    path = [np.array(points[name].Q) for name in ('Waypoint_18', 'pick_rotate_1', 'Waypoint_18')]
+    with pytest.raises(Planner_Error_Cls, match='env_box_station_bracket'):
+        planner.Verify_Path(path)
+
+
 def test_the_penalty_counts_only_far_from_the_station(planners, program):
     """
     Description:

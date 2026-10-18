@@ -732,3 +732,27 @@ machine-(a)-only margin raised by the position's accuracy: open until the accura
 machine-only margin increase is to be proposed), or a path is found to come closer on the robot.
 
 Pinned by `test/Planner/test_core.py::test_the_committed_paths_pass_the_independent_verification`.
+
+## The planner keeps generated paths no closer to a station box than their taught ends
+
+**Decision.** A generated segment may come no closer to a station box (an added box in the station
+zone: the holder, and the stub) than the closer of its two taught ends, both capped at
+`Clearance.Environment` (the station-box rule, SPEC §9.7). `Scene_Cls.Station_Box_Floors` gives the
+floors; `Planner_Cls.Plan` applies them to every edge and `Verify_Path` re-checks them from the
+path's own ends; the report and the replay judge generated moves by the same rule.
+
+**Why.** The station boxes are fitted to the taught program (the holder's top, the stub's front),
+not measured; the only evidence of free space near them is what the taught program uses. The rule
+was a test of the committed output only, so the planner could return a path that broke it: S2 came
+0.6 mm closer to the stub (9.5 mm) than its taught end (10.1 mm), and re-planning gave the same
+path (owner, 2026-10-18, option a).
+
+**Alternatives.** Accepting S2 0.6 mm closer (b) or delivering the taught S2 (c): rejected by the
+owner. A fixed larger margin for the boxes: it would also forbid what the taught program does.
+
+**Revisit if** a station box is measured (its geometry then gives the margin), or a taught end
+changes.
+
+Pinned by `test/Scene/test_station.py::test_a_generated_sample_closer_to_a_station_box_than_its_floor_violates`,
+`test/Planner/test_core.py::test_the_planner_keeps_the_station_box_rule_of_the_segment_it_plans` and
+`test/Planner/test_core.py::test_verify_path_refuses_a_path_closer_to_a_station_box_than_its_ends`.
