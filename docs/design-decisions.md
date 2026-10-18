@@ -570,3 +570,27 @@ keep equal to the DH; the numeric one uses the DH directly.
 Pinned by `test/Kinematics/test_core.py::test_a_movel_follows_the_straight_tcp_line_to_its_target` and
 `test/Example/test_replay.py::test_every_path_visits_its_moves_in_program_order`.
 
+## After the machine shift, S2 is optimised for time, not safety; the re-planned paths are kept
+
+**Decision.** `Data/Generated/` keeps the S1 – S3 re-planned on the current scene (2026-10-18: the
+machine shifted 100 mm, the post refitted, the station holder box added; same seed, budget and
+w = 0.5 s/m), not the ones planned on the 2026-10-17 scene (owner, 2026-10-18).
+
+**Why.** A path planned on a scene that is no longer the model is not what the checks describe. On
+the current scene the taught S2 also keeps the generated rule (0 violations in both cases; on
+2026-10-17 it came to 15.4 mm and failed), so S2's optimisation is now about time: one via point
+instead of three, 8.30 / 8.29 s -> 4.45 / 4.46 s (estimate, case 17 / 18). The price is clearance:
+outside the station neighbourhood the optimised S2 passes at 30.0 / 29.7 mm against the taught
+42.5 mm, 10 mm above the 20 mm hard margin, at the 30 mm penalty threshold in case 17 and 0.3 mm
+inside it in case 18 (penalty 0.002 m).
+
+**Alternatives.** Keeping the 2026-10-17 paths: they keep the generated rule on the current scene
+(SPEC 4.9), but they were planned for another model. Keeping the taught S2: 3.8 s slower per case
+(estimate), 12.5 mm more clearance.
+
+**Revisit if** the cell is measured (the machine position is an estimate, `KNOWN_ISSUES.md`), the
+penalty weight changes, or the owner prefers the clearance of the taught S2 to the time.
+
+Pinned by `test/Planner/test_core.py::test_the_committed_paths_pass_the_independent_verification`
+and `test/Example/test_replay.py::test_every_path_visits_its_moves_in_program_order` (entries 5 and 6
+print the strict comparison).

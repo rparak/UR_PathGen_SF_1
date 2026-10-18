@@ -970,6 +970,9 @@ synthetic point with a joint at 4.0 rad that must come out as 4.0.
 
 ### 10.6 Planner and the rotation-sequence output
 
+*Since the machine shift (2026-10-18) the taught S1 – S3 all keep the generated rule; S2 is optimised
+for time (−3.8 s, estimate), not for clearance (§17).*
+
 **Segments.** Per case, S1 home → drop (holding: the case's `Tool.Holding_Openings`, 50 mm for both
 cases), S2 retreat → approach (open, 85 mm: the full stroke for `rq_set_pos_spd_for(0, ...)`; the
 release opening is real, owner 2026-10-18, §4.9), S3 lift → home (holding). The ends are the
@@ -1293,6 +1296,9 @@ Measured on the development Mac (M2 Pro), Python 3.11, mujoco 3.16.0.
   came to 15.4 mm and failed): the machine shift moved the reason it was optimised. The optimised S2
   is shorter (one via point instead of three, 3.8 s less, estimate) but passes closer to the
   environment than the taught S2 outside the station neighbourhood (30.0 / 29.7 mm against 42.5 mm).
+  The owner keeps the re-planned output (2026-10-18): **the optimisation of S2 is now about time,
+  not safety.** The optimised S2 stays 10 mm above the 20 mm hard margin; against the 30 mm penalty
+  threshold it is at it in case 17 (30.0 mm) and 0.3 mm inside in case 18 (29.7 mm, penalty 0.002 m).
 - **Machine assembly and post refit (2026-10-18, §4.9).** `machine_a` −100 mm, post 2710 a further
   −15.7 mm; the 2026-10-17 overrides replaced. The collision set was rebuilt: 1109 s, the same 6716
   pieces, conservativeness 0.769 mm, 398 flagged (was 396). The committed S1 – S3 keep the generated
