@@ -56,7 +56,17 @@ Environment:
   # the world axes, collision only; a box that meets Clearance.Station_Zone is a zone piece. Each
   # entry: Name, Min and Max (lower and upper corner, world frame), Source. The collision set is not
   # rebuilt for them. REQUIRED (may be empty). [-, m, m, text]
-  Added_Boxes: []
+  # station_bracket: the black U-shaped holder on the left window profile, under the part (owner
+  # photo, 2026-10-18). x from the post face (8 mm into the post) to 90 mm in front of it, y and
+  # the bottom from the photo (about 80 mm wide); the top is the highest at which every taught
+  # sample of cases 17 and 18, the release included, keeps 5 mm: 1.1126 m (the open finger),
+  # 17 mm above the photo's estimate of 1.095 m (SPEC 4.10). The stub seen above the holder is not
+  # modelled: at its estimated position it contradicts the taught drop (KNOWN_ISSUES.md).
+  Added_Boxes:
+    - Name: station_bracket
+      Min: [-0.735, -0.340, 0.955]
+      Max: [-0.645, -0.260, 1.112]
+      Source: owner photo + taught points, not measured
 
 # The robot and its placement.
 Robot:

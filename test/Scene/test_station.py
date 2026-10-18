@@ -82,6 +82,11 @@ CONST_OVERRIDES = [(2710, [-0.0157, 0.0, 0.0], 'derived from sf1_plc_v4.script c
 #   Unit [int]
 CONST_POST, CONST_TOP_PROFILE, CONST_SIDE_TABLE, CONST_PALLET_TABLE = 2710, 2699, 1061, 1060
 CONST_MACHINE_INTERIOR, CONST_RIGHT_PROFILE = 1638, 2709
+# The station boxes (Environment.Added_Boxes, owner photo: the holder under the part), and the cap
+# of their distance search: above the global margin (20 mm), so that every distance inside a
+# margin is exact.
+#   Unit [Tuple<string>], [float] (m)
+CONST_STATION_BOXES, CONST_BOX_DISTMAX = ('station_bracket',), 0.030
 # Near-margin segments for the early-exit equivalence: from each taught point of the sequence to a
 # seeded perturbation of it (normal, sigma per joint), at the segment's opening.
 #   Unit [int], [float] (rad), [int]
@@ -118,6 +123,46 @@ def test_the_taught_rotation_sequence_keeps_its_margins(scenes, plc_points, case
         found += ['%s -> %s sample %d: %s - %s %.2f mm (margin %.1f mm)' % (a, b, k, v.Body_1, v.Body_2, v.Distance * 1e3,
                                                                             v.Margin * 1e3) for k, v in violations]
     assert not found, '\n'.join(found)
+
+
+@pytest.mark.parametrize('name', CONST_STATION_BOXES)
+def test_the_taught_station_clears_the_station_boxes_by_the_zone_margin(scenes, cfg, plc_points, name):
+    """
+    Description:
+        Each station box (Environment.Added_Boxes, not in the STL) is in both scenes as a zone
+        piece, so the replay above checks it. Its exact distance (mj_geomDistance) to every robot
+        geom on every taught sample stays at or above the zone margin; it comes within the global
+        margin, so the zone margin decides; and the contact MuJoCo generates at the closest sample
+        has that same distance, so Check_Clearance sees the box.
+    """
+
+    closest = (np.inf, None, None, None)
+    for case in sorted(CONST_SEQUENCES):
+        for a, b, state in CONST_SEQUENCES[case]:
+            scene = scenes[state]
+            m, d = scene.Model, scene.Data
+            box = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, 'env_box_' + name)
+            assert box >= 0 and name in scene.Zone_Boxes
+            robot = [g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0
+                     and not m.body(m.geom_bodyid[g]).name.startswith('env') and m.body(m.geom_bodyid[g]).name != 'base']
+            for q in scene.Segment_Samples(plc_points[a].Q, plc_points[b].Q):
+                scene.Set_Joints(q)
+                for g in robot:
+                    # Bounding spheres farther apart than the cap cannot come closer.
+                    if (np.linalg.norm(d.geom_xpos[g] - d.geom_xpos[box]) - m.geom_rbound[g] - m.geom_rbound[box]
+                            > CONST_BOX_DISTMAX):
+                        continue
+                    distance = mujoco.mj_geomDistance(m, d, g, box, CONST_BOX_DISTMAX, None)
+                    if distance < closest[0]:
+                        closest = (distance, '%d %s -> %s' % (case, a, b), state, q)
+    distance, where, state, q = closest
+    assert cfg.Station_Zone_Environment <= distance < cfg.Clearance_Environment, (distance, where)
+    scene = scenes[state]
+    scene.Set_Joints(q)
+    mujoco.mj_collision(scene.Model, scene.Data)
+    box = mujoco.mj_name2id(scene.Model, mujoco.mjtObj.mjOBJ_GEOM, 'env_box_' + name)
+    contacts = [c.dist for c in scene.Data.contact[:scene.Data.ncon] if box in (c.geom1, c.geom2)]
+    assert contacts and min(contacts) == pytest.approx(distance, abs=1e-6)
 
 
 @pytest.mark.parametrize('case', sorted(CONST_SEQUENCES))

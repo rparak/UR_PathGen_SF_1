@@ -366,6 +366,34 @@ Pinned by `test/Scene/test_station.py::test_the_taught_rotation_sequence_keeps_i
 `test/Scene/test_station.py::test_the_corrections_are_recorded_and_configured` and
 `test/Scene/test_station.py::test_the_zone_covers_the_corrected_station_and_nothing_far`.
 
+## The station holder is a box sized by a photo and capped by the taught sweep; the stub is not modelled
+
+**Decision.** The U-shaped holder under the part, missing from the STL, is one box in
+`Environment.Added_Boxes` (`station_bracket`). Its footprint and bottom come from an owner photo,
+and its x range runs from the post face to an assumed 90 mm in front. Its top is the highest at
+which every taught sample of cases 17 and 18 keeps 5 mm: 1.112 m, 17 mm above the photo's estimate
+(SPEC §4.10). The stub seen above the holder is not modelled (owner, 2026-10-18).
+
+**Why.** The optimised paths reach the station points from directions the taught program never
+used, and the model had nothing under the part. The photo cannot resolve the height to better than
+about ±30 mm; the taught program bounds it from above, because the real robot runs it, release
+included. The largest box that bound allows is the conservative end. The stub cannot stand where
+the photo puts it: the post fit leaves the taught drop 5 mm from the post face there, so a box could
+be at most 0.3 mm proud. Such a plate would claim a geometry nothing supports and would still steer
+the planner.
+
+**Alternatives.**
+
+- The photo's height for the holder (1.095 m): rejected, less conservative.
+- The stub as a 0.3 mm plate beside the post: rejected by the owner; its real position is unknown,
+  and a plate there would only move case 17 S2.
+- A U with arms: rejected, the arms' position relative to the fingers is not visible.
+
+**Revisit if** the holder or the stub is measured, or the drop or the pick is re-taught.
+
+Pinned by `test/Scene/test_station.py::test_the_taught_station_clears_the_station_boxes_by_the_zone_margin`
+and `test/Planner/test_core.py::test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end`.
+
 ## The gripper is mounted at 0°, confirmed by the owner; the yaw is never fitted
 
 **Decision.** `Tool.Mount_Yaw` = 0°: the standard dowel-pin-indexed Robotiq mounting, with the

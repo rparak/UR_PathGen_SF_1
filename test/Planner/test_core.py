@@ -30,6 +30,8 @@ import dataclasses
 import numpy as np
 # Pytest (Testing framework) [pip3 install pytest]
 import pytest
+# MuJoCo (Physics simulator) [pip3 install mujoco]
+import mujoco
 # Custom Lib.:
 #   ../src/Planner/Core — the planner and the estimates under test
 from Planner.Core import (Planner_Cls, Planner_Budget_Str, Planner_Error_Cls, Segment_Duration, Estimate_Duration,
@@ -72,6 +74,11 @@ CONST_TAUGHT_VIAS = {'S1': 1, 'S2': 3, 'S3': 1}
 CONST_REDUCED = Planner_Budget_Str(Restarts=2, RRT_Iterations=600, Shortcut_Iterations=40, Refine_Candidates=1,
                                    Refine_Iterations=20)
 CONST_REDUCED_SEED = 7
+# The station boxes (Environment.Added_Boxes, owner photo: the holder under the part), and the cap
+# of their distance search: far beyond every margin, so that a generated sample is compared with
+# its taught end exactly unless both are farther than the cap.
+#   Unit [Tuple<string>], [float] (m)
+CONST_STATION_BOXES, CONST_BOX_DISTMAX = ('station_bracket',), 0.200
 
 
 def _Segments(case):
@@ -95,7 +102,17 @@ def program(root):
 
 
 @pytest.fixture(scope='module')
-def planners(cfg, program):
+def scenes(cfg):
+    """
+    Description:
+        The scene with the environment at each segment opening.
+    """
+
+    return {o: Scene_Cls(dataclasses.replace(cfg, Opening=o)) for o in sorted(set(CONST_OPENING.values()))}
+
+
+@pytest.fixture(scope='module')
+def planners(program, scenes):
     """
     Description:
         A planner per opening, with all fixed station points, penalty weight 0.
@@ -103,7 +120,6 @@ def planners(cfg, program):
 
     points, _ = program
     station_q = [points[name].Q for name in CONST_STATION_POINTS]
-    scenes = {o: Scene_Cls(dataclasses.replace(cfg, Opening=o)) for o in sorted(set(CONST_OPENING.values()))}
     return {segment: Planner_Cls(scenes[o], station_q, 0.0, CONST_REDUCED) for segment, o in CONST_OPENING.items()}
 
 
@@ -154,6 +170,55 @@ def test_the_committed_paths_pass_the_independent_verification(root, program, pl
         path, vias = _Path(document, points, start, goal)
         planners[segment].Verify_Path(path)
         assert len(vias) <= CONST_TAUGHT_VIAS[segment] - (1 if segment == 'S2' else 0)
+
+
+def _Box_Distance(scene, robot, box, q):
+    m, d = scene.Model, scene.Data
+    scene.Set_Joints(q)
+    distance = CONST_BOX_DISTMAX
+    for g in robot:
+        # Bounding spheres farther apart than the cap cannot come closer.
+        if np.linalg.norm(d.geom_xpos[g] - d.geom_xpos[box]) - m.geom_rbound[g] - m.geom_rbound[box] > CONST_BOX_DISTMAX:
+            continue
+        distance = min(distance, mujoco.mj_geomDistance(m, d, g, box, CONST_BOX_DISTMAX, None))
+    return distance
+
+
+@pytest.mark.parametrize('case', sorted(CONST_CASES))
+def test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end(root, cfg, program, scenes, case):
+    """
+    Description:
+        The station boxes (Environment.Added_Boxes, not in the STL; fitted, not measured) are in the
+        scenes the paths are verified in. For every committed generated segment and every station
+        box, measured exactly (mj_geomDistance): within the global margin, no sample comes closer to
+        the box than the closer of the segment's two taught ends, so a generated path never uses the
+        boxes' space more tightly than the taught program does (farther away, where the rule does
+        not look, a fraction of a millimetre either way means nothing); and every sample keeps the
+        generated rule's margin to the box (the zone margin within the endpoint radius of a station
+        point, the global margin elsewhere).
+    """
+
+    points, _ = program
+    document, _ = _Output(root, case)
+    station_q = [points[name].Q for name in CONST_STATION_POINTS]
+    for segment, (start, goal) in _Segments(case).items():
+        scene = scenes[CONST_OPENING[segment]]
+        m = scene.Model
+        robot = [g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0
+                 and not m.body(m.geom_bodyid[g]).name.startswith('env') and m.body(m.geom_bodyid[g]).name != 'base']
+        tcps = scene.Station_TCPs(station_q)
+        path, _ = _Path(document, points, start, goal)
+        for name in CONST_STATION_BOXES:
+            box = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, 'env_box_' + name)
+            assert box >= 0 and name in scene.Zone_Boxes
+            taught = min(_Box_Distance(scene, robot, box, path[0]), _Box_Distance(scene, robot, box, path[-1]))
+            for leg, (q_a, q_b) in enumerate(zip(path[:-1], path[1:])):
+                for k, q in enumerate(scene.Segment_Samples(q_a, q_b)):
+                    distance = _Box_Distance(scene, robot, box, q)
+                    margin = cfg.Station_Zone_Environment if scene.Near_Station(q, tcps) else cfg.Clearance_Environment
+                    assert distance >= margin, (segment, name, leg, k, distance, margin)
+                    assert min(distance, cfg.Clearance_Environment) >= min(taught, cfg.Clearance_Environment) - 1e-9, (
+                        segment, name, leg, k, distance, taught)
 
 
 @pytest.mark.parametrize('case', sorted(CONST_CASES))

@@ -97,7 +97,8 @@ def test_the_shipped_configuration_loads_in_si_units():
     assert cfg.Mount_Yaw == 0.0
     assert cfg.Assembly_Overrides == [('machine_a', 1154, [-0.100, 0.0, 0.0], 'owner estimate, 2026-10-18, not measured')]
     assert cfg.Component_Overrides == [(2710, [-0.0157, 0.0, 0.0], 'derived from sf1_plc_v4.script cases 17/18, not measured')]
-    assert cfg.Added_Boxes == []
+    assert cfg.Added_Boxes == [('station_bracket', [-0.735, -0.340, 0.955], [-0.645, -0.260, 1.112],
+                                'owner photo + taught points, not measured')]
 
 
 @pytest.mark.parametrize('field', CONST_REQUIRED)

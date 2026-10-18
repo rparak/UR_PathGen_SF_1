@@ -54,11 +54,20 @@ generated path only while its TCP lies within 50 mm of a station point.
   error at the drop); the open gripper at 85 mm — assumption: full 85 mm stroke for
   `rq_set_pos_spd_for(0, ...)`; conservative; owner did not confirm (the URCap sets
   `set_open_mm(50.0, 1)`).
-- **Evidence:** SPEC §4.7 (first fit), §4.9 (current fit, all-cases check, per-segment table).
-- **Pinned by:** `test/Scene/test_station.py` (the replay of both cases as taught, the generated
-  rule, the recorded overrides, the zone pieces).
-- **What would close it:** measuring the machine's position, the post and the station's holder on
-  the real cell, then correcting the STL and removing the overrides.
+- **The station holder is an estimate** (`Environment.Added_Boxes`, `station_bracket`, source "owner
+  photo + taught points, not measured", SPEC §4.10): one box under the part. Its footprint comes
+  from the photo, its depth (90 mm) is assumed, and its top (1.112 m) is the highest the taught
+  sequence allows. The holder's arms beside the part are not modelled.
+- **The stub is not modelled.** The photo's stub contradicts the taught drop at its estimated
+  position; its real position is unknown and it is not modelled. Run the robot near the drop at
+  reduced speed first.
+- **Evidence:** SPEC §4.7 (first fit), §4.9 (current fit, all-cases check, per-segment table),
+  §4.10 (holder, stub).
+- **Pinned by:** `test/Scene/test_station.py` (the replay of both cases as taught and as generated,
+  the recorded overrides, the zone pieces, the holder) and
+  `test/Planner/test_core.py::test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end`.
+- **What would close it:** measuring the machine's position, the post, the holder and the stub on
+  the real cell, then correcting the STL and removing the overrides and the box.
 
 ## The position of machine (a) is the owner's estimate, not a measurement
 
