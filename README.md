@@ -33,7 +33,10 @@ Linux:
 .venv/bin/python Example/demo_rotate_axis.py
 ```
 
-In the viewer, collision geometry is in geom group 3 (toggle with the `3` key).
+Geom groups in the viewer (toggle with the number keys): `1` the visual STL of the cell, `2` the
+robot's visual meshes, `3` the collision geometry (environment pieces and robot). Both viewer scripts
+take `--collision-only`: the scene is built without the visual STL (faster, lighter) and the viewer
+starts with group 3 shown.
 
 Plan the transfer segments of the rotation sequence (cases 17 and 18; about 35 minutes, writes
 `Data/Generated/` and prints the taught vs optimised report):

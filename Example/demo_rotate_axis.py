@@ -46,7 +46,7 @@ from Configuration.Core import Load_Configuration, Configuration_Error_Cls, CONS
 #   ../URScript/Core — the learned points
 from URScript.Core import Read_URScript
 #   ../Scene/Core — the scene and its clearance check
-from Scene.Core import Scene_Cls
+from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP
 
 """
 Description:
@@ -151,11 +151,16 @@ def main():
             macOS:  .venv/bin/mjpython Example/demo_rotate_axis.py
             Linux:  .venv/bin/python Example/demo_rotate_axis.py
             Tests:  .venv/bin/python Example/demo_rotate_axis.py --headless
+
+        --collision-only builds the scene without the visual STL and starts the viewer with the
+        collision geometry (geom group 3) shown.
     """
 
     parser = argparse.ArgumentParser(description='Rotate one joint of the UR10e in the SF1 scene.')
     parser.add_argument('--config', default=CONST_DEFAULT_CONFIG_FILE, help='the cell configuration (default: %(default)s)')
     parser.add_argument('--headless', action='store_true', help='check and replay without a viewer')
+    parser.add_argument('--collision-only', action='store_true',
+                        help='no visual STL; the viewer starts with the collision geometry shown')
     args = parser.parse_args()
     try:
         cfg = Load_Configuration(args.config)
@@ -169,8 +174,10 @@ def main():
 
     # 1\ The scene (the visual mesh only when it is shown).
     t0 = time.time()
-    scene = Scene_Cls(cfg, with_environment=True, with_visual=not args.headless)
-    print('[INFO] Scene built in %.1f s: %d geoms.' % (time.time() - t0, scene.Model.ngeom))
+    with_visual = not (args.headless or args.collision_only)
+    scene = Scene_Cls(cfg, with_environment=True, with_visual=with_visual)
+    print('[INFO] Scene built in %.1f s: %d geoms; visual mesh %s.'
+          % (time.time() - t0, scene.Model.ngeom, 'loaded' if with_visual else 'not loaded'))
 
     # 2\ Check the whole motion first; the label follows from the result.
     waypoints = Motion_Waypoints(start, CONST_JOINT, math.radians(CONST_AMPLITUDE))
@@ -205,6 +212,9 @@ def main():
               'Example/demo_rotate_axis.py' % error)
         return 2
     with viewer:
+        if args.collision_only:
+            with viewer.lock():
+                viewer.opt.geomgroup[CONST_COLLISION_GROUP] = 1
         viewer.set_texts((mujoco.mjtFontScale.mjFONTSCALE_150, mujoco.mjtGridPos.mjGRID_TOPLEFT,
                           'SF1 demo: base +-%.0f deg' % CONST_AMPLITUDE, label))
         while viewer.is_running():
