@@ -18,7 +18,7 @@ collision set against their hashes. It is safe to re-run; `./install.sh --detect
 
 ## Run
 
-The demo rotates the base joint ±45° around `home_safe`. It checks the motion first and labels it
+The demo rotates the base joint ±45° around `home`. It checks the motion first and labels it
 "clearance checked" or "VISUAL ONLY - UNCHECKED".
 
 macOS (the MuJoCo viewer needs `mjpython`):

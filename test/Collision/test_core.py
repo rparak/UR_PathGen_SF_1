@@ -266,7 +266,7 @@ def test_a_collinear_component_is_thickened_in_two_directions():
     assert np.max(line @ hull.equations[:, :3].T + hull.equations[:, 3]) <= 1e-12
 
 
-@pytest.mark.parametrize('name', ['home_safe', 'drop_rot_01'])
+@pytest.mark.parametrize('name', ['home', 'drop_rotate_1'])
 def test_no_robot_body_at_a_or_b_is_inside_a_flagged_piece(scene, collision, points, name):
     """
     Description:

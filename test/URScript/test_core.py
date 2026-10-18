@@ -117,10 +117,11 @@ def test_the_export_round_trips_byte_for_byte():
 def test_the_shipped_files_round_trip_byte_for_byte(root):
     """
     Description:
-        The positions file (with its comment header) and the export fixture round-trip exactly.
+        A written file with its comment header (the generated points of case 17) and the export
+        fixture round-trip exactly.
     """
 
-    for parts in (('Data', 'Positions', 'SF1_Positions.urscript'), ('test', 'URScript', 'data', 'SF1_Positions_original.urscript')):
+    for parts in (('Data', 'Generated', 'SF1_Rotation_17.urscript'), ('test', 'URScript', 'data', 'SF1_Positions_original.urscript')):
         text = _Read_File(root, *parts)
         assert Write_URScript(Read_URScript(text)) == text
 
@@ -218,20 +219,6 @@ def test_a_malformed_program_excerpt_is_refused(text, fragment):
         Read_Program_Excerpt(text)
 
 
-def test_the_renamed_points_keep_every_token(root):
-    """
-    Description:
-        home -> home_safe and drop_rotate_1 -> drop_rot_01: renamed, values verbatim (tokens equal).
-    """
-
-    original = Read_URScript(CONST_EXPORT).Points
-    renamed = Read_URScript(_Read_File(root, 'Data', 'Positions', 'SF1_Positions.urscript')).Points
-    assert list(renamed) == ['home_safe', 'drop_rot_01']
-    for old, new in (('home', 'home_safe'), ('drop_rotate_1', 'drop_rot_01')):
-        assert renamed[new].P_Tokens == original[old].P_Tokens
-        assert renamed[new].Q_Tokens == original[old].Q_Tokens
-
-
 @pytest.mark.parametrize('text, fragment', [
     ('global a_p=p[1, 2, 3, 4, 5, 6]\nglobal a_q=[1, 2, 3, 4, 5]\n', 'has 5 values'),
     ('global a_p=p[1, 2, 3, 4, 5, 6]\n', 'no a_q'),
@@ -299,9 +286,9 @@ def test_movej_uses_joint_targets_and_no_blend():
         given a and v tokens as written, and no blend.
     """
 
-    assert (Write_Movej_Sequence(['home_safe', 'drop_rot_01'], '1.3962634015954636', '1.0471975511965976')
-            == 'movej(home_safe_q, a=1.3962634015954636, v=1.0471975511965976, r=0)\n'
-               'movej(drop_rot_01_q, a=1.3962634015954636, v=1.0471975511965976, r=0)\n')
+    assert (Write_Movej_Sequence(['home', 'drop_rotate_1'], '1.3962634015954636', '1.0471975511965976')
+            == 'movej(home_q, a=1.3962634015954636, v=1.0471975511965976, r=0)\n'
+               'movej(drop_rotate_1_q, a=1.3962634015954636, v=1.0471975511965976, r=0)\n')
 
 
 def test_a_motion_sequence_writes_generated_moves_program_lines_and_comments():

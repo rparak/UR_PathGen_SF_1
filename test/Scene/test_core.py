@@ -159,18 +159,18 @@ def _Scene_With_Yaw(tmp_path, yaw):
 def test_a_base_yaw_of_90_deg_turns_a_known_point_by_90_deg(cfg, points, tmp_path):
     """
     Description:
-        Robot.Base_Yaw is written in degrees. At 90 deg, home_safe's TCP - its own _p in the base
+        Robot.Base_Yaw is written in degrees. At 90 deg, home's TCP - its own _p in the base
         frame, (x, y, z) - lies at world Base_Position + (-y, x, z), both in MuJoCo (flange * TCP)
-        and through Base_Frame. Tolerance 3 mm: the measured FK residual at home_safe is 1.72 mm
+        and through Base_Frame. Tolerance 3 mm: the measured FK residual at home is 1.72 mm
         (SPEC 4.3). The value read as radians would turn the point by 90 rad (~ 116.6 deg).
     """
 
     scene = _Scene_With_Yaw(tmp_path, 90.0)
-    x, y, z = points['home_safe'].P[:3]
+    x, y, z = points['home'].P[:3]
     expected = np.array(cfg.Base_Position) + np.array([-y, x, z])
-    scene.Set_Joints(points['home_safe'].Q)
+    scene.Set_Joints(points['home'].Q)
     tcp_mujoco = (scene.Flange_Pose() @ Pose_To_Matrix(cfg.TCP_Offset))[:3, 3]
-    tcp_frame = (scene.Base_Frame() @ TCP_Pose(points['home_safe'].Q, cfg.TCP_Offset))[:3, 3]
+    tcp_frame = (scene.Base_Frame() @ TCP_Pose(points['home'].Q, cfg.TCP_Offset))[:3, 3]
     assert np.linalg.norm(tcp_mujoco - expected) < 0.003, (tcp_mujoco, expected)
     assert np.linalg.norm(tcp_frame - expected) < 0.003, (tcp_frame, expected)
 
@@ -184,7 +184,7 @@ def test_mujoco_flange_equals_dh_flange_for_random_joints(robot_scene, cfg, poin
 
     rng = np.random.default_rng(0)
     qs = list(rng.uniform(cfg.Joint_Limits_Min, cfg.Joint_Limits_Max, size=(1000, 6)))
-    qs += [points['home_safe'].Q, points['drop_rot_01'].Q]
+    qs += [points['home'].Q, points['drop_rotate_1'].Q]
     worst_p = worst_r = 0.0
     for q in qs:
         robot_scene.Set_Joints(q)
@@ -329,7 +329,7 @@ def test_joint_ranges_are_the_configured_limits(robot_scene, cfg):
     assert cfg.Joint_Limits_Max[2] == pytest.approx(math.pi)
 
 
-def _Placement_Problems(scene, cfg, plc_points):
+def _Placement_Problems(scene, cfg, points):
     """
     Description:
         Where the taught grasp and drop points of sf1_plc_v4.script land in the world, against what
@@ -342,36 +342,36 @@ def _Placement_Problems(scene, cfg, plc_points):
     for i in range(1, 9):
         for name, x, y in (('pick_obj_%d' % i, CONST_PALLET_TABLE_X, CONST_PALLET_TABLE_Y),
                            ('unload_obj_%d' % i, CONST_SIDE_TABLE_X, CONST_SIDE_TABLE_Y)):
-            tcp = (scene.Base_Frame() @ TCP_Pose(plc_points[name].Q, cfg.TCP_Offset))[:3, 3]
+            tcp = (scene.Base_Frame() @ TCP_Pose(points[name].Q, cfg.TCP_Offset))[:3, 3]
             if not (x[0] < tcp[0] < x[1] and y[0] < tcp[1] < y[1] and CONST_TABLE_PLATE_TOP < tcp[2] < CONST_SIDE_TABLE_TOP):
                 problems.append('%s at %s' % (name, np.round(tcp, 3)))
-        tcp = (scene.Base_Frame() @ TCP_Pose(plc_points['bench_drop_%d' % i].Q, cfg.TCP_Offset))[:3, 3]
+        tcp = (scene.Base_Frame() @ TCP_Pose(points['bench_drop_%d' % i].Q, cfg.TCP_Offset))[:3, 3]
         if not all(CONST_OBJECT_A_MIN[k] < tcp[k] < CONST_OBJECT_A_MAX[k] for k in range(3)):
             problems.append('bench_drop_%d at %s' % (i, np.round(tcp, 3)))
     return problems
 
 
-def test_the_taught_points_land_where_they_handle_parts(robot_scene, cfg, plc_points):
+def test_the_taught_points_land_where_they_handle_parts(robot_scene, cfg, points):
     """
     Description:
         The world-yaw check that FK vs _p cannot do: at the configured base pose every grasp point
         lands on its table and every machine drop inside machine (a).
     """
 
-    assert _Placement_Problems(robot_scene, cfg, plc_points) == []
+    assert _Placement_Problems(robot_scene, cfg, points) == []
 
 
-def test_the_placement_check_refuses_a_base_yaw_of_0_deg(cfg, plc_points, tmp_path):
+def test_the_placement_check_refuses_a_base_yaw_of_0_deg(cfg, points, tmp_path):
     """
     Description:
         The placement check discriminates: at Base_Yaw = 0 (the earlier, wrong value) all 24 points
         land elsewhere.
     """
 
-    assert len(_Placement_Problems(_Scene_With_Yaw(tmp_path, 0.0), cfg, plc_points)) == 24
+    assert len(_Placement_Problems(_Scene_With_Yaw(tmp_path, 0.0), cfg, points)) == 24
 
 
-@pytest.mark.parametrize('name', ['home_safe', 'drop_rot_01'])
+@pytest.mark.parametrize('name', ['home', 'drop_rotate_1'])
 def test_a_and_b_keep_every_clearance_margin(scene, cfg, points, name):
     """
     Description:
@@ -386,7 +386,7 @@ def test_a_and_b_keep_every_clearance_margin(scene, cfg, points, name):
     Check_Learned_Point(scene, cfg, points[name])
 
 
-def test_a_pose_pushed_into_the_side_table_is_a_collision(scene, cfg, plc_points):
+def test_a_pose_pushed_into_the_side_table_is_a_collision(scene, cfg, points):
     """
     Description:
         hover_unload_2 (over the side table, clear) lowered by the shoulder until the TCP is below
@@ -394,7 +394,7 @@ def test_a_pose_pushed_into_the_side_table_is_a_collision(scene, cfg, plc_points
         Check_Learned_Point refuses it.
     """
 
-    q = np.array(plc_points['hover_unload_2'].Q)
+    q = np.array(points['hover_unload_2'].Q)
     assert scene.Check_Clearance(q) == []
     for delta in sorted(np.linspace(-1.0, 1.0, 401), key=abs):
         trial = q + np.array([0.0, delta, 0.0, 0.0, 0.0, 0.0])
@@ -408,7 +408,7 @@ def test_a_pose_pushed_into_the_side_table_is_a_collision(scene, cfg, plc_points
     assert any(v.Body_2.startswith('env') or v.Body_1.startswith('env') for v in violations)
     assert min(v.Distance for v in violations) < 0.0
     # A consistent point (its _p is the FK of its _q), so it is the clearance check that refuses it.
-    point = dataclasses.replace(plc_points['hover_unload_2'], Q=list(trial),
+    point = dataclasses.replace(points['hover_unload_2'], Q=list(trial),
                                 P=Matrix_To_Pose(TCP_Pose(trial, cfg.TCP_Offset)))
     with pytest.raises(Clearance_Error_Cls, match='hover_unload_2 violates'):
         Check_Learned_Point(scene, cfg, point)
@@ -458,7 +458,7 @@ def test_an_added_box_is_an_env_box_and_a_zone_piece_only_inside_the_zone(cfg):
     assert scene.Zone_Boxes == ['test_zone']
 
 
-def test_the_station_zone_applies_within_the_endpoint_radius(robot_scene, cfg, plc_points):
+def test_the_station_zone_applies_within_the_endpoint_radius(robot_scene, cfg, points):
     """
     Description:
         A generated configuration may use the zone margin only while its TCP lies within
@@ -467,7 +467,7 @@ def test_the_station_zone_applies_within_the_endpoint_radius(robot_scene, cfg, p
         each point is inside its own neighbourhood. Distances from DH FK, not from the scene.
     """
 
-    drop, below = np.array(plc_points['drop_rotate_1'].Q), np.array(plc_points['Waypoint_4'].Q)
+    drop, below = np.array(points['drop_rotate_1'].Q), np.array(points['Waypoint_4'].Q)
     tcp = lambda q: TCP_Pose(q, cfg.TCP_Offset)[:3, 3]
     assert np.linalg.norm(tcp(below) - tcp(drop)) > cfg.Station_Zone_Endpoint_Radius
     t = min(np.linspace(0.0, 1.0, 1001), key=lambda x: abs(np.linalg.norm(tcp(drop + x * (below - drop)) - tcp(drop)) - 0.040))
@@ -483,7 +483,7 @@ def test_a_generated_configuration_above_the_workspace_is_refused(robot_scene, c
         The arm upright with the tool pointing up puts the TCP above the workspace's 2.35 m (DH FK,
         not the scene): the generated rule reports the robot bodies above it, the largest excursion
         being the pad end's,
-        the taught rule does not apply the box, and home_safe lies inside it.
+        the taught rule does not apply the box, and home lies inside it.
     """
 
     up = [0.0, -math.pi / 2.0, 0.0, math.pi, -math.pi / 2.0, 0.0]
@@ -497,7 +497,7 @@ def test_a_generated_configuration_above_the_workspace_is_refused(robot_scene, c
     assert abs(max(-v.Distance for v in violations) - expected) < 1e-4
     assert any(v.Body_2 == 'workspace' for v in robot_scene.Check_Configuration(up, 'generated'))
     assert not any(v.Body_2 == 'workspace' for v in robot_scene.Check_Configuration(up, 'taught'))
-    assert robot_scene.Workspace_Violations(points['home_safe'].Q) == []
+    assert robot_scene.Workspace_Violations(points['home'].Q) == []
 
 
 def test_the_van_der_corput_order_visits_every_sample_once():
@@ -520,7 +520,7 @@ def test_a_segment_is_taught_or_generated(robot_scene, points):
     """
 
     with pytest.raises(Scene_Error_Cls, match='"taught" or "generated"'):
-        robot_scene.Check_Segment(points['home_safe'].Q, points['home_safe'].Q, kind='learned')
+        robot_scene.Check_Segment(points['home'].Q, points['home'].Q, kind='learned')
 
 
 def test_the_static_base_clearance_is_checked_at_build(scene, cfg):
@@ -581,20 +581,20 @@ def test_the_visual_mesh_is_not_hulled(cfg):
 def test_check_learned_point_refuses_a_point_whose_joints_disagree_with_its_pose(scene, cfg, points):
     """
     Description:
-        The kinematic branch of Check_Learned_Point: drop_rot_01 with its base joint turned by
+        The kinematic branch of Check_Learned_Point: drop_rotate_1 with its base joint turned by
         0.05 rad but its _p unchanged is refused with Kinematics_Error_Cls before any clearance check.
         Expected numbers, independent of the FK code: the TCP moves along a chord 2 r sin(0.025)
         with r = |(x, y)| of _p = 0.7660 m, i.e. 38.30 mm, give or take the measured kinematic
         error (<= 4.1 mm); the orientation by 0.05 rad = 2.865 deg, give or take 0.4 deg.
     """
 
-    p = points['drop_rot_01'].P
+    p = points['drop_rotate_1'].P
     chord = 2.0 * math.hypot(p[0], p[1]) * math.sin(0.025) * 1e3
-    q = list(points['drop_rot_01'].Q)
+    q = list(points['drop_rotate_1'].Q)
     q[0] += 0.05
     with pytest.raises(Kinematics_Error_Cls) as error:
-        Check_Learned_Point(scene, cfg, dataclasses.replace(points['drop_rot_01'], Q=q))
-    match = re.search(r'Point drop_rot_01: .* is ([0-9.]+) mm / ([0-9.]+) deg from its _p; the sanity bound is '
+        Check_Learned_Point(scene, cfg, dataclasses.replace(points['drop_rotate_1'], Q=q))
+    match = re.search(r'Point drop_rotate_1: .* is ([0-9.]+) mm / ([0-9.]+) deg from its _p; the sanity bound is '
                       r'10\.00 mm / ([0-9.]+) deg', str(error.value))
     assert match, str(error.value)
     assert abs(float(match.group(1)) - chord) <= 4.1

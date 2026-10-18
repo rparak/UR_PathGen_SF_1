@@ -65,19 +65,8 @@ def cfg():
 def points():
     """
     Description:
-        The learned SF1 points (home_safe = A, drop_rot_01 = B).
-    """
-
-    from URScript.Core import Read_URScript
-    with open(os.path.join(CONST_ROOT, 'Data', 'Positions', 'SF1_Positions.urscript'), encoding='utf-8') as handle:
-        return Read_URScript(handle.read()).Points
-
-
-@pytest.fixture(scope='session')
-def plc_points():
-    """
-    Description:
-        Every learned point of the owner's program sf1_plc_v4.script (the committed extract).
+        Every learned point of the owner's program sf1_plc_v4.script (the committed extract, the single
+        source of learned points; A = home, B = drop_rotate_1).
     """
 
     from URScript.Core import Read_URScript

@@ -43,11 +43,11 @@ Description:
 """
 # (point, position residual [mm], orientation residual [deg]).
 #   Unit [Tuple]
-CONST_RESIDUAL_PINS = (('home_safe', 1.7177033, 0.2608401), ('drop_rot_01', 4.0229419, 0.3763663))
+CONST_RESIDUAL_PINS = (('home', 1.7177033, 0.2608401), ('drop_rotate_1', 4.0229419, 0.3763663))
 # Diagnostic derived TCP per point: position in the flange frame [mm], rotation angle [deg].
 #   Unit [Tuple]
-CONST_DERIVED_PINS = (('home_safe', (1.112, -0.036, 172.692), 0.2608401),
-                      ('drop_rot_01', (-3.299, -0.229, 171.709), 0.3763663))
+CONST_DERIVED_PINS = (('home', (1.112, -0.036, 172.692), 0.2608401),
+                      ('drop_rotate_1', (-3.299, -0.229, 171.709), 0.3763663))
 # Pin bands: +-0.01 mm and +-0.001 deg (residuals); +-0.001 mm for the derived TCP position.
 #   Unit [float]
 CONST_PIN_MM = 0.01
@@ -109,7 +109,7 @@ def test_both_learned_points_are_within_the_sanity_bound(points, cfg):
     """
 
     bound = Orientation_Sanity_Bound(cfg.FK_Sanity_Bound_Position, 0.18)
-    for name in ('home_safe', 'drop_rot_01'):
+    for name in ('home', 'drop_rotate_1'):
         Check_FK_Consistency(name, points[name].Q, points[name].P, cfg.TCP_Offset, cfg.FK_Sanity_Bound_Position, bound)
 
 
@@ -119,10 +119,10 @@ def test_a_point_whose_joints_disagree_with_its_pose_is_refused(points, cfg):
         Shifting the base joint by 0.05 rad moves the TCP ~25 mm: refused with both numbers named.
     """
 
-    q = list(points['drop_rot_01'].Q)
+    q = list(points['drop_rotate_1'].Q)
     q[0] += 0.05
-    with pytest.raises(Kinematics_Error_Cls, match=r'drop_rot_01: .* mm .* deg from its _p'):
-        Check_FK_Consistency('drop_rot_01', q, points['drop_rot_01'].P, cfg.TCP_Offset, cfg.FK_Sanity_Bound_Position,
+    with pytest.raises(Kinematics_Error_Cls, match=r'drop_rotate_1: .* mm .* deg from its _p'):
+        Check_FK_Consistency('drop_rotate_1', q, points['drop_rotate_1'].P, cfg.TCP_Offset, cfg.FK_Sanity_Bound_Position,
                              Orientation_Sanity_Bound(cfg.FK_Sanity_Bound_Position, 0.18))
 
 
@@ -133,7 +133,7 @@ def test_the_geodesic_angle_ignores_the_rotation_vector_sign_flip_near_pi(points
         by ~2*pi but are the same rotation: the geodesic angle between them is 0.
     """
 
-    r = np.array(points['home_safe'].P[3:])
+    r = np.array(points['home'].P[3:])
     theta = np.linalg.norm(r)
     assert theta == pytest.approx(3.1393, abs=1e-4)
     equivalent = -(2.0 * math.pi - theta) * r / theta

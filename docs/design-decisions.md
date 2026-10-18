@@ -208,15 +208,27 @@ robot choose its own IK branch. Speed does not change the path of an unblended `
 
 Pinned by `test/URScript/test_core.py::test_movej_uses_joint_targets_and_no_blend`.
 
-## Learned points are stored under project names, values verbatim
+## Learned points keep the program's names; the program extract is their single source
 
-**Decision.** `home` → `home_safe` (A), `drop_rotate_1` → `drop_rot_01` (B); generated via points are
-`via_<from>_<to>_<nn>`. The robot export is kept as `test/URScript/data/SF1_Positions_original.urscript`.
+**Decision.** Learned points are read only from `Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript`,
+under the robot's names (A = `home`, B = `drop_rotate_1`); generated via points are
+`via_<from>_<to>_<nn>`. The robot export of A and B is kept as
+`test/URScript/data/SF1_Positions_original.urscript`.
 
-**Why.** A consistent convention for generated output; the original tokens (encoder noise
-included) are what the robot knows.
+*Corrected 2026-10-18 (owner): A and B were first stored under project names (`home_safe`,
+`drop_rot_01`) in `Data/Positions/SF1_Positions.urscript`. That file is retired.*
 
-Pinned by `test/URScript/test_core.py::test_the_renamed_points_keep_every_token`.
+**Why.** Two files held the same points under two names, and the program, the generated output
+and the viewers all use the robot's names. One source cannot drift; the original tokens (encoder
+noise included) are what the robot knows.
+
+**Alternatives.** Keeping the renamed file next to the extract, with a test that their tokens agree:
+it doubles the names an operator has to map.
+
+**Revisit if** a second robot program is added and its point names clash with this one's.
+
+Pinned by `test/URScript/test_core.py::test_the_plc_extract_is_read_with_every_token` (A and B in the
+extract carry the export's tokens) and `::test_the_fixture_is_the_robot_export`.
 
 ## `Robot.Base_Yaw` is 180°, decided by where the taught points land
 
@@ -225,7 +237,7 @@ Pinned by `test/URScript/test_core.py::test_the_renamed_points_keep_every_token`
 points land on what they handle; at 0° it refuses all of them.
 
 *Corrected 2026-10-17: 0° was configured and recorded as confirmed.* That value was an assumption.
-The test meant to catch a wrong yaw (`drop_rot_01` above the side table) encoded the same
+The test meant to catch a wrong yaw (`drop_rotate_1` above the side table) encoded the same
 assumption, so it passed. FK vs `_p` is blind to the yaw, and clearance does not decide it either:
 at 0° both learned points and the ±45° demo were clear, because the robot then swept empty space.
 

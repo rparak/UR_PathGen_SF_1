@@ -72,13 +72,13 @@ movej(<name>_q, r=0)
 
 | Point | Name | Role |
 |---|---|---|
-| robot `home` | `home_safe` | A |
-| robot `drop_rotate_1` | `drop_rot_01` | B |
-| generated | `via_<from>_<to>_<nn>`, e.g. `via_home_safe_drop_rot_01_01` | via points, `nn` from `01` |
+| robot `home` | `home` | A |
+| robot `drop_rotate_1` | `drop_rotate_1` | B |
+| generated | `via_<from>_<to>_<nn>`, e.g. `via_home_drop_rotate_1_01` | via points, `nn` from `01` |
 
-`Data/Positions/SF1_Positions.urscript` holds A and B under the project names with their values
-verbatim. The original export is kept as a test fixture, and its number tokens equal the renamed
-file's (SPEC §10.3). At most **5 via points** per path; more is a failure, never a longer output
+Learned points keep the robot's names; their single source is the program extract
+`Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript`. The original export is kept as a test
+fixture, and its number tokens equal the extract's (SPEC §10.3). At most **5 via points** per path; more is a failure, never a longer output
 (SPEC §1, §14 risk 8).
 
 ## Comparing orientations ✅

@@ -103,12 +103,12 @@ def scenes(cfg):
     return {state: Scene_Cls(dataclasses.replace(cfg, Opening=opening)) for state, opening in CONST_OPENING.items()}
 
 
-def _Station_Q(plc_points):
-    return [plc_points[name].Q for name in CONST_STATION_POINTS]
+def _Station_Q(points):
+    return [points[name].Q for name in CONST_STATION_POINTS]
 
 
 @pytest.mark.parametrize('case', sorted(CONST_SEQUENCES))
-def test_the_taught_rotation_sequence_keeps_its_margins(scenes, plc_points, case):
+def test_the_taught_rotation_sequence_keeps_its_margins(scenes, points, case):
     """
     Description:
         Every segment of the taught rotation sequence, checked as taught, has no penetration and
@@ -118,7 +118,7 @@ def test_the_taught_rotation_sequence_keeps_its_margins(scenes, plc_points, case
 
     found = []
     for a, b, state in CONST_SEQUENCES[case]:
-        samples, violations = scenes[state].Check_Segment(plc_points[a].Q, plc_points[b].Q, kind='taught')
+        samples, violations = scenes[state].Check_Segment(points[a].Q, points[b].Q, kind='taught')
         assert samples > 1
         found += ['%s -> %s sample %d: %s - %s %.2f mm (margin %.1f mm)' % (a, b, k, v.Body_1, v.Body_2, v.Distance * 1e3,
                                                                             v.Margin * 1e3) for k, v in violations]
@@ -126,7 +126,7 @@ def test_the_taught_rotation_sequence_keeps_its_margins(scenes, plc_points, case
 
 
 @pytest.mark.parametrize('name', CONST_STATION_BOXES)
-def test_the_taught_station_clears_the_station_boxes_by_the_zone_margin(scenes, cfg, plc_points, name):
+def test_the_taught_station_clears_the_station_boxes_by_the_zone_margin(scenes, cfg, points, name):
     """
     Description:
         Each station box (Environment.Added_Boxes, not in the STL) is in both scenes as a zone
@@ -145,7 +145,7 @@ def test_the_taught_station_clears_the_station_boxes_by_the_zone_margin(scenes, 
             assert box >= 0 and name in scene.Zone_Boxes
             robot = [g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0
                      and not m.body(m.geom_bodyid[g]).name.startswith('env') and m.body(m.geom_bodyid[g]).name != 'base']
-            for q in scene.Segment_Samples(plc_points[a].Q, plc_points[b].Q):
+            for q in scene.Segment_Samples(points[a].Q, points[b].Q):
                 scene.Set_Joints(q)
                 for g in robot:
                     # Bounding spheres farther apart than the cap cannot come closer.
@@ -166,7 +166,7 @@ def test_the_taught_station_clears_the_station_boxes_by_the_zone_margin(scenes, 
 
 
 @pytest.mark.parametrize('case', sorted(CONST_SEQUENCES))
-def test_every_taught_segment_keeps_the_generated_rule(scenes, plc_points, case):
+def test_every_taught_segment_keeps_the_generated_rule(scenes, points, case):
     """
     Description:
         With the machine assembly shifted and the post fitted (SPEC 4.9), the taught rotation
@@ -177,14 +177,14 @@ def test_every_taught_segment_keeps_the_generated_rule(scenes, plc_points, case)
 
     found = []
     for a, b, state in CONST_SEQUENCES[case]:
-        _, violations = scenes[state].Check_Segment(plc_points[a].Q, plc_points[b].Q, kind='generated',
-                                                    station_q=_Station_Q(plc_points))
+        _, violations = scenes[state].Check_Segment(points[a].Q, points[b].Q, kind='generated',
+                                                    station_q=_Station_Q(points))
         found += ['%s -> %s sample %d: %s - %s %.2f mm (margin %.1f mm)' % (a, b, k, v.Body_1, v.Body_2, v.Distance * 1e3,
                                                                             v.Margin * 1e3) for k, v in violations]
     assert not found, '\n'.join(found)
 
 
-def test_a_generated_segment_uses_the_zone_margin_near_a_station_point(scenes, cfg, plc_points):
+def test_a_generated_segment_uses_the_zone_margin_near_a_station_point(scenes, cfg, points):
     """
     Description:
         The drop's descent drop_rotate_1 -> Waypoint_4 keeps less than 20 mm to the station: as a
@@ -192,8 +192,8 @@ def test_a_generated_segment_uses_the_zone_margin_near_a_station_point(scenes, c
         station point; without station points the global margin applies and it violates.
     """
 
-    scene, a, b = scenes['holding'], plc_points['drop_rotate_1'].Q, plc_points['Waypoint_4'].Q
-    assert scene.Check_Segment(a, b, kind='generated', station_q=_Station_Q(plc_points))[1] == []
+    scene, a, b = scenes['holding'], points['drop_rotate_1'].Q, points['Waypoint_4'].Q
+    assert scene.Check_Segment(a, b, kind='generated', station_q=_Station_Q(points))[1] == []
     violations = scene.Check_Segment(a, b, kind='generated')[1]
     assert violations and all(v.Margin == cfg.Clearance_Environment for _, v in violations)
 
@@ -229,7 +229,7 @@ def test_the_zone_covers_the_corrected_station_and_nothing_far(scenes, cfg, root
     assert CONST_MACHINE_INTERIOR not in zone and CONST_RIGHT_PROFILE not in zone
 
 
-def test_the_early_exit_check_agrees_with_the_full_check(scenes, plc_points):
+def test_the_early_exit_check_agrees_with_the_full_check(scenes, points):
     """
     Description:
         Segment_Valid stops at the first violating sample; its verdict equals "Check_Segment finds no
@@ -241,17 +241,17 @@ def test_the_early_exit_check_agrees_with_the_full_check(scenes, plc_points):
     verdicts = []
     for case in sorted(CONST_SEQUENCES):
         for a, _, state in CONST_SEQUENCES[case]:
-            q = np.array(plc_points[a].Q)
+            q = np.array(points[a].Q)
             for _ in range(CONST_EQUIVALENCE_PER_POINT):
                 target = q + rng.normal(0.0, CONST_EQUIVALENCE_SIGMA, 6)
-                full = not scenes[state].Check_Segment(q, target, kind='generated', station_q=_Station_Q(plc_points))[1]
-                fast = scenes[state].Segment_Valid(q, target, kind='generated', station_q=_Station_Q(plc_points))
+                full = not scenes[state].Check_Segment(q, target, kind='generated', station_q=_Station_Q(points))[1]
+                fast = scenes[state].Segment_Valid(q, target, kind='generated', station_q=_Station_Q(points))
                 assert fast == full, (case, a, list(target))
                 verdicts.append(full)
     assert any(verdicts) and not all(verdicts)
 
 
-def test_the_environment_distance_equals_the_exact_distance(scenes, plc_points):
+def test_the_environment_distance_equals_the_exact_distance(scenes, points):
     """
     Description:
         Environment_Distance (raised margins, one collision pass) equals the smallest
@@ -266,7 +266,7 @@ def test_the_environment_distance_equals_the_exact_distance(scenes, plc_points):
     env = [g for g in range(m.ngeom) if m.geom_contype[g] and m.body(m.geom_bodyid[g]).name.startswith('env')]
     robot = [g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0
              and not m.body(m.geom_bodyid[g]).name.startswith('env') and m.body(m.geom_bodyid[g]).name != 'base']
-    samples = scene.Segment_Samples(plc_points['Waypoint_5'].Q, plc_points['Waypoint_1'].Q)
+    samples = scene.Segment_Samples(points['Waypoint_5'].Q, points['Waypoint_1'].Q)
     band = 0
     for q in samples[:16]:
         measured = scene.Environment_Distance(q, 0.030)[0]

@@ -75,12 +75,12 @@ def test_the_demo_runs_headless_and_reports_its_label(root, tmp_path):
 def test_only_the_base_joint_moves_within_its_limits(root, cfg, points):
     """
     Description:
-        Every frame differs from home_safe only in joint 0, which moves monotonically between the
+        Every frame differs from home only in joint 0, which moves monotonically between the
         turning points +45 deg and -45 deg and stays within the configured limits.
     """
 
     demo = _Demo_Module(root)
-    start = np.array(points['home_safe'].Q)
+    start = np.array(points['home'].Q)
     waypoints = demo.Motion_Waypoints(start, 0, math.radians(45.0))
     frames = demo.Replay_Frames(waypoints, 0, math.radians(30.0), 60.0)
     values = np.array([f[0] for f in frames])
@@ -101,7 +101,7 @@ def test_the_segment_check_samples_densely_enough(scene, cfg, points):
         point moves more than Clearance.Environment / 4 (bounded by sum |dq_i| * lever_i).
     """
 
-    start = np.array(points['home_safe'].Q)
+    start = np.array(points['home'].Q)
     end = start.copy()
     end[0] += math.radians(45.0)
     samples = scene.Segment_Samples(start, end)
@@ -109,7 +109,7 @@ def test_the_segment_check_samples_densely_enough(scene, cfg, points):
     assert float(np.dot(step, scene.Joint_Levers())) <= cfg.Clearance_Environment / 4.0 + 1e-12
 
 
-def test_a_motion_into_the_side_table_is_labelled_unchecked(root, scene, points, plc_points):
+def test_a_motion_into_the_side_table_is_labelled_unchecked(root, scene, points):
     """
     Description:
         The label follows the check, not the motion: hover_unload_2 (over the side table, clear)
@@ -119,12 +119,12 @@ def test_a_motion_into_the_side_table_is_labelled_unchecked(root, scene, points,
     """
 
     demo = _Demo_Module(root)
-    start = np.array(plc_points['hover_unload_2'].Q)
+    start = np.array(points['hover_unload_2'].Q)
     assert scene.Check_Clearance(start) == []
     into_table = start + np.array([0.0, -0.3, 0.0, 0.0, 0.0, 0.0])
     label, samples, violations = demo.Check_Motion(scene, [start, into_table])
     assert label == 'VISUAL ONLY - UNCHECKED'
     assert violations and samples > 1
     assert any(v.Body_1.startswith('env') or v.Body_2.startswith('env') for _, v in violations)
-    shipped = demo.Motion_Waypoints(np.array(points['home_safe'].Q), 0, math.radians(45.0))
+    shipped = demo.Motion_Waypoints(np.array(points['home'].Q), 0, math.radians(45.0))
     assert demo.Check_Motion(scene, shipped)[0] == 'clearance checked'

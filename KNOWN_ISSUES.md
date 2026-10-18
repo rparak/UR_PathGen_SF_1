@@ -8,8 +8,8 @@ measured.
 ## Kinematic error measured at two poses only
 
 The tool uses the nominal UR10e DH parameters; there is no `calibration.conf` of this robot.
-Comparing `DH_FK(q) · TCP` with the robot's own `_p` gives 1.72 mm / 0.261° at `home_safe` and
-4.02 mm / 0.376° at `drop_rot_01`. That is the difference between nominal and calibrated
+Comparing `DH_FK(q) · TCP` with the robot's own `_p` gives 1.72 mm / 0.261° at `home` (A) and
+4.02 mm / 0.376° at `drop_rotate_1` (B). That is the difference between nominal and calibrated
 kinematics. Along a path, and at generated via points, the error is unmeasured and may be larger.
 
 - **Impact:** of the 20 mm environment margin, 4.0 mm is taken by the measured error, which leaves

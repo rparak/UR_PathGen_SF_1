@@ -52,10 +52,10 @@ from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP
 Description:
     Initialization of constants.
 """
-# The learned points and the one the motion starts from.
+# The learned points (the program extract, SPEC 10.1) and the one the motion starts from.
 #   Unit [string]
-CONST_POSITIONS = os.path.join(CONST_PROJECT_ROOT, 'Data', 'Positions', 'SF1_Positions.urscript')
-CONST_START = 'home_safe'
+CONST_POSITIONS = os.path.join(CONST_PROJECT_ROOT, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_positions.urscript')
+CONST_START = 'home'
 # The rotated joint (0 = base, shoulder_pan) and the amplitude around the start (owner, Q5).
 #   Unit [int], [float] (deg)
 CONST_JOINT = 0
@@ -144,7 +144,7 @@ def Check_Motion(scene: Scene_Cls, waypoints: tp.List[np.ndarray]) -> tp.Tuple[s
 def main():
     """
     Description:
-        Rotate the base joint +-45 deg around home_safe as a kinematic replay. Before anything is
+        Rotate the base joint +-45 deg around home as a kinematic replay. Before anything is
         shown, the whole motion is checked with the segment check (joint-linear samples, as movej
         moves); the label says whether it passed. The amplitude is never reduced to make it pass.
 
