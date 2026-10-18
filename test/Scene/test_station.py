@@ -253,6 +253,54 @@ def test_a_generated_sample_closer_to_a_station_box_than_its_floor_violates(scen
     assert scene.Check_Configuration(q, 'taught', None) == []
 
 
+def test_generated_segments_keep_the_extra_margin_to_the_machine_outside_the_zone(scenes, cfg, points, root):
+    """
+    Description:
+        Clearance.Machine_Extra (machine (a), +10 mm, the owner's accuracy estimate): on the direct
+        segment Waypoint_6 -> home (holding), a sample 25 mm (exact mj_geomDistance, +-0.5 mm) from a
+        machine-(a) piece outside the zone, and farther than 30 mm from everything else, violates
+        the generated rule with the 30 mm margin; a sample 35 mm away does not; the taught rule
+        keeps 20 mm to it, so the taught replay is unaffected.
+    """
+
+    scene = scenes[17, 'holding']
+    m, d = scene.Model, scene.Data
+    collision = Read_Collision_Set(cfg.Collision_Set, root)
+    members, zone = set(collision.Manifest['assembly_components']['machine_a']), set(scene.Zone_Pieces)
+    machine = [mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, 'env_piece_%d' % i) for i, c in enumerate(collision.Components)
+               if c in members and i not in zone]
+    others = [g for g in range(m.ngeom) if m.geom_contype[g] and m.body(m.geom_bodyid[g]).name.startswith('env')
+              and g not in set(machine)]
+    robot = [g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0
+             and not m.body(m.geom_bodyid[g]).name.startswith('env') and m.body(m.geom_bodyid[g]).name != 'base']
+    def Exact(q, geoms):
+        scene.Set_Joints(q)
+        best = 0.040
+        for g in robot:
+            for e in geoms:
+                if np.linalg.norm(d.geom_xpos[g] - d.geom_xpos[e]) - m.geom_rbound[g] - m.geom_rbound[e] > best:
+                    continue
+                best = min(best, mujoco.mj_geomDistance(m, d, g, e, best, None))
+        return best
+    assert (cfg.Machine_Extra_Assembly, cfg.Machine_Extra_Margin) == ('machine_a', 0.010)
+    tcps = scene.Station_TCPs(_Station_Q(points))
+    found = {}
+    for q in scene.Segment_Samples(points['Waypoint_6'].Q, points['home'].Q)[::3]:
+        # A cheap pre-selection; the exact distances below decide.
+        if not 0.023 < scene.Environment_Distance(q, 0.040)[0] < 0.037:
+            continue
+        distance = Exact(q, machine)
+        for target in (0.025, 0.035):
+            if target not in found and abs(distance - target) <= 0.0005 and Exact(q, others) > 0.030:
+                found[target] = (q, distance)
+    assert set(found) == {0.025, 0.035}, found
+    q, distance = found[0.025]
+    violations = scene.Check_Configuration(q, 'generated', tcps)
+    assert [round(v.Margin, 6) for v in violations] == [0.030] and violations[0].Distance == pytest.approx(distance, abs=1e-6)
+    assert scene.Check_Configuration(q, 'taught') == []
+    assert scene.Check_Configuration(found[0.035][0], 'generated', tcps) == []
+
+
 def test_the_corrections_are_recorded_and_configured(scenes, cfg):
     """
     Description:

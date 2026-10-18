@@ -153,6 +153,15 @@ Clearance:
     Max: [-0.62, -0.24, 1.13]
     Environment: 0.005
     Endpoint_Radius: 0.050
+  # Extra environment margin of generated segments to one assembly's pieces outside the station
+  # zone: the accuracy of its estimated placement. machine_a: +-10 mm (owner, 2026-10-18), so a
+  # generated path keeps Clearance.Environment + 10 = 30 mm to machine (a) outside the zone. Taught
+  # segments, the station zone and every other object keep their margins (SPEC 9.7, 9.8).
+  # REQUIRED, all three. [-, m, text]
+  Machine_Extra:
+    Assembly: machine_a
+    Margin: 0.010
+    Source: owner accuracy estimate of the machine position, 2026-10-18
   # The box a generated segment must keep every robot collision geom inside (world frame); taught
   # segments are not held to it. Space outside the STL is not modelled, so a new path may use only
   # space proved free by the taught program: x and y are the STL's extents (SPEC 4.1), z min the

@@ -353,7 +353,7 @@ def test_the_planner_keeps_the_station_box_rule_of_the_segment_it_plans(cfg, pro
     Description:
         Plan sets the station-box floors of its own two ends for every edge: before any plan the
         approach Waypoint_18 -> pick_rotate_1 (holding, 17.8 mm from the holder, SPEC 4.11) keeps the
-        generated rule; after planning S3 (Waypoint_6 -> home, both ends farther than the margin
+        generated rule; after planning home -> Waypoint_1 (direct; both ends farther than the margin
         from the holder, so its floor is 20 mm) the same edge is refused.
     """
 
@@ -362,7 +362,7 @@ def test_the_planner_keeps_the_station_box_rule_of_the_segment_it_plans(cfg, pro
     planner = Planner_Cls(scenes[CONST_OPENING['S3']], station_q, 0.0, CONST_REDUCED)
     a, b = np.array(points['Waypoint_18'].Q), np.array(points['pick_rotate_1'].Q)
     assert planner.Edge_Valid(a, b)
-    assert planner.Plan(points['Waypoint_6'].Q, points['home'].Q, CONST_REDUCED_SEED).Origin == 'direct'
+    assert planner.Plan(points['home'].Q, points['Waypoint_1'].Q, CONST_REDUCED_SEED).Origin == 'direct'
     assert not planner.Edge_Valid(a, b)
 
 

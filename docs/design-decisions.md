@@ -756,3 +756,27 @@ changes.
 Pinned by `test/Scene/test_station.py::test_a_generated_sample_closer_to_a_station_box_than_its_floor_violates`,
 `test/Planner/test_core.py::test_the_planner_keeps_the_station_box_rule_of_the_segment_it_plans` and
 `test/Planner/test_core.py::test_verify_path_refuses_a_path_closer_to_a_station_box_than_its_ends`.
+
+## Generated paths keep an extra 10 mm to machine (a) outside the station zone
+
+**Decision.** `Clearance.Machine_Extra` (machine_a, 10 mm, source "owner accuracy estimate of the
+machine position, 2026-10-18"): a generated sample keeps `Clearance.Environment` + 10 mm = 30 mm to
+the pieces of machine (a) outside the station zone. Taught segments, the zone and every other object
+keep their margins.
+
+**Why.** The machine's position (-150 mm) is the owner's estimate, accurate to about ±10 mm. The
+20 mm environment margin is fully used by the kinematic error, eps and cables (SPEC §9.8), so an
+error in where the machine stands needs its own allowance, and only where the estimate applies. The
+taught program runs on the real cell, so it is not held to it; the station zone holds geometry
+fitted to the taught program, whose own rule applies there.
+
+**Alternatives.** Raising `Clearance.Environment` to 30 mm: it would also cover the stand, the
+tables and the station boxes, whose positions are not in question, and the taught program would
+then violate it. A smaller machine shift (the error toward the robot): it changes the model rather
+than its tolerance.
+
+**Revisit if** the machine is measured (the margin then reflects the measurement's accuracy), or the
+owner restates the accuracy.
+
+Pinned by `test/Scene/test_station.py::test_generated_segments_keep_the_extra_margin_to_the_machine_outside_the_zone`
+and `test/Configuration/test_core.py::test_the_shipped_configuration_loads_in_si_units`.

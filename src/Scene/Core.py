@@ -298,6 +298,9 @@ class Scene_Cls(object):
                               for i in self.__zone_pieces}
                              | {mujoco.mj_name2id(self.__model, mujoco.mjtObj.mjOBJ_GEOM, CONST_ADDED_BOX_PREFIX + name)
                                 for name in self.__zone_boxes})
+        # The geoms of Clearance.Machine_Extra's assembly outside the zone.
+        self.__machine_geoms = {mujoco.mj_name2id(self.__model, mujoco.mjtObj.mjOBJ_GEOM, 'env_piece_%d' % i)
+                                for i in self.__machine_pieces}
         # The geom of each station box (an added box that is a zone piece), for the station-box rule.
         self.__station_box_geoms = {mujoco.mj_name2id(self.__model, mujoco.mjtObj.mjOBJ_GEOM, CONST_ADDED_BOX_PREFIX + name): name
                                     for name in self.__zone_boxes}
@@ -430,13 +433,21 @@ class Scene_Cls(object):
             zone_lo, zone_hi = np.asarray(cfg.Station_Zone_Min), np.asarray(cfg.Station_Zone_Max)
             self.__zone_pieces = [i for i, v in enumerate(collision_set.Pieces)
                                   if np.all(v.max(axis=0) >= zone_lo) and np.all(v.min(axis=0) <= zone_hi)]
+            # The pieces of Clearance.Machine_Extra's assembly outside the zone: their geoms carry the
+            # extra margin, so MuJoCo generates their contacts up to it; Check_Clearance applies it to
+            # generated configurations only.
+            members = set(collision_set.Manifest.get('assembly_components', {}).get(cfg.Machine_Extra_Assembly, []))
+            zone = set(self.__zone_pieces)
+            self.__machine_pieces = [i for i, c in enumerate(collision_set.Components) if c in members and i not in zone]
+            machine = set(self.__machine_pieces)
             env_bodies = {name: spec.worldbody.add_body(name=name) for name in ('env', 'env_stand')}
             for i, (vertices, body) in enumerate(zip(collision_set.Pieces, collision_set.Bodies)):
                 spec.add_mesh(name='env_piece_%d' % i, uservert=vertices.flatten().tolist(),
                               inertia=mujoco.mjtMeshInertia.mjMESH_INERTIA_SHELL)
+                margin = cfg.Clearance_Environment + (cfg.Machine_Extra_Margin if i in machine else 0.0)
                 env_bodies[body].add_geom(name='env_piece_%d' % i, type=mujoco.mjtGeom.mjGEOM_MESH,
                                           meshname='env_piece_%d' % i, contype=1, conaffinity=1,
-                                          group=CONST_COLLISION_GROUP, margin=cfg.Clearance_Environment, gap=0.0,
+                                          group=CONST_COLLISION_GROUP, margin=margin, gap=0.0,
                                           rgba=[0.3, 0.6, 0.9, 0.3])
             # Obstacles missing from the STL (Environment.Added_Boxes): convex meshes of their eight
             # corners in env, like the set's pieces, zone pieces by the same rule. Not box primitives:
@@ -459,7 +470,7 @@ class Scene_Cls(object):
             self.__piece_components = list(collision_set.Components)
         else:
             self.__collision_manifest = {}
-            self.__zone_pieces, self.__zone_boxes, self.__piece_components = [], [], []
+            self.__zone_pieces, self.__zone_boxes, self.__piece_components, self.__machine_pieces = [], [], [], []
         if with_visual:
             vertices, faces = Read_Binary_STL(cfg.Visual_Mesh)
             spec.add_mesh(name='env_visual', uservert=vertices.flatten().tolist(), userface=faces.flatten().tolist(),
@@ -626,7 +637,7 @@ class Scene_Cls(object):
 
         return self.__overrides.get(frozenset((body_1, body_2)), geom_margin)
 
-    def Check_Clearance(self, q: tp.Sequence[float], station_zone: bool = False) -> tp.List[Violation_Str]:
+    def Check_Clearance(self, q: tp.Sequence[float], station_zone: bool = False, machine_extra: bool = False) -> tp.List[Violation_Str]:
         """
         Description:
             Every body pair closer than its configured margin at q, with the smallest distance per
@@ -634,11 +645,14 @@ class Scene_Cls(object):
             (measured, mujoco 3.16), a superset of the configured margin, so each contact is filtered
             here by the pair's configured margin. With station_zone, a contact with a station-zone
             piece is filtered by Clearance.Station_Zone.Environment instead (its geom keeps the
-            global margin, so the contact is still generated).
+            global margin, so the contact is still generated). A piece of Clearance.Machine_Extra's
+            assembly outside the zone has Clearance.Environment, plus the extra margin with
+            machine_extra (its geom carries the sum, so the contact is generated).
 
         Args:
             (1) q [Vector<float> 1x6]: Joint angles (rad).
             (2) station_zone [bool]: Apply the zone margin to the zone pieces.
+            (3) machine_extra [bool]: Apply Clearance.Machine_Extra (generated configurations).
 
         Returns:
             (1) parameter [List<Violation_Str>]: The violations, sorted by distance (empty = clear).
@@ -651,7 +665,10 @@ class Scene_Cls(object):
         for i in range(d.ncon):
             contact = d.contact[i]
             b1, b2 = m.body(m.geom_bodyid[contact.geom1]).name, m.body(m.geom_bodyid[contact.geom2]).name
-            margin = self.Pair_Margin(b1, b2, float(max(m.geom_margin[contact.geom1], m.geom_margin[contact.geom2])))
+            geom_margin = float(max(m.geom_margin[contact.geom1], m.geom_margin[contact.geom2]))
+            if contact.geom1 in self.__machine_geoms or contact.geom2 in self.__machine_geoms:
+                geom_margin = self.__cfg.Clearance_Environment + (self.__cfg.Machine_Extra_Margin if machine_extra else 0.0)
+            margin = self.Pair_Margin(b1, b2, geom_margin)
             if station_zone and (contact.geom1 in self.__zone_geoms or contact.geom2 in self.__zone_geoms):
                 margin = self.__cfg.Station_Zone_Environment
             # MuJoCo generated this contact below the sum of the margins; only the configured one counts.
@@ -984,8 +1001,9 @@ class Scene_Cls(object):
             The clearance rule of one configuration of a segment (SPEC 9.7). Taught: the zone margin
             at the zone pieces. Generated: the global margins, the zone margin only while the TCP
             lies within Endpoint_Radius of a station point's TCP, every robot geom inside
-            Clearance.Workspace, and, with box_floors, the station-box rule: no station box closer
-            than its floor (Station_Box_Floors of the generated segment's ends).
+            Clearance.Workspace, Clearance.Machine_Extra to that assembly outside the zone, and, with
+            box_floors, the station-box rule: no station box closer than its floor
+            (Station_Box_Floors of the generated segment's ends).
 
         Args:
             (1) q [Vector<float> 1x6]: Joint angles (rad).
@@ -1004,7 +1022,7 @@ class Scene_Cls(object):
             return self.Check_Clearance(q, station_zone=True)
         near = self.Near_Station(q, station_tcps)
         # Check_Clearance has set the joints and run the collision pass the box rule reads.
-        violations = self.Check_Clearance(q, station_zone=near)
+        violations = self.Check_Clearance(q, station_zone=near, machine_extra=True)
         if box_floors:
             for name, (distance, body) in self.__Station_Box_Current().items():
                 if distance < box_floors[name]:

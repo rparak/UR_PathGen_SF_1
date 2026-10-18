@@ -78,6 +78,7 @@ CONST_SCHEMA = {
              'Mount_Yaw': None, 'Opening': None, 'Holding_Openings': None, 'TCP_Offset': None},
     'Clearance': {'Environment': None, 'Self': None, 'Self_Pair_Overrides': None,
                   'Station_Zone': {'Min': None, 'Max': None, 'Environment': None, 'Endpoint_Radius': None},
+                  'Machine_Extra': {'Assembly': None, 'Margin': None, 'Source': None},
                   'Workspace': {'Min': None, 'Max': None}},
     'Self_Collision': {'Excluded_Pairs': None, 'Rigid_Groups': None},
     'Kinematics': {'FK_Sanity_Bound': {'Position': None}},
@@ -175,6 +176,13 @@ class Cell_Configuration_Str:
     # fixed station point.
     #   Unit [float] (m)
     Station_Zone_Endpoint_Radius: float = 0.0
+    # The extra environment margin of a generated segment to one assembly's pieces outside the
+    # station zone (the accuracy of its estimated position): the assembly's name, the margin and
+    # its source.
+    #   Unit [string], [float] (m), [string]
+    Machine_Extra_Assembly: str = ''
+    Machine_Extra_Margin: float = 0.0
+    Machine_Extra_Source: str = ''
     # Lower and upper corner of the box a generated segment must keep every robot collision geom
     # inside, world frame.
     #   Unit [Vector<float> 1x3] (m)
@@ -627,6 +635,24 @@ def Load_Configuration(config_path: str = CONST_DEFAULT_CONFIG_FILE) -> Cell_Con
         reader.Fail('Clearance.Station_Zone.Environment (%r) must not exceed Clearance.Environment (%r): the zone only '
                     'reduces the margin.' % (cfg.Station_Zone_Environment, cfg.Clearance_Environment))
     cfg.Station_Zone_Endpoint_Radius = reader.Number('Clearance.Station_Zone.Endpoint_Radius', positive=True)
+    assembly = reader.Raw('Clearance.Machine_Extra.Assembly')
+    if assembly is not None:
+        if not isinstance(assembly, str) or assembly not in [a[0] for a in cfg.Assembly_Overrides]:
+            reader.Fail('Clearance.Machine_Extra.Assembly must name an Environment.Assembly_Overrides entry (%s), not %r.'
+                        % (', '.join(a[0] for a in cfg.Assembly_Overrides) or 'none configured', assembly))
+        else:
+            cfg.Machine_Extra_Assembly = assembly
+    cfg.Machine_Extra_Margin = reader.Number('Clearance.Machine_Extra.Margin', non_negative=True)
+    if cfg.Machine_Extra_Margin > CONST_OVERRIDE_TRANSLATION_MAX:
+        reader.Fail('Clearance.Machine_Extra.Margin (%r m) exceeds %.0f mm, the largest placement correction an assembly '
+                    'may have; it stands for the accuracy of that placement.' % (cfg.Machine_Extra_Margin,
+                                                                                  CONST_OVERRIDE_TRANSLATION_MAX * 1e3))
+    source = reader.Raw('Clearance.Machine_Extra.Source')
+    if source is not None:
+        if not isinstance(source, str) or not source.strip():
+            reader.Fail('Clearance.Machine_Extra.Source must be text naming where the margin comes from, not %r.' % (source,))
+        else:
+            cfg.Machine_Extra_Source = source
     cfg.Workspace_Min = reader.Vector('Clearance.Workspace.Min', 3)
     cfg.Workspace_Max = reader.Vector('Clearance.Workspace.Max', 3)
     if any(lo >= hi for lo, hi in zip(cfg.Workspace_Min, cfg.Workspace_Max)):

@@ -84,7 +84,10 @@ fitted to them (SPEC §4.8). After the shift, the robot-table edge → lower cab
 (tape about 300 mm) and the base axis → right window profile 762 mm (tape about 700 mm).
 
 - **Impact:**
-  - if either stands closer than estimated, every clearance to it is smaller than reported;
+  - if either stands closer than estimated, every clearance to it is smaller than reported. The
+    owner estimates the machine's position to ±10 mm: generated paths keep 30 mm to machine (a)
+    outside the station zone (`Clearance.Machine_Extra`); taught segments and the station zone are
+    not covered by it, and a larger error is not;
   - **the space the shift frees exists only in the estimate:** the taught program does not reach it
     (it keeps ≥ 39.1 mm to the post, and no segment comes within 50 mm of the side cabinet, SPEC
     §4.11). **A generated path that uses it must first run on the robot at reduced speed**, with
