@@ -147,6 +147,24 @@ deliverable) pass the full generated-rule check in simulation. What that does no
   stop button; no real robot is available.
 - **Pinned by:** `test/Planner/test_core.py` (the committed paths pass `Verify_Path`).
 
+## Box-against-box contacts are missed inside the margin
+
+The gripper pads are box primitives, and so are the obstacles added to the STL
+(`Environment.Added_Boxes`, the station holder). MuJoCo's box-box collision does not report every
+pair that comes within the margin: over the taught samples of cases 17 and 18 and the committed
+S1 - S3, 6 of 33 pad-holder pairs within 25 mm got no contact (measured 2026-10-18, exact distance
+by `mj_geomDistance`; with a stub box on the post face, 296 of 1534 pad-stub pairs, the closest
+missed at 7.2 mm). Mesh-box pairs (the pad-span hull, the finger links) are reported, at most 6.5 mm
+too close, the safe direction.
+
+- **Impact:** a pad approaching an added box inside its margin may pass the clearance check
+  unreported; the hull and link geometry of the same finger usually reports it. The tests check the
+  committed paths against the station boxes with exact distances
+  (`test/Planner/test_core.py::test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end`),
+  so a delivered path is held to them; a newly planned one is checked only after planning.
+- **What would close it:** modelling the added boxes as convex meshes (or the pads as meshes), so
+  every such pair goes through the convex collider, then re-measuring.
+
 ## The replay's timing is an estimate
 
 `Example/replay_rotation.py` plays each move for its estimated duration (the trapezoid of SPEC
