@@ -38,9 +38,11 @@ now stands 34.3 mm behind that fit: **nothing in the program constrains where it
 only the owner's estimate.** The visual mesh is unchanged, so the viewer shows the original post and
 machine front, not the collision geometry.
 
-Inside the station zone (`Clearance.Station_Zone`: the post, the machine-front pieces, the window's
-top profile, the holder) the environment margin is 5 mm instead of 20 mm: for taught segments
-everywhere, for a generated path only while its TCP lies within 50 mm of a station point.
+Inside the station zone (`Clearance.Station_Zone`: the holder and the sill frame it sits on; since
+2026-10-18 no longer the post, the window's top profile or the machine front, SPEC §4.12) the
+environment margin is 5 mm instead of 20 mm: for taught segments everywhere, for a generated path
+only while its TCP lies within 50 mm of a station point. Everything else, the post included, takes
+the full 20 mm.
 
 - **Impact:**
   - **0 mm is left for cables inside the zone** (5 mm = 1 mm eps + 4.0 mm measured kinematic error);
@@ -49,7 +51,7 @@ everywhere, for a generated path only while its TCP lies within 50 mm of a stati
     highest at which the taught pick keeps 5 mm (5.5 mm, the open finger), by construction;
   - **if the machine stands closer than estimated**, the post is closer than modelled; the taught
     program keeps ≥ 39.1 mm to the model, so a real post up to about 34 mm closer is still consistent
-    with it.
+    with it. A generated path keeps 20 mm to the modelled post, not more.
 - **Also assumed:** movel segments checked joint-linear (the robot moves the TCP on a line); blended
   corners (r > 0) checked through the corner, not along the blend; nominal DH (4.0 mm error at the
   drop); the open gripper at 85 mm — the release opening is real (owner, 2026-10-18).
@@ -65,7 +67,7 @@ everywhere, for a generated path only while its TCP lies within 50 mm of a stati
   It is still not modelled (not decided); a generated path may therefore pass where the real stub
   stands. Run the robot near the drop at reduced speed first.
 - **Evidence:** SPEC §4.7 (first fit), §4.9 (−100 mm and the post fit), §4.10 (holder, stub), §4.11
-  (−150 mm, the fit removed, the per-segment table).
+  (−150 mm, the fit removed, the per-segment table), §4.12 (the zone shrunk to the holder).
 - **Pinned by:** `test/Scene/test_station.py` (the replay of both cases as taught and as generated,
   the recorded overrides, the zone pieces, the holder) and
   `test/Planner/test_core.py::test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end`.

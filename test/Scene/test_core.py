@@ -441,10 +441,10 @@ def test_an_added_box_is_an_env_box_and_a_zone_piece_only_inside_the_zone(cfg):
     Description:
         Every Environment.Added_Boxes entry becomes a box primitive of body env spanning exactly its
         configured corners, with the environment margin; it is a zone piece when it meets the
-        station-zone box (a box at the station) and not otherwise (a box beside the side table).
+        station-zone box (a box beside the holder) and not otherwise (a box beside the side table).
     """
 
-    boxes = [('test_zone', [-0.70, -0.35, 1.40], [-0.68, -0.33, 1.42], 'test'),
+    boxes = [('test_zone', [-0.70, -0.35, 1.00], [-0.68, -0.33, 1.02], 'test'),
              ('test_far', [0.50, 0.60, 0.80], [0.60, 0.70, 0.90], 'test')]
     scene = Scene_Cls(dataclasses.replace(cfg, Added_Boxes=boxes), with_environment=True)
     m = scene.Model

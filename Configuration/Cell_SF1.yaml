@@ -135,20 +135,22 @@ Clearance:
   # minimum of every entry and fails if it is not > 0. REQUIRED (may be empty). [m]
   Self_Pair_Overrides:
     - [base, upper_arm_link, 0.0]
-  # The rotation station, whose geometry is fitted to the taught program, not measured
+  # The station holder, whose geometry is fitted to the taught program, not measured
   # (KNOWN_ISSUES.md). Environment pieces whose bounding box meets the box [Min, Max] (world frame)
   # get the margin Environment instead of Clearance.Environment: always for taught segments, and
   # for a generated sample only while its TCP lies within Endpoint_Radius of a fixed station point.
-  # Box: around the left window profile, the station and the window's top-left corner, the only
-  # region where the taught program (cases 17 and 18) comes closer than 20 mm after the
-  # correction. Its x range starts at -0.80 m so that the machine-interior fallback hull (component
-  # 1638, x up to -0.805 m) stays outside: the zone covers the station frame only. Environment 5 mm: the taught segments keep >= 5.2 mm after the fit; it covers eps
-  # (1 mm) and the measured kinematic error at the drop (4.0 mm), nothing for cables (SPEC 9.8).
-  # Endpoint_Radius 50 mm: every taught sample under 20 mm near the station has its TCP within
-  # 44 mm of a station point (owner, 2026-10-17). REQUIRED, all four. [m]
+  # Box: the holder's neighbourhood (owner, 2026-10-18; SPEC 4.12): the holder box and the sill
+  # frame it sits on (components 181, 1062, 2701, 2702, 2704, which no taught sample comes within
+  # 20 mm of). Since the machine shift the holder is the only geometry the taught program (cases 17
+  # and 18) comes closer to than 20 mm (5.5 mm); the post keeps >= 39.1 mm, so it, the window's top
+  # profile and the machine front take the full 20 mm: its extra 34 mm beyond the earlier fit rests
+  # only on the owner's estimate, and a generated path may not use it. Environment 5 mm: it covers
+  # eps (1 mm) and the measured kinematic error at the drop (4.0 mm), nothing for cables (SPEC 9.8).
+  # Endpoint_Radius 50 mm: every taught sample under 20 mm has its TCP within 13.5 mm of a station
+  # point (2026-10-18; 44 mm before the shift, owner 2026-10-17). REQUIRED, all four. [m]
   Station_Zone:
-    Min: [-0.80, -0.40, 1.00]
-    Max: [-0.55, -0.20, 1.85]
+    Min: [-0.755, -0.36, 0.94]
+    Max: [-0.62, -0.24, 1.13]
     Environment: 0.005
     Endpoint_Radius: 0.050
   # The box a generated segment must keep every robot collision geom inside (world frame); taught

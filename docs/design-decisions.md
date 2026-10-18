@@ -346,6 +346,31 @@ consume the budget everywhere.
 
 Pinned by `test/Scene/test_core.py::test_the_station_zone_applies_within_the_endpoint_radius`.
 
+## The station zone holds the holder only; the post takes the full margin
+
+**Decision.** `Clearance.Station_Zone` is the holder's neighbourhood, `[-0.755, -0.36, 0.94]` –
+`[-0.62, -0.24, 1.13]` m: the holder box and the sill-frame pieces it sits on (owner, 2026-10-18,
+option S of three). The post, the window's top profile and the machine front return to the 20 mm
+margin.
+
+**Why.** After the machine shift (SPEC §4.11) the taught program keeps ≥ 39.1 mm to the post, so it
+no longer constrains where the post is: its extra 34 mm beyond the earlier fit (−115.7 mm) rests
+only on the owner's estimate, and a generated path must keep 20 mm from it. The holder is the only
+geometry the program still comes closer to than 20 mm (5.5 mm, its top fitted to that); without it
+every taught segment keeps the global margins everywhere (SPEC §4.12).
+
+**Alternatives.** Keeping the zone (K): a generated path could then pass the post at 5 mm near a
+station point while the program keeps 39 mm, using space only the estimate provides. Removing the
+zone and lowering the holder's top to the photo's 1.095 m (R; 21.1 mm to every taught sample): it
+gives up the 17 mm of fitted, conservative height, and the zone's endpoint radius also defines the
+penalty's neighbourhood, so the planner's objective would change.
+
+**Revisit if** the machine or the post is measured, the holder is measured (its top may then keep
+20 mm), or the program comes closer to the post again.
+
+Pinned by `test/Scene/test_station.py::test_the_zone_holds_the_holders_neighbourhood_only` and
+`test/Scene/test_station.py::test_without_the_holder_the_taught_sequence_keeps_the_global_margin`.
+
 ## The rotation-station geometry is fitted to the taught program only where the program constrains it
 
 **Decision.** Machine (a) is shifted −150 mm along x as one assembly and the side cabinet (c) −50 mm
@@ -357,8 +382,10 @@ translation that keeps every taught segment 5 mm clear. The holder box is fitted
 was translated a further −15.7 mm along x: the smallest translation along the machine front's normal
 that keeps every segment of the taught rotation sequence (cases 17 and 18) at least 5 mm clear (the
 free-direction optimum was 15.5 mm). The owner's further 50 mm made it unnecessary, and it was
-removed rather than kept on top (−165.7 mm).* The station zone's box starts at
-world x = −0.80 m, so the machine-interior fallback hull (component 1638) stays outside it.
+removed rather than kept on top (−165.7 mm).* The station zone holds the holder's
+neighbourhood only (entry "The station zone holds the holder only"; until 2026-10-18 its box
+started at world x = −0.80 m, so the machine-interior fallback hull, component 1638, stayed
+outside it).
 *Corrected 2026-10-18: before the owner's assembly estimate, the fit was 2710 by (−114.8, −6.2,
 −0.6) mm and 1154 by (−32.6, −11.6, +3.6) mm (SPEC §4.7); the post now totals −115.7 mm along x,
 consistent with it (SPEC §4.9).*
@@ -386,7 +413,7 @@ program or the owner states.
 
 Pinned by `test/Scene/test_station.py::test_the_taught_rotation_sequence_keeps_its_margins`,
 `test/Scene/test_station.py::test_the_corrections_are_recorded_and_configured` and
-`test/Scene/test_station.py::test_the_zone_covers_the_corrected_station_and_nothing_far`.
+`test/Scene/test_station.py::test_the_zone_holds_the_holders_neighbourhood_only`.
 
 ## The station holder is a box sized by a photo and capped by the taught sweep; the stub is not modelled
 

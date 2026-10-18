@@ -78,13 +78,14 @@ CONST_STATION_POINTS = ('drop_rotate_1', 'drop_rotate_2', 'Waypoint_4', 'Waypoin
 CONST_ASSEMBLIES = [('machine_a', 1154, [-0.150, 0.0, 0.0], 'owner estimate, 2026-10-18 (100 mm, then a further 50 mm), not measured'),
                     ('side_cabinet', 2643, [-0.050, 0.0, 0.0], 'owner estimate, 2026-10-18, not measured')]
 CONST_OVERRIDES = []
-# STL components: the left window profile (corrected), the window's top profile (near, not
-# corrected), the side table and the pallet table (far from the station, below the zone box), the
-# machine-interior fallback hull (235 mm excess, behind the zone box) and the right window profile
-# (beside the zone box, the other side of the window). SPEC 4.1, 4.6, 4.7.
-#   Unit [int]
+# STL components: the left window profile (the post), the window's top profile, the machine body,
+# the side table and the pallet table, the machine-interior fallback hull (235 mm excess) and the
+# right window profile - none in the zone since it holds the holder's neighbourhood only (SPEC
+# 4.12) - and the sill-frame pieces under the holder, which are. SPEC 4.1, 4.6, 4.11.
+#   Unit [int], [Tuple<int>]
 CONST_POST, CONST_TOP_PROFILE, CONST_SIDE_TABLE, CONST_PALLET_TABLE = 2710, 2699, 1061, 1060
-CONST_MACHINE_INTERIOR, CONST_RIGHT_PROFILE = 1638, 2709
+CONST_MACHINE_INTERIOR, CONST_RIGHT_PROFILE, CONST_MACHINE_BODY = 1638, 2709, 1154
+CONST_SILL_FRAME = (181, 1062, 2701, 2702, 2704)
 # The station boxes (Environment.Added_Boxes, owner photo: the holder under the part), and the cap
 # of their distance search: above the global margin (20 mm), so that every distance inside a
 # margin is exact.
@@ -219,21 +220,39 @@ def test_the_corrections_are_recorded_and_configured(scenes, cfg):
     assert manifest['component_overrides'] == Component_Overrides_Record(cfg.Component_Overrides)
 
 
-def test_the_zone_covers_the_corrected_station_and_nothing_far(scenes, cfg, root):
+def test_the_zone_holds_the_holders_neighbourhood_only(scenes, cfg, root):
     """
     Description:
-        The station-zone pieces include every piece of the corrected post and a piece of the
-        window's top profile, and no piece of the side table, the pallet table, the
-        machine-interior fallback hull or the right window profile: the box bounds the zone on
-        every side.
+        The station zone is the holder and the sill frame it sits on (owner, 2026-10-18, SPEC 4.12):
+        the holder box and exactly the sill-frame components are zone pieces; the post, the window's
+        top profile, the machine body, the right window profile, the tables and the machine-interior
+        hull are not, so they keep the global margin.
     """
 
     components = Read_Collision_Set(cfg.Collision_Set, root).Components
     zone = {components[i] for i in scenes[17, 'holding'].Zone_Pieces}
-    assert all(i in scenes[17, 'holding'].Zone_Pieces for i, c in enumerate(components) if c == CONST_POST)
-    assert CONST_TOP_PROFILE in zone
-    assert CONST_SIDE_TABLE not in zone and CONST_PALLET_TABLE not in zone
-    assert CONST_MACHINE_INTERIOR not in zone and CONST_RIGHT_PROFILE not in zone
+    assert scenes[17, 'holding'].Zone_Boxes == list(CONST_STATION_BOXES)
+    assert zone == set(CONST_SILL_FRAME)
+    assert not zone & {CONST_POST, CONST_TOP_PROFILE, CONST_MACHINE_BODY, CONST_RIGHT_PROFILE, CONST_SIDE_TABLE,
+                       CONST_PALLET_TABLE, CONST_MACHINE_INTERIOR}
+
+
+@pytest.mark.parametrize('case', sorted(CONST_SEQUENCES))
+def test_without_the_holder_the_taught_sequence_keeps_the_global_margin(cfg, points, case):
+    """
+    Description:
+        The zone margin is needed for the holder only: with the holder box removed, every taught
+        segment keeps the global margins everywhere (the generated rule without station points),
+        the post included (>= 39.1 mm, SPEC 4.11).
+    """
+
+    no_holder = {opening: Scene_Cls(dataclasses.replace(cfg, Opening=opening, Added_Boxes=[]))
+                 for opening in sorted(set(CONST_OPENING.values()))}
+    found = []
+    for a, b, state in CONST_SEQUENCES[case]:
+        _, violations = no_holder[CONST_OPENING[case, state]].Check_Segment(points[a].Q, points[b].Q, kind='generated')
+        found += ['%s -> %s sample %d: %s - %s %.2f mm' % (a, b, k, v.Body_1, v.Body_2, v.Distance * 1e3) for k, v in violations]
+    assert not found, '\n'.join(found)
 
 
 def test_the_early_exit_check_agrees_with_the_full_check(scenes, points):
