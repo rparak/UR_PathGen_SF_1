@@ -64,6 +64,10 @@ CONST_ELBOW_INDEX = 2
 # its own: an assembly shift and a component fit on top of it are separate claims (owner, 2026-10-18).
 #   Unit [float] (m)
 CONST_OVERRIDE_TRANSLATION_MAX = 0.150
+# The largest inner pad-face gap of the Robotiq 2F-85: its 85 mm stroke (Instruction Manual
+# rev. 2020/02/11, section 1). A holding opening above it cannot be configured.
+#   Unit [float] (m)
+CONST_GRIPPER_STROKE = 0.085
 # The known keys, as nested dictionaries; a leaf is None. Used to report unknown keys.
 #   Unit [Dict]
 CONST_SCHEMA = {
@@ -71,7 +75,7 @@ CONST_SCHEMA = {
                     'Assembly_Overrides': None, 'Component_Overrides': None, 'Added_Boxes': None},
     'Robot': {'Model': None, 'Base_Position': None, 'Base_Yaw': None, 'Joint_Position_Limits': {'Min': None, 'Max': None}},
     'Tool': {'Model': None, 'Coupling': {'Thickness': None, 'Diameter': None, 'Spigot_Depth': None},
-             'Mount_Yaw': None, 'Opening': None, 'TCP_Offset': None},
+             'Mount_Yaw': None, 'Opening': None, 'Holding_Openings': None, 'TCP_Offset': None},
     'Clearance': {'Environment': None, 'Self': None, 'Self_Pair_Overrides': None,
                   'Station_Zone': {'Min': None, 'Max': None, 'Environment': None, 'Endpoint_Radius': None},
                   'Workspace': {'Min': None, 'Max': None}},
@@ -141,9 +145,12 @@ class Cell_Configuration_Str:
     # Rotation of the gripper about flange z relative to the Menagerie default.
     #   Unit [float] (rad)
     Mount_Yaw: float = 0.0
-    # Inner pad-face gap held during transit.
+    # Inner pad-face gap of a scene that names no case (the demo, the tests).
     #   Unit [float] (m)
     Opening: float = 0.0
+    # Inner pad-face gap while a case's part is held, per case of the robot program (opening, source).
+    #   Unit [Dict<int, Tuple<float, string>>] (-, m, -)
+    Holding_Openings: tp.Dict[int, tp.Tuple[float, str]] = field(default_factory=dict)
     # TCP in the flange frame [x, y, z, rx, ry, rz].
     #   Unit [Vector<float> 1x6] (m, rad)
     TCP_Offset: tp.List[float] = field(default_factory=list)
@@ -267,6 +274,26 @@ def Valid_Assembly_Override(item: tp.Any) -> bool:
             and isinstance(item['Name'], str) and re.fullmatch(r'[A-Za-z0-9_]+', item['Name']) is not None
             and isinstance(item['Object_Of'], int) and not isinstance(item['Object_Of'], bool) and item['Object_Of'] >= 0
             and Valid_Point(item['Translation'])
+            and isinstance(item['Source'], str) and item['Source'].strip() != '')
+
+
+def Valid_Holding_Opening(item: tp.Any) -> bool:
+    """
+    Description:
+        Whether one entry of Tool.Holding_Openings has exactly the keys Case (a case number >= 1),
+        Opening (a finite number) and Source (non-empty text).
+
+    Args:
+        (1) item [Any]: The entry as read from YAML.
+
+    Returns:
+        (1) parameter [bool]: True when the entry is well formed.
+    """
+
+    return (isinstance(item, dict) and set(item) == {'Case', 'Opening', 'Source'}
+            and isinstance(item['Case'], int) and not isinstance(item['Case'], bool) and item['Case'] >= 1
+            and isinstance(item['Opening'], (int, float)) and not isinstance(item['Opening'], bool)
+            and math.isfinite(item['Opening'])
             and isinstance(item['Source'], str) and item['Source'].strip() != '')
 
 
@@ -566,6 +593,20 @@ def Load_Configuration(config_path: str = CONST_DEFAULT_CONFIG_FILE) -> Cell_Con
                     % (cfg.Coupling_Spigot_Depth, cfg.Coupling_Thickness))
     cfg.Mount_Yaw = math.radians(reader.Number('Tool.Mount_Yaw'))
     cfg.Opening = reader.Number('Tool.Opening', positive=True)
+    holding = reader.Raw('Tool.Holding_Openings')
+    if holding is not None:
+        if not isinstance(holding, list) or not holding or not all(Valid_Holding_Opening(h) for h in holding):
+            reader.Fail('Tool.Holding_Openings must be a non-empty list of {Case: case number >= 1, Opening: m, '
+                        'Source: text}, not %r.' % (holding,))
+        else:
+            for h in holding:
+                if not 0.0 < h['Opening'] <= CONST_GRIPPER_STROKE:
+                    reader.Fail('Tool.Holding_Openings: case %d holds at %r m; the opening must be greater than 0 and '
+                                'at most the 2F-85 stroke of %.3f m.' % (h['Case'], h['Opening'], CONST_GRIPPER_STROKE))
+            cases = [h['Case'] for h in holding]
+            if len(set(cases)) != len(cases):
+                reader.Fail('Tool.Holding_Openings names a case more than once: %r.' % (cases,))
+            cfg.Holding_Openings = {h['Case']: (float(h['Opening']), h['Source']) for h in holding}
     cfg.TCP_Offset = reader.Vector('Tool.TCP_Offset', 6)
     cfg.Clearance_Environment = reader.Number('Clearance.Environment', positive=True)
     cfg.Clearance_Self = reader.Number('Clearance.Self', positive=True)

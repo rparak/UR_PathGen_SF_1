@@ -45,11 +45,12 @@ Description:
     are checked joint-linear here (an approximation; the robot moves the TCP on a line), and blended
     corners (r > 0) are checked through the corner, not along the blend.
 """
-# Gripper opening per state: holding the 50 x 50 mm part (Tool.Opening, owner) and open after
-# rq_set_pos_spd_for(0, ...). Open is an assumption: the full 85 mm stroke for
-# rq_set_pos_spd_for(0, ...); conservative; owner did not confirm (the URCap sets set_open_mm(50.0, 1)).
-#   Unit [float] (m)
-CONST_OPENING = {'holding': 0.050, 'open': 0.085}
+# Gripper opening per case and state, typed here: holding the case's part (Tool.Holding_Openings:
+# case 17 the 50 x 50 mm part, owner; case 18 assumed equal, the second part's size is unknown,
+# KNOWN_ISSUES) and open after rq_set_pos_spd_for(0, ...), the full 85 mm stroke (owner,
+# 2026-10-18: the release opening is real, SPEC 4.9).
+#   Unit [Dict<Tuple<int, string>, float>] (m)
+CONST_OPENING = {(17, 'holding'): 0.050, (17, 'open'): 0.085, (18, 'holding'): 0.050, (18, 'open'): 0.085}
 # The segments (from, to, gripper state) of each case.
 #   Unit [Dict<int, List<Tuple<string, string, string>>>]
 CONST_SEQUENCES = {
@@ -97,10 +98,14 @@ CONST_EQUIVALENCE_SEED, CONST_EQUIVALENCE_SIGMA, CONST_EQUIVALENCE_PER_POINT = 2
 def scenes(cfg):
     """
     Description:
-        The scene with the environment at each gripper state's opening.
+        The scene with the environment at the opening of each case and gripper state (one scene per
+        distinct opening). The configured holding openings must be the ones typed here.
     """
 
-    return {state: Scene_Cls(dataclasses.replace(cfg, Opening=opening)) for state, opening in CONST_OPENING.items()}
+    assert {case: cfg.Holding_Openings[case][0] for case in (17, 18)} == {17: CONST_OPENING[17, 'holding'],
+                                                                         18: CONST_OPENING[18, 'holding']}
+    built = {opening: Scene_Cls(dataclasses.replace(cfg, Opening=opening)) for opening in sorted(set(CONST_OPENING.values()))}
+    return {key: built[opening] for key, opening in CONST_OPENING.items()}
 
 
 def _Station_Q(points):
@@ -118,7 +123,7 @@ def test_the_taught_rotation_sequence_keeps_its_margins(scenes, points, case):
 
     found = []
     for a, b, state in CONST_SEQUENCES[case]:
-        samples, violations = scenes[state].Check_Segment(points[a].Q, points[b].Q, kind='taught')
+        samples, violations = scenes[case, state].Check_Segment(points[a].Q, points[b].Q, kind='taught')
         assert samples > 1
         found += ['%s -> %s sample %d: %s - %s %.2f mm (margin %.1f mm)' % (a, b, k, v.Body_1, v.Body_2, v.Distance * 1e3,
                                                                             v.Margin * 1e3) for k, v in violations]
@@ -139,7 +144,7 @@ def test_the_taught_station_clears_the_station_boxes_by_the_zone_margin(scenes, 
     closest = (np.inf, None, None, None)
     for case in sorted(CONST_SEQUENCES):
         for a, b, state in CONST_SEQUENCES[case]:
-            scene = scenes[state]
+            scene = scenes[case, state]
             m, d = scene.Model, scene.Data
             box = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, 'env_box_' + name)
             assert box >= 0 and name in scene.Zone_Boxes
@@ -154,10 +159,10 @@ def test_the_taught_station_clears_the_station_boxes_by_the_zone_margin(scenes, 
                         continue
                     distance = mujoco.mj_geomDistance(m, d, g, box, CONST_BOX_DISTMAX, None)
                     if distance < closest[0]:
-                        closest = (distance, '%d %s -> %s' % (case, a, b), state, q)
-    distance, where, state, q = closest
+                        closest = (distance, '%d %s -> %s' % (case, a, b), (case, state), q)
+    distance, where, key, q = closest
     assert cfg.Station_Zone_Environment <= distance < cfg.Clearance_Environment, (distance, where)
-    scene = scenes[state]
+    scene = scenes[key]
     scene.Set_Joints(q)
     mujoco.mj_collision(scene.Model, scene.Data)
     box = mujoco.mj_name2id(scene.Model, mujoco.mjtObj.mjOBJ_GEOM, 'env_box_' + name)
@@ -177,7 +182,7 @@ def test_every_taught_segment_keeps_the_generated_rule(scenes, points, case):
 
     found = []
     for a, b, state in CONST_SEQUENCES[case]:
-        _, violations = scenes[state].Check_Segment(points[a].Q, points[b].Q, kind='generated',
+        _, violations = scenes[case, state].Check_Segment(points[a].Q, points[b].Q, kind='generated',
                                                     station_q=_Station_Q(points))
         found += ['%s -> %s sample %d: %s - %s %.2f mm (margin %.1f mm)' % (a, b, k, v.Body_1, v.Body_2, v.Distance * 1e3,
                                                                             v.Margin * 1e3) for k, v in violations]
@@ -192,7 +197,7 @@ def test_a_generated_segment_uses_the_zone_margin_near_a_station_point(scenes, c
         station point; without station points the global margin applies and it violates.
     """
 
-    scene, a, b = scenes['holding'], points['drop_rotate_1'].Q, points['Waypoint_4'].Q
+    scene, a, b = scenes[17, 'holding'], points['drop_rotate_1'].Q, points['Waypoint_4'].Q
     assert scene.Check_Segment(a, b, kind='generated', station_q=_Station_Q(points))[1] == []
     violations = scene.Check_Segment(a, b, kind='generated')[1]
     assert violations and all(v.Margin == cfg.Clearance_Environment for _, v in violations)
@@ -205,7 +210,7 @@ def test_the_corrections_are_recorded_and_configured(scenes, cfg):
         correction, which are also the configured ones (the scene would refuse a mismatch).
     """
 
-    manifest = scenes['holding'].Collision_Manifest
+    manifest = scenes[17, 'holding'].Collision_Manifest
     assert manifest['assembly_overrides'] == Assembly_Overrides_Record(CONST_ASSEMBLIES)
     assert manifest['assembly_overrides'] == Assembly_Overrides_Record(cfg.Assembly_Overrides)
     assert manifest['component_overrides'] == Component_Overrides_Record(CONST_OVERRIDES)
@@ -222,8 +227,8 @@ def test_the_zone_covers_the_corrected_station_and_nothing_far(scenes, cfg, root
     """
 
     components = Read_Collision_Set(cfg.Collision_Set, root).Components
-    zone = {components[i] for i in scenes['holding'].Zone_Pieces}
-    assert all(i in scenes['holding'].Zone_Pieces for i, c in enumerate(components) if c == CONST_POST)
+    zone = {components[i] for i in scenes[17, 'holding'].Zone_Pieces}
+    assert all(i in scenes[17, 'holding'].Zone_Pieces for i, c in enumerate(components) if c == CONST_POST)
     assert CONST_TOP_PROFILE in zone
     assert CONST_SIDE_TABLE not in zone and CONST_PALLET_TABLE not in zone
     assert CONST_MACHINE_INTERIOR not in zone and CONST_RIGHT_PROFILE not in zone
@@ -244,8 +249,8 @@ def test_the_early_exit_check_agrees_with_the_full_check(scenes, points):
             q = np.array(points[a].Q)
             for _ in range(CONST_EQUIVALENCE_PER_POINT):
                 target = q + rng.normal(0.0, CONST_EQUIVALENCE_SIGMA, 6)
-                full = not scenes[state].Check_Segment(q, target, kind='generated', station_q=_Station_Q(points))[1]
-                fast = scenes[state].Segment_Valid(q, target, kind='generated', station_q=_Station_Q(points))
+                full = not scenes[case, state].Check_Segment(q, target, kind='generated', station_q=_Station_Q(points))[1]
+                fast = scenes[case, state].Segment_Valid(q, target, kind='generated', station_q=_Station_Q(points))
                 assert fast == full, (case, a, list(target))
                 verdicts.append(full)
     assert any(verdicts) and not all(verdicts)
@@ -261,7 +266,7 @@ def test_the_environment_distance_equals_the_exact_distance(scenes, points):
         never show.
     """
 
-    scene = scenes['open']
+    scene = scenes[17, 'open']
     m, d = scene.Model, scene.Data
     env = [g for g in range(m.ngeom) if m.geom_contype[g] and m.body(m.geom_bodyid[g]).name.startswith('env')]
     robot = [g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0

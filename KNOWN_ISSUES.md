@@ -129,6 +129,20 @@ generated-rule check in simulation. What that does not cover:
   stop button; no real robot is available.
 - **Pinned by:** `test/Planner/test_core.py` (the committed paths pass `Verify_Path`).
 
+## The part of case 18 has an unknown size; its holding opening is assumed
+
+Cases 17 and 18 are two independent rotation (regrasp) cases, probably for two parts of different
+size; the operator runs one or the other (owner, 2026-10-18). Case 17 holds the 50 × 50 mm part at
+50 mm. The size of case 18's part is unknown, so its holding opening (`Tool.Holding_Openings`) is
+set to the same 50 mm.
+
+- **Impact:** every holding segment of case 18 (S1, S3, the station's holding moves, the loading
+  moves) is checked and planned with the fingers at 50 mm. A larger part opens them wider: the
+  fingers then reach further out sideways, and the margins measured at 50 mm do not hold.
+- **Evidence:** owner, 2026-10-18; no measurement of the second part.
+- **What would close it:** the part's width from the owner, entered in `Tool.Holding_Openings`
+  with its source, then a re-run of `Example/plan_rotation.py --case 18` and the replay.
+
 ## The carried part is not modelled
 
 The gripper holds a 50 × 50 mm part of negligible mass during transit (owner); it is not in the

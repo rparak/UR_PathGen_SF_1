@@ -40,7 +40,8 @@ import typing as tp
 import numpy as np
 # Custom Lib.:
 #   ../Configuration/Core — the cell configuration
-from Configuration.Core import Load_Configuration, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE, CONST_PROJECT_ROOT
+from Configuration.Core import (Load_Configuration, Cell_Configuration_Str, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE,
+                                CONST_PROJECT_ROOT)
 #   ../URScript/Core — the program extracts and the output files
 from URScript.Core import (Read_URScript, Read_Program_Excerpt, Make_Generated_Point, Make_Document, Write_URScript,
                            Write_Motion_Sequence)
@@ -76,11 +77,14 @@ CONST_TAUGHT_VIAS = {'S1': ['Waypoint_1'], 'S2': ['Waypoint_1', 'Waypoint_2', 'W
 #   Unit [Tuple<string>]
 CONST_STATION_POINTS = ('drop_rotate_1', 'drop_rotate_2', 'Waypoint_4', 'Waypoint_7', 'Waypoint_5', 'Waypoint_18',
                         'Waypoint_11', 'pick_rotate_1', 'pick_rotate_2', 'Waypoint_6', 'Waypoint_8')
-# Gripper openings: holding the 50 x 50 mm part (Tool.Opening) for S1 and S3; open for S2 - an
-# assumption: the full 85 mm stroke for rq_set_pos_spd_for(0, ...); conservative; owner did not
-# confirm (the URCap sets set_open_mm(50.0, 1)).
+# Gripper opening after rq_set_pos_spd_for(0, ...): the full 85 mm stroke; the release opening of
+# 85 mm is real, the part is released into a magazine with free space (owner, 2026-10-18, SPEC 4.9).
+# While the part is held, the case's Tool.Holding_Openings applies (Segment_Opening).
 #   Unit [float] (m)
-CONST_OPENING = {'S1': 0.050, 'S2': 0.085, 'S3': 0.050}
+CONST_RELEASE_OPENING = 0.085
+# The gripper state of each generated segment: S1 and S3 carry the part, S2 runs open.
+#   Unit [Dict<string, string>]
+CONST_SEGMENT_STATE = {'S1': 'holding', 'S2': 'open', 'S3': 'holding'}
 # The recorded seed of every planning run; segment k (0 = S1) of a case plans with
 # seed * 1000 + case * 10 + k.
 #   Unit [int]
@@ -113,6 +117,29 @@ def Segments(case: int) -> tp.Dict[str, tp.Tuple[str, str]]:
 
     c = CONST_CASES[case]
     return {'S1': (c['home'], c['drop']), 'S2': (c['retreat'], c['approach']), 'S3': (c['above'], c['home'])}
+
+
+def Opening(cfg: Cell_Configuration_Str, case: int, state: str) -> float:
+    """
+    Description:
+        The gripper opening of a case in a gripper state: the case's Tool.Holding_Openings while the
+        part is held, CONST_RELEASE_OPENING when open.
+
+    Args:
+        (1) cfg [Cell_Configuration_Str(object)]: The cell configuration.
+        (2) case [int]: The program case.
+        (3) state [string]: 'holding' or 'open'.
+
+    Returns:
+        (1) parameter [float]: The inner pad-face gap (m).
+    """
+
+    if state == 'open':
+        return CONST_RELEASE_OPENING
+    if case not in cfg.Holding_Openings:
+        raise Configuration_Error_Cls('Tool.Holding_Openings has no entry for case %d; add {Case: %d, Opening: <m>, '
+                                      'Source: <text>} to the configuration.' % (case, case))
+    return cfg.Holding_Openings[case][0]
 
 
 def Measure(scene: Scene_Cls, path: tp.Sequence[np.ndarray], station_q: tp.Sequence[tp.Sequence[float]]) -> tp.Dict:
@@ -208,23 +235,28 @@ def main():
     parser.add_argument('--case', type=int, choices=sorted(CONST_CASES), action='append', help='one case (default: both)')
     args = parser.parse_args()
     print('[WARNING] Simulation passed != safe on the robot. Run every generated path on the real cell at reduced speed first.')
+    cases = args.case or sorted(CONST_CASES)
     try:
         cfg = Load_Configuration(args.config)
+        openings = {(case, segment): Opening(cfg, case, state) for case in cases for segment, state in CONST_SEGMENT_STATE.items()}
     except Configuration_Error_Cls as error:
         print('[ERROR] %s' % error)
         return 1
+    for case in cases:
+        print('[INFO] Case %d: holding opening %.1f mm (%s), open %.1f mm.'
+              % (case, cfg.Holding_Openings[case][0] * 1e3, cfg.Holding_Openings[case][1], CONST_RELEASE_OPENING * 1e3))
     with open(CONST_POSITIONS, encoding='utf-8') as handle:
         points = Read_URScript(handle.read()).Points
     with open(CONST_CASES_FILE, encoding='utf-8') as handle:
         program = Read_Program_Excerpt(handle.read())
     station_q = [points[name].Q for name in CONST_STATION_POINTS]
-    scenes = {opening: Scene_Cls(dataclasses.replace(cfg, Opening=opening)) for opening in sorted(set(CONST_OPENING.values()))}
+    scenes = {opening: Scene_Cls(dataclasses.replace(cfg, Opening=opening)) for opening in sorted(set(openings.values()))}
     budget = Planner_Budget_Str()
     os.makedirs(args.out, exist_ok=True)
-    for case in (args.case or sorted(CONST_CASES)):
+    for case in cases:
         c, rows, generated = CONST_CASES[case], [], {}
         for index, (segment, (start, goal)) in enumerate(Segments(case).items()):
-            scene = scenes[CONST_OPENING[segment]]
+            scene = scenes[openings[(case, segment)]]
             planner = Planner_Cls(scene, station_q, args.penalty_weight, budget)
             started = time.time()
             try:

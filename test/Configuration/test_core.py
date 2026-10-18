@@ -48,7 +48,7 @@ CONST_REQUIRED = ['Environment.Visual_Mesh', 'Environment.Collision_Set', 'Envir
                   'Robot.Model', 'Robot.Base_Position', 'Robot.Base_Yaw',
                   'Robot.Joint_Position_Limits.Min', 'Robot.Joint_Position_Limits.Max', 'Tool.Model',
                   'Tool.Coupling.Thickness', 'Tool.Coupling.Diameter', 'Tool.Coupling.Spigot_Depth', 'Tool.Mount_Yaw',
-                  'Tool.Opening', 'Tool.TCP_Offset', 'Clearance.Environment', 'Clearance.Self',
+                  'Tool.Opening', 'Tool.Holding_Openings', 'Tool.TCP_Offset', 'Clearance.Environment', 'Clearance.Self',
                   'Clearance.Self_Pair_Overrides', 'Clearance.Station_Zone.Min', 'Clearance.Station_Zone.Max',
                   'Clearance.Station_Zone.Environment', 'Clearance.Station_Zone.Endpoint_Radius',
                   'Clearance.Workspace.Min', 'Clearance.Workspace.Max',
@@ -95,6 +95,8 @@ def test_the_shipped_configuration_loads_in_si_units():
     assert cfg.Clearance_Environment == 0.020 and cfg.Clearance_Self == 0.005
     assert cfg.Self_Pair_Overrides == [('base', 'upper_arm_link', 0.0)]
     assert cfg.Mount_Yaw == 0.0
+    assert cfg.Holding_Openings == {17: (0.050, 'owner, 2026-10-18: the 50 x 50 mm part'),
+                                    18: (0.050, 'assumption: the size of the second part is unknown (KNOWN_ISSUES)')}
     assert cfg.Assembly_Overrides == [('machine_a', 1154, [-0.100, 0.0, 0.0], 'owner estimate, 2026-10-18, not measured')]
     assert cfg.Component_Overrides == [(2710, [-0.0157, 0.0, 0.0], 'derived from sf1_plc_v4.script cases 17/18, not measured')]
     assert cfg.Added_Boxes == [('station_bracket', [-0.735, -0.340, 0.955], [-0.645, -0.260, 1.112],
@@ -123,6 +125,13 @@ def test_a_missing_required_field_fails_naming_it(tmp_path, field):
     ('Clearance.Environment', -0.02, 'greater than 0'),
     ('Kinematics.FK_Sanity_Bound.Position', 0.0, 'greater than 0'),
     ('Tool.Opening', 'wide', 'finite number'),
+    ('Tool.Holding_Openings', [{'Case': 17, 'Opening': 0.086, 'Source': 'x'}], 'at most the 2F-85 stroke'),
+    ('Tool.Holding_Openings', [{'Case': 17, 'Opening': 0.0, 'Source': 'x'}], 'greater than 0'),
+    ('Tool.Holding_Openings', [{'Case': 17, 'Opening': 0.05, 'Source': ' '}], 'Source: text'),
+    ('Tool.Holding_Openings', [{'Case': 17, 'Opening': 0.05}], 'Source: text'),
+    ('Tool.Holding_Openings', [], 'non-empty list'),
+    ('Tool.Holding_Openings', [{'Case': 17, 'Opening': 0.05, 'Source': 'a'}, {'Case': 17, 'Opening': 0.04, 'Source': 'b'}],
+     'more than once'),
     ('Self_Collision.Excluded_Pairs', [['base']], 'pairs'),
     ('Clearance.Self_Pair_Overrides', [['base', 'upper_arm_link', -1.0]], 'margin >= 0'),
     ('Robot.Model', 'models/none.xml', 'does not exist'),

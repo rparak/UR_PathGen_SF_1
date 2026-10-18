@@ -54,8 +54,7 @@ Description:
 # The program's movej acceleration and speed, typed from sf1_plc_v4.script.
 #   Unit [float] (rad/s^2, rad/s)
 CONST_A, CONST_V = 1.3962634015954636, 1.0471975511965976
-# The cases: station points and the three generated segments (owner), with the gripper opening of
-# each segment (S2 open: assumption, the full 85 mm stroke; not confirmed by the owner).
+# The cases: station points and the three generated segments (owner).
 #   Unit [Dict]
 CONST_CASES = {
     17: {'drop': 'drop_rotate_1', 'below': 'Waypoint_4', 'retreat': 'Waypoint_5', 'approach': 'Waypoint_18',
@@ -63,7 +62,11 @@ CONST_CASES = {
     18: {'drop': 'drop_rotate_2', 'below': 'Waypoint_7', 'retreat': 'Waypoint_5', 'approach': 'Waypoint_11',
          'pick': 'pick_rotate_2', 'above': 'Waypoint_8'},
 }
-CONST_OPENING = {'S1': 0.050, 'S2': 0.085, 'S3': 0.050}
+# The gripper opening of each case's segments, typed here: S1 and S3 hold the case's part
+# (Tool.Holding_Openings: case 17 the 50 x 50 mm part, owner; case 18 assumed equal, KNOWN_ISSUES),
+# S2 runs open at the full 85 mm stroke (owner, 2026-10-18, SPEC 4.9).
+#   Unit [Dict<Tuple<int, string>, float>] (m)
+CONST_OPENING = {(case, segment): (0.085 if segment == 'S2' else 0.050) for case in (17, 18) for segment in ('S1', 'S2', 'S3')}
 CONST_STATION_POINTS = ('drop_rotate_1', 'drop_rotate_2', 'Waypoint_4', 'Waypoint_7', 'Waypoint_5', 'Waypoint_18',
                         'Waypoint_11', 'pick_rotate_1', 'pick_rotate_2', 'Waypoint_6', 'Waypoint_8')
 # Via points the taught program uses per segment.
@@ -105,9 +108,11 @@ def program(root):
 def scenes(cfg):
     """
     Description:
-        The scene with the environment at each segment opening.
+        The scene with the environment at each segment opening. The configured holding openings must
+        be the ones typed here.
     """
 
+    assert {case: cfg.Holding_Openings[case][0] for case in (17, 18)} == {17: CONST_OPENING[17, 'S1'], 18: CONST_OPENING[18, 'S1']}
     return {o: Scene_Cls(dataclasses.replace(cfg, Opening=o)) for o in sorted(set(CONST_OPENING.values()))}
 
 
@@ -120,7 +125,7 @@ def planners(program, scenes):
 
     points, _ = program
     station_q = [points[name].Q for name in CONST_STATION_POINTS]
-    return {segment: Planner_Cls(scenes[o], station_q, 0.0, CONST_REDUCED) for segment, o in CONST_OPENING.items()}
+    return {key: Planner_Cls(scenes[o], station_q, 0.0, CONST_REDUCED) for key, o in CONST_OPENING.items()}
 
 
 def _Output(root, case):
@@ -168,7 +173,7 @@ def test_the_committed_paths_pass_the_independent_verification(root, program, pl
     document, _ = _Output(root, case)
     for segment, (start, goal) in _Segments(case).items():
         path, vias = _Path(document, points, start, goal)
-        planners[segment].Verify_Path(path)
+        planners[case, segment].Verify_Path(path)
         assert len(vias) <= CONST_TAUGHT_VIAS[segment] - (1 if segment == 'S2' else 0)
 
 
@@ -202,7 +207,7 @@ def test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end(r
     document, _ = _Output(root, case)
     station_q = [points[name].Q for name in CONST_STATION_POINTS]
     for segment, (start, goal) in _Segments(case).items():
-        scene = scenes[CONST_OPENING[segment]]
+        scene = scenes[CONST_OPENING[case, segment]]
         m = scene.Model
         robot = [g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0
                  and not m.body(m.geom_bodyid[g]).name.startswith('env') and m.body(m.geom_bodyid[g]).name != 'base']
@@ -277,7 +282,7 @@ def test_a_reduced_planning_run_is_byte_identical_twice(cfg, program):
 
     points, _ = program
     station_q = [points[name].Q for name in CONST_STATION_POINTS]
-    scene = Scene_Cls(dataclasses.replace(cfg, Opening=CONST_OPENING['S3']))
+    scene = Scene_Cls(dataclasses.replace(cfg, Opening=CONST_OPENING[17, 'S3']))
     texts = []
     for _ in range(2):
         result = Planner_Cls(scene, station_q, 0.0, CONST_REDUCED).Plan(points['Waypoint_6'].Q, points['home'].Q, CONST_REDUCED_SEED)
@@ -326,8 +331,8 @@ def test_the_penalty_counts_only_far_from_the_station(planners, program):
     """
 
     points, _ = program
-    far = planners['S2'].Segment_Penalty(np.array(points['hover_obj_1'].Q), np.array(points['pick_obj_1'].Q))
-    near = planners['S1'].Segment_Penalty(np.array(points['drop_rotate_1'].Q), np.array(points['Waypoint_4'].Q))
+    far = planners[17, 'S2'].Segment_Penalty(np.array(points['hover_obj_1'].Q), np.array(points['pick_obj_1'].Q))
+    near = planners[17, 'S1'].Segment_Penalty(np.array(points['drop_rotate_1'].Q), np.array(points['Waypoint_4'].Q))
     assert far >= 0.030 + 0.0027
     assert near == 0.0
 
@@ -344,6 +349,6 @@ def test_rrt_connect_is_reproducible_with_both_sample_sources(planners, program)
 
     points, _ = program
     start, goal = np.array(points['Waypoint_5'].Q), np.array(points['Waypoint_18'].Q)
-    paths = [planners['S2'].RRT_Connect(start, goal, np.random.default_rng([8, 0])) for _ in range(2)]
+    paths = [planners[17, 'S2'].RRT_Connect(start, goal, np.random.default_rng([8, 0])) for _ in range(2)]
     assert paths[0] is not None and len(paths[0]) > 2
     assert np.array(paths[0]).tobytes() == np.array(paths[1]).tobytes()

@@ -651,7 +651,8 @@ field without a reader.
 | `Tool.Coupling.Diameter` | coupling outer diameter: `0.075` | m | REQUIRED |
 | `Tool.Coupling.Spigot_Depth` | depth of the Ø71 bore receiving the gripper: `0.0029`; gripper datum = thickness − depth = 14.0 mm (measured on the robot) | m | REQUIRED |
 | `Tool.Mount_Yaw` | rotation of the gripper about the flange z axis relative to the Menagerie default: `0.0`, the fingers open along flange ±x. **Confirmed on the robot by the owner (2026-10-18)**; a statement of 90° made that day was withdrawn (§9.3) | deg | REQUIRED |
-| `Tool.Opening` | inner pad-face gap held during transit: `0.050` | m | REQUIRED |
+| `Tool.Opening` | inner pad-face gap of a scene that names no program case (the demo, the tests): `0.050`, the 50 × 50 mm part (owner) | m | REQUIRED |
+| `Tool.Holding_Openings` | inner pad-face gap while the part of a program case is held, `{Case, Opening, Source}` each, used by planning, verification and replay of that case: case 17 `0.050` (owner, 2026-10-18: the 50 × 50 mm part), case 18 `0.050` (**assumption**: the size of the second part is unknown, `KNOWN_ISSUES.md`). Load rejects: an empty list, an opening ≤ 0 or above the 85 mm stroke, an empty source, a case named twice; a script refuses a case without an entry | m | REQUIRED |
 | `Tool.TCP_Offset` | TCP in the flange frame `[x, y, z, rx, ry, rz]`: `[0.0, 0.0, 0.174, 0.0, 0.0, 0.0]`. Source: the Polyscope TCP of SF1 (owner, 2026-10-17), identical to the Robotiq value (manual rev. 2020/02/11 p. 127, §5.2.3) | m, rad (rotvec) | REQUIRED |
 | `Clearance.Environment` | minimum robot/gripper ↔ environment distance: `0.020` | m | REQUIRED |
 | `Clearance.Self` | minimum distance between non-excluded robot/gripper bodies: `0.005` | m | REQUIRED |
@@ -954,9 +955,10 @@ synthetic point with a joint at 4.0 rad that must come out as 4.0.
 
 ### 10.6 Planner and the rotation-sequence output
 
-**Segments.** Per case, S1 home → drop (holding, 50 mm), S2 retreat → approach (open, 85 mm —
-assumption: the full stroke for `rq_set_pos_spd_for(0, ...)`; conservative; not confirmed by the
-owner), S3 lift → home (holding). The ends are the program's `_q` tokens, never wrapped.
+**Segments.** Per case, S1 home → drop (holding: the case's `Tool.Holding_Openings`, 50 mm for both
+cases), S2 retreat → approach (open, 85 mm: the full stroke for `rq_set_pos_spd_for(0, ...)`; the
+release opening is real, owner 2026-10-18, §4.9), S3 lift → home (holding). The ends are the
+program's `_q` tokens, never wrapped.
 
 **Planner** (`Planner_Cls.Plan`):
 1. Both ends must keep the generated rule (§9.7), else `Planner_Error_Cls`.

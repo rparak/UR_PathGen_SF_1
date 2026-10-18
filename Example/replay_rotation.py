@@ -51,7 +51,7 @@ from URScript.Core import Read_URScript
 #   ../Scene/Core — the scene and the generated rule
 from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP
 #   ../Example/plan_rotation — the cases, segments and openings the outputs were planned with
-from plan_rotation import CONST_CASES, CONST_TAUGHT_VIAS, CONST_STATION_POINTS, CONST_OPENING, CONST_POSITIONS, Segments
+from plan_rotation import CONST_CASES, CONST_TAUGHT_VIAS, CONST_STATION_POINTS, CONST_SEGMENT_STATE, CONST_POSITIONS, Segments, Opening
 
 """
 Description:
@@ -224,6 +224,7 @@ def main():
     print('[WARNING] Simulation passed != safe on the robot.')
     try:
         cfg = Load_Configuration(args.config)
+        opening = Opening(cfg, args.case, CONST_SEGMENT_STATE[args.segment])
     except Configuration_Error_Cls as error:
         print('[ERROR] %s' % error)
         return 1
@@ -233,7 +234,7 @@ def main():
         generated = Read_URScript(handle.read()).Points
     station_q = [points[name].Q for name in CONST_STATION_POINTS]
     t0 = time.time()
-    scene = Scene_Cls(dataclasses.replace(cfg, Opening=CONST_OPENING[args.segment]), with_environment=True,
+    scene = Scene_Cls(dataclasses.replace(cfg, Opening=opening), with_environment=True,
                       with_visual=args.with_stl)
     print('[INFO] Scene built in %.1f s: %d geoms; visual mesh %s.'
           % (time.time() - t0, scene.Model.ngeom, 'loaded' if args.with_stl else 'not loaded'))

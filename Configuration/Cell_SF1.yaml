@@ -106,8 +106,16 @@ Tool:
   # SF1 robot by the owner (2026-10-18; a statement of 90 deg made that day was withdrawn).
   # REQUIRED. [deg]
   Mount_Yaw: 0.0
-  # Inner pad-face gap held during transit: the gripper holds a 50 x 50 mm part (owner). REQUIRED. [m]
+  # Inner pad-face gap of a scene that names no case of the program (the demo, the tests): the
+  # 50 x 50 mm part (owner). A path of a program case uses Holding_Openings. REQUIRED. [m]
   Opening: 0.050
+  # Inner pad-face gap while the part of a case of sf1_plc_v4.script is held. Cases 17 and 18 are
+  # two independent rotation (regrasp) cases, probably for two parts of different size (owner,
+  # 2026-10-18). Used by planning, verification and replay of the case. Each entry: Case, Opening
+  # (> 0, at most the 85 mm stroke), Source. REQUIRED. [-, m, -]
+  Holding_Openings:
+    - {Case: 17, Opening: 0.050, Source: 'owner, 2026-10-18: the 50 x 50 mm part'}
+    - {Case: 18, Opening: 0.050, Source: 'assumption: the size of the second part is unknown (KNOWN_ISSUES)'}
   # TCP in the flange frame [x, y, z, rx, ry, rz]: the Polyscope TCP of SF1 (owner, 2026-10-17),
   # identical to the Robotiq value (Instruction Manual rev. 2020/02/11, p. 127, section 5.2.3).
   # Configured, never derived from *_p. REQUIRED. [m, rad (rotation vector)]

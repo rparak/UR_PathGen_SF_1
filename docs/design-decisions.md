@@ -506,3 +506,25 @@ differ (owner, 2026-10-17).
 **Revisit if** planning takes too long on the owner's machine (then the counts change, recorded).
 
 Pinned by `test/Planner/test_core.py::test_a_reduced_planning_run_is_byte_identical_twice`.
+
+## The holding opening is configured per program case
+
+**Decision.** `Tool.Holding_Openings` gives the gripper opening while the part of each program
+case is held, with its source: case 17 = 0.050 m (owner), case 18 = 0.050 m (assumption,
+`KNOWN_ISSUES.md`). Planning, the verification of the committed output and the replay take it per
+case; open is the full 85 mm stroke (a gripper property, a code constant). `Tool.Opening` stays
+the opening of a scene that names no case (the demo, the tests).
+
+**Why.** Cases 17 and 18 are independent and probably handle parts of different size (owner,
+2026-10-18). One global opening would silently apply case 17's part to case 18. The owner chose a
+configuration field over a code constant: it is a cell fact with a source, like the other
+`Tool` values.
+
+**Alternatives.** A code constant next to the case table in `Example/plan_rotation.py`: rejected by
+the owner.
+
+**Revisit if** a case handles more than one part, or the URCap's position for a part is measured.
+
+Pinned by `test/Configuration/test_core.py::test_the_shipped_configuration_loads_in_si_units`,
+`test/Example/test_plan_rotation.py` and the per-case scenes of `test/Scene/test_station.py` and
+`test/Planner/test_core.py`.
