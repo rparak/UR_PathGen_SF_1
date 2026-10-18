@@ -137,8 +137,9 @@ deliverable) pass the full generated-rule check in simulation. What that does no
 - **The optimised paths depend on the estimated machine position:** with the machine at the earlier
   estimate (−100 mm, post fitted) they would penetrate the top profile by 19.6 mm (S1) and 16.2 mm
   (S2) and the post by 9.8 mm (S3). The space they use is freed only by the owner's estimate of a
-  further 50 mm, which nothing in the program confirms. **Run them on the robot at reduced speed
-  first** (see "The positions of machine (a) and the side cabinet").
+  further 50 mm, which nothing in the program confirms; the owner judges it closer to the real cell
+  (2026-10-18), still unmeasured. **Run them on the robot at reduced speed first** (see "The
+  positions of machine (a) and the side cabinet").
 - **Space:** a generated segment stays inside `Clearance.Workspace` (the STL's x/y extents, up to
   2.35 m, the height the taught program reaches); what lies outside the STL is unknown.
 - **The carried part, cables, Polyscope safety limits** as elsewhere in this file.

@@ -495,7 +495,10 @@ at its estimated position; its real position is unknown (`KNOWN_ISSUES.md`).
 ### 4.11 Machine (a) at −150 mm, side cabinet −50 mm, post fit removed (*measured*, 2026-10-18)
 
 **Owner facts (estimates, not measured).** Machine (a) stands a further 50 mm along −x: 150 mm in
-all, at the 150 mm bound of an override. The side cabinet, object (c) (56 components, named by its
+all, at the 150 mm bound of an override. **Owner's judgement (2026-10-18): the −150 mm position
+matches the real cell better than −100 mm**, and generated paths may use the space it frees (the
+re-planned S1 – S3 of §17 are kept). It remains an estimate, not a measurement; its accuracy is not
+yet stated. The side cabinet, object (c) (56 components, named by its
 body 2643), stands 50 mm along −x, a separate assembly with its own source. The robot stand and the
 tables, object (b), stay. The holder stays where the robot places the part (world-fixed); it is
 mounted on the post, so its back is extended to the shifted post face.

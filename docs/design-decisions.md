@@ -701,3 +701,25 @@ Checking cases 17 and 18 only: the post fit and the machine shift move geometry 
 the program changes (its sha256 is recorded).
 
 Pinned by `test/Scene/test_program.py`.
+
+## Generated paths may use the space the machine shift to -150 mm frees: the owner's judgement
+
+**Decision.** Machine (a) stays at -150 mm in the model, and the S1 - S3 re-planned on that scene
+(home -> home 16.66 s, estimate; SPEC §17) are the delivered output. The planner plans and verifies
+against the current scene only.
+
+**Why.** The owner judges that the further 50 mm matches the real cell better than -100 mm
+(2026-10-18). It is still an estimate: the taught program does not confirm it (it keeps >= 39.1 mm
+to the post at -150 mm, SPEC §4.11), and all three re-planned segments would penetrate the machine
+front at -100 mm (by 9.8 - 19.6 mm). The owner accepts that, with every path run at reduced speed
+first.
+
+**Alternatives.** Planning against a conservative scene (the machine at -100 mm, the last position
+the program constrains) and verifying against both: considered on 2026-10-18 and withdrawn by the
+owner the same day; it would have kept the previous outputs (17.24 s, 49 - 66 mm clearance). A
+machine-(a)-only margin raised by the position's accuracy: open until the accuracy is stated.
+
+**Revisit if** the machine is measured, the owner states the position's accuracy (above 10 mm a
+machine-only margin increase is to be proposed), or a path is found to come closer on the robot.
+
+Pinned by `test/Planner/test_core.py::test_the_committed_paths_pass_the_independent_verification`.
