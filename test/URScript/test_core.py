@@ -31,7 +31,7 @@ import pytest
 #   ../src/URScript/Core — the reader and writer under test
 from URScript.Core import (Read_URScript, Write_URScript, Write_Movej_Sequence, Make_Generated_Point, Make_Document,
                            Format_Generated, URScript_Error_Cls, Read_Program_Excerpt, Write_Motion_Sequence, Program_Entries,
-                           Gripper_Comment)
+                           Gripper_Comment, Read_Motion_Sequence)
 
 """
 Description:
@@ -340,3 +340,29 @@ def test_program_entries_keep_the_moves_and_comment_the_gripper():
         ('program', '        movel(b_p, a=1.2, v=0.25)')]
     with pytest.raises(URScript_Error_Cls, match='Only a gripper line'):
         Gripper_Comment(lines[1])
+
+
+def test_a_motion_sequence_is_read_with_its_tokens_and_sections():
+    """
+    Description:
+        Read_Motion_Sequence returns the moves and gripper actions in order: a program movej with
+        and without r, a generated movej to a joint target, a movel, the gripper comment; a, v and r
+        as written (r = 0 when absent); the header comments name no section, a later comment does.
+        Any other line is refused, naming its number.
+    """
+
+    text = ('# header 1\n# header 2\n'
+            'movej(get_inverse_kin(a_p, qnear=a_q), a=0.17453292519943295, v=0.17453292519943295)\n'
+            '# S1 (generated): a -> b\n'
+            'movej(via_a_b_01_q, a=1.3962634015954636, v=1.0471975511965976, r=0)\n'
+            'movel(b_p, a=1.2, v=0.25)\n'
+            '# Gripper open: the program\'s Robotiq node goes here (rq_set_pos_spd_for(0, 255, 255, "1"))\n'
+            'movej(get_inverse_kin(c_p, qnear=c_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)\n')
+    found = [(m.Kind, m.Target, m.A, m.V, m.R, m.Generated, m.Section, m.Line) for m in Read_Motion_Sequence(text)]
+    assert found == [('movej', 'a', 0.17453292519943295, 0.17453292519943295, 0.0, False, '', 3),
+                     ('movej', 'via_a_b_01', 1.3962634015954636, 1.0471975511965976, 0.0, True, 'S1 (generated): a -> b', 5),
+                     ('movel', 'b', 1.2, 0.25, 0.0, False, 'S1 (generated): a -> b', 6),
+                     ('gripper', 'open', 0.0, 0.0, 0.0, False, 'S1 (generated): a -> b', 7),
+                     ('movej', 'c', 1.3962634015954636, 1.0471975511965976, 0.01, False, 'S1 (generated): a -> b', 8)]
+    with pytest.raises(URScript_Error_Cls, match='Line 2 is not a move'):
+        Read_Motion_Sequence('movel(b_p, a=1.2, v=0.25)\nsleep(0.5)\n')

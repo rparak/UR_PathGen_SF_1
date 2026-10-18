@@ -62,6 +62,13 @@ CONST_PROGRAM_GRIPPER = re.compile(r'^\s*rq_set_pos_spd_for\((\d+), \d+, \d+, "\
 # Robotiq position commands of the program: 0 opens fully, 255 closes (on the part).
 #   Unit [Dict<string, string>]
 CONST_GRIPPER_ACTIONS = {'0': 'open', '255': 'close'}
+# The lines of a motion sequence (Write_Motion_Sequence): a program movej or movel with its tokens,
+# a generated movej to a joint target, and a gripper comment (Gripper_Comment).
+#   Unit [Pattern]
+CONST_SEQUENCE_MOVEJ = re.compile(r'^movej\(get_inverse_kin\(([A-Za-z_]\w*)_p, qnear=\1_q\), a=([^,()]+), v=([^,()]+)(?:, r=([^,()]+))?\)$')
+CONST_SEQUENCE_JOINT = re.compile(r'^movej\(([A-Za-z_]\w*)_q, a=([^,()]+), v=([^,()]+), r=([^,()]+)\)$')
+CONST_SEQUENCE_MOVEL = re.compile(r'^movel\(([A-Za-z_]\w*)_p, a=([^,()]+), v=([^,()]+)(?:, r=([^,()]+))?\)$')
+CONST_SEQUENCE_GRIPPER = re.compile(r'^# Gripper (open|close): ')
 # Decimal places of a generated value: 1e-12 m / rad, far below anything the robot resolves.
 #   Unit [int]
 CONST_GENERATED_DECIMALS = 12
@@ -113,6 +120,35 @@ class Program_Line_Str:
     # The line exactly as in the program, indentation included.
     #   Unit [string]
     Raw: str = ''
+
+
+@dataclass
+class Motion_Str:
+    """
+    Description:
+        One operation of a motion sequence file: a move or a gripper action.
+    """
+
+    # 'movej', 'movel' or 'gripper'.
+    #   Unit [string]
+    Kind: str = ''
+    # The target point of a move; 'open' / 'close' for the gripper.
+    #   Unit [string]
+    Target: str = ''
+    # Acceleration, speed and blend radius as written (r = 0 when the line has none).
+    #   Unit [float] (rad/s^2, rad/s, m for movej; m/s^2, m/s, m for movel)
+    A: float = 0.0
+    V: float = 0.0
+    R: float = 0.0
+    # True for a generated movej to a joint target, False for a line of the robot program.
+    #   Unit [bool]
+    Generated: bool = False
+    # The last comment line before the operation after the file's header (its section; '' if none).
+    #   Unit [string]
+    Section: str = ''
+    # The 1-based line number in the file.
+    #   Unit [int]
+    Line: int = 0
 
 
 @dataclass
@@ -440,3 +476,46 @@ def Program_Entries(lines: tp.Sequence[Program_Line_Str]) -> tp.List[tp.Tuple[st
         elif line.Kind == 'gripper':
             entries.append(('comment', Gripper_Comment(line)))
     return entries
+
+
+def Read_Motion_Sequence(text: str) -> tp.List[Motion_Str]:
+    """
+    Description:
+        Parse a motion sequence file (Write_Motion_Sequence): program movej and movel lines, generated
+        movej to joint targets and gripper comments, in order. The comment lines before the first
+        operation are the file's header; every later comment line names the section of the
+        operations after it. Strict: any other line is an error naming its number.
+
+    Args:
+        (1) text [string]: The file content.
+
+    Returns:
+        (1) parameter [List<Motion_Str>]: The operations in order.
+    """
+
+    out: tp.List[Motion_Str] = []
+    section = ''
+    for number, raw in enumerate(text.splitlines(), start=1):
+        if not raw.strip():
+            continue
+        gripper = CONST_SEQUENCE_GRIPPER.match(raw)
+        if gripper is not None:
+            out.append(Motion_Str('gripper', gripper.group(1), Section=section, Line=number))
+            continue
+        if raw.startswith('#'):
+            section = raw[1:].strip() if out else ''
+            continue
+        for pattern, kind, generated in ((CONST_SEQUENCE_MOVEJ, 'movej', False), (CONST_SEQUENCE_JOINT, 'movej', True),
+                                         (CONST_SEQUENCE_MOVEL, 'movel', False)):
+            match = pattern.match(raw)
+            if match is not None:
+                try:
+                    a, v, r = float(match.group(2)), float(match.group(3)), float(match.group(4) or 0.0)
+                except ValueError as error:
+                    raise URScript_Error_Cls('Line %d has a non-numeric a, v or r: %s' % (number, raw)) from error
+                out.append(Motion_Str(kind, match.group(1), a, v, r, generated, section, number))
+                break
+        else:
+            raise URScript_Error_Cls('Line %d is not a move, a gripper comment or a comment of a motion sequence: %s'
+                                     % (number, raw))
+    return out

@@ -59,12 +59,29 @@ movej with `r=0`). Both can be pasted into the robot program; run them at reduce
 .venv/bin/python Example/plan_rotation.py
 ```
 
-Replay taught vs optimised (macOS: `mjpython`), or write screenshots instead of opening the viewer:
+Replay a path in the viewer (macOS: `mjpython`), or write screenshots instead:
 
 ```bash
-.venv/bin/mjpython Example/replay_rotation.py --case 17 --segment S2
-.venv/bin/python Example/replay_rotation.py --case 17 --segment S2 --screenshots <directory>
+.venv/bin/mjpython Example/replay_rotation.py --path 2
+.venv/bin/mjpython Example/replay_rotation.py --path 5 --speed 0.5
+.venv/bin/python Example/replay_rotation.py --path 2 --screenshots <directory>
 ```
+
+| `--path` | Path |
+|---|---|
+| 1 | case 17 taught (whole case) |
+| 2 | case 17 optimised (whole case) |
+| 3 | case 18 taught (whole case) |
+| 4 | case 18 optimised (whole case) |
+| 5 | case 17 rotation sequence only (home → home), taught then optimised |
+| 6 | case 18 rotation sequence only (home → home), taught then optimised |
+
+Without `--path` the catalogue is printed and a number asked; `--list` prints it. `--speed` is
+relative to the estimated real time (1.0). movel moves the TCP on a straight line; the gripper
+switches between the case's holding width and open at the gripper actions. Each move is labelled by
+its clearance (taught lines by the taught rule, generated moves by the generated rule); a move
+inside machine (a) is labelled "model not valid here". Entries 5 and 6 also print S1 – S3 of both
+variants judged by the generated rule. `--headless` prints every move instead of opening the viewer.
 
 `Data/Programs/sf1_plc_v4/` holds verbatim extracts of the owner's robot program (its learned points
 and the whole cases 17 and 18) and, written from them, the simplified taught program of each case:

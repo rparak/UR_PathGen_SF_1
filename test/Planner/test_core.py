@@ -37,7 +37,7 @@ import mujoco
 # Custom Lib.:
 #   ../src/Planner/Core — the planner and the estimates under test
 from Planner.Core import (Planner_Cls, Planner_Budget_Str, Planner_Error_Cls, Segment_Duration, Estimate_Duration,
-                          Linear_Duration, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN)
+                          Linear_Duration, Profile_Fraction, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN)
 #   ../src/Scene/Core — the scene at each opening
 from Scene.Core import Scene_Cls
 #   ../src/URScript/Core — the committed outputs and the program extracts
@@ -402,3 +402,27 @@ def test_rrt_connect_is_reproducible_with_both_sample_sources(planners, program)
     paths = [planners[17, 'S2'].RRT_Connect(start, goal, np.random.default_rng([8, 0])) for _ in range(2)]
     assert paths[0] is not None and len(paths[0]) > 2
     assert np.array(paths[0]).tobytes() == np.array(paths[1]).tobytes()
+
+
+@pytest.mark.parametrize('distance, a, v', [(0.5, CONST_A, CONST_V), (2.0, CONST_A, CONST_V), (0.06, 1.2, 0.25), (0.04, 1.2, 0.25)])
+def test_the_profile_ends_with_the_duration_estimate(distance, a, v):
+    """
+    Description:
+        Profile_Fraction, the position profile the replay plays, is 0 at the start, 1 exactly at the
+        estimated duration of the same move (Segment_Duration on the leading joint, Linear_Duration
+        on the TCP path; triangle and trapezoid cases), below 1 just before, 0.5 at half the time
+        (the profile is symmetric), a t^2 / 2 of the distance early in the acceleration, and never
+        decreasing.
+    """
+
+    duration = (Segment_Duration([0.0] * 6, [distance, 0, 0, 0, 0, 0], a, v) if a == CONST_A
+                else Linear_Duration([0.0] * 6, [distance, 0, 0, 0, 0, 0], a, v))
+    assert Profile_Fraction(0.0, distance, a, v) == 0.0
+    assert Profile_Fraction(duration, distance, a, v) == pytest.approx(1.0, abs=1e-12)
+    assert Profile_Fraction(duration * (1.0 - 1e-3), distance, a, v) < 1.0
+    assert Profile_Fraction(duration / 2.0, distance, a, v) == pytest.approx(0.5, abs=1e-12)
+    # The acceleration phase from rest: s = a t^2 / 2 (before the peak speed, in both shapes).
+    t = 0.1 * min(v / a, duration / 2.0)
+    assert Profile_Fraction(t, distance, a, v) == pytest.approx(0.5 * a * t * t / distance, rel=1e-9)
+    samples = [Profile_Fraction(duration * k / 200.0, distance, a, v) for k in range(201)]
+    assert all(b >= a_ for a_, b in zip(samples[:-1], samples[1:]))

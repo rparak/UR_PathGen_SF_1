@@ -548,3 +548,25 @@ conservativeness check (`KNOWN_ISSUES.md`).
 
 Pinned by `test/Scene/test_core.py::test_components_within_names_the_machine_interior_hull` and
 `test/Example/test_visualize_position.py::test_a_known_position_reports_its_clearance`.
+
+## The replay moves a movel on its TCP line to the DH TCP of its target's _q
+
+**Decision.** `Example/replay_rotation.py` replays a movel as the controller runs it: the TCP on the
+straight line, the orientation turning about one axis, the joints solved step by step from the
+previous solution (`Kinematics.Core.Linear_Path`, `Solve_IK_Near`). The line ends at the DH TCP of
+the target's `_q`, not at its `_p`, and must reach that `_q` itself; otherwise the replay refuses.
+
+**Why.** The robot reaches `_p` with its calibrated kinematics, which corresponds to `_q`; with
+nominal DH, `_p` and `DH_FK(_q)` differ by the measured residual (up to 4 mm, `KNOWN_ISSUES.md`).
+Ending at `DH_FK(_q)` keeps the line consistent with the one kinematic truth and with the next move,
+which starts at `_q`. Replaying it joint-linear (as before) shows a path the robot does not take.
+
+**Alternatives.** The line to `_p` with nominal DH: it ends up to 4 mm off `_q` and the next movej
+starts elsewhere. An analytic UR inverse kinematics: one more implementation of the kinematics to
+keep equal to the DH; the numeric one uses the DH directly.
+
+**Revisit if** a calibrated kinematic model (`calibration.conf`) is used.
+
+Pinned by `test/Kinematics/test_core.py::test_a_movel_follows_the_straight_tcp_line_to_its_target` and
+`test/Example/test_replay.py::test_every_path_visits_its_moves_in_program_order`.
+

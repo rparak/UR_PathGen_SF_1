@@ -30,7 +30,8 @@ import pytest
 # Custom Lib.:
 #   ../src/Kinematics/Core — the kinematics under test
 from Kinematics.Core import (DH_FK, TCP_Residual, Derive_TCP_Offset, Geodesic_Angle, Rotvec_To_Matrix, Matrix_To_Rotvec,
-                             Check_FK_Consistency, Kinematics_Error_Cls, Orientation_Sanity_Bound)
+                             Check_FK_Consistency, Kinematics_Error_Cls, Orientation_Sanity_Bound, TCP_Pose,
+                             Solve_IK_Near, Linear_Path)
 
 """
 Description:
@@ -189,3 +190,55 @@ def test_rotations_on_either_side_of_pi_are_close():
     below, above = Rotvec_To_Matrix((math.pi - 1e-3) * axis), Rotvec_To_Matrix((math.pi + 1e-3) * axis)
     assert np.linalg.norm(Matrix_To_Rotvec(below) - Matrix_To_Rotvec(above)) > 6.0
     assert Geodesic_Angle(below, above) == pytest.approx(2e-3, abs=1e-12)
+
+
+def test_the_ik_finds_the_configuration_on_the_branch_it_starts_from(cfg):
+    """
+    Description:
+        Solve_IK_Near, started 0.05 rad (per joint, seeded) from 20 seeded configurations within
+        the joint limits away from the elbow singularity, returns a configuration whose DH TCP is
+        the target within 1e-9 m / 1e-9 rad, and it is the configuration itself (the same branch,
+        1e-6 rad). A target 3 m away is refused, never approximated.
+    """
+
+    rng = np.random.default_rng(20261018)
+    for _ in range(20):
+        q = rng.uniform(-math.pi, math.pi, 6)
+        q[2] = rng.uniform(0.5, 2.5) * rng.choice([-1.0, 1.0])
+        q[4] = rng.uniform(0.5, 2.5)
+        target = TCP_Pose(q, cfg.TCP_Offset)
+        found = Solve_IK_Near(target, q + rng.uniform(-0.05, 0.05, 6), cfg.TCP_Offset)
+        reached = TCP_Pose(found, cfg.TCP_Offset)
+        assert np.linalg.norm(reached[:3, 3] - target[:3, 3]) < 1e-9
+        assert Geodesic_Angle(reached[:3, :3], target[:3, :3]) < 1e-9
+        assert np.max(np.abs(found - q)) < 1e-6
+    far = TCP_Pose(np.zeros(6), cfg.TCP_Offset)
+    far[:3, 3] += [3.0, 0.0, 0.0]
+    with pytest.raises(Kinematics_Error_Cls, match='out of reach or at a singularity'):
+        Solve_IK_Near(far, np.zeros(6), cfg.TCP_Offset)
+
+
+def test_a_movel_follows_the_straight_tcp_line_to_its_target(cfg, points):
+    """
+    Description:
+        Linear_Path of the station movel drop_rotate_1 -> Waypoint_4 (60 mm down) and of the lift
+        pick_rotate_1 -> Waypoint_6 (194 mm up): every configuration's DH TCP lies on the straight
+        line between the two TCPs (1e-9 m), in order, at most 5 mm apart; the orientation turns
+        evenly about one axis; the path starts at the start's _q and ends at the target's _q
+        exactly.
+    """
+
+    for start, goal in (('drop_rotate_1', 'Waypoint_4'), ('pick_rotate_1', 'Waypoint_6')):
+        q_a, q_b = points[start].Q, points[goal].Q
+        path = Linear_Path(q_a, q_b, cfg.TCP_Offset)
+        T_a, T_b = TCP_Pose(q_a, cfg.TCP_Offset), TCP_Pose(q_b, cfg.TCP_Offset)
+        line = T_b[:3, 3] - T_a[:3, 3]
+        assert list(path[0]) == list(q_a) and list(path[-1]) == list(q_b)
+        turn = Geodesic_Angle(T_a[:3, :3], T_b[:3, :3])
+        for k, q in enumerate(path):
+            T = TCP_Pose(q, cfg.TCP_Offset)
+            along = float(np.dot(T[:3, 3] - T_a[:3, 3], line) / np.dot(line, line))
+            assert along == pytest.approx(k / (len(path) - 1), abs=1e-6)
+            assert np.linalg.norm(T_a[:3, 3] + along * line - T[:3, 3]) < 1e-9
+            assert Geodesic_Angle(T_a[:3, :3], T[:3, :3]) == pytest.approx(turn * k / (len(path) - 1), abs=1e-6)
+        assert np.linalg.norm(line) / (len(path) - 1) <= 0.005 + 1e-12

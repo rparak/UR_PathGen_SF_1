@@ -130,6 +130,32 @@ generated-rule check in simulation. What that does not cover:
   stop button; no real robot is available.
 - **Pinned by:** `test/Planner/test_core.py` (the committed paths pass `Verify_Path`).
 
+## The replay's timing and gripper state on entry are estimates
+
+`Example/replay_rotation.py` plays each move for its estimated duration (the trapezoid of SPEC
+§10.6 with the line's a and v). Blends are not replayed (every move stops), and the gripper's time
+and the program's waits are left out, so the elapsed time shown is not the robot's. A case is
+entered holding its part: inferred from the program (no gripper action before the drop or after the
+pick), not confirmed by the owner (asked 2026-10-18, not answered).
+
+- **Impact:** the replay shows the order, the shape and the relative timing of the moves; real cycle
+  times must be measured on the robot. If the part is not held on entry, the moves before the drop
+  are replayed and checked at the wrong opening (they lie inside machine (a), where the model is not
+  valid anyway).
+- **Pinned by:** `test/Example/test_replay.py::test_the_speed_scales_the_playback`.
+- **What would close it:** a cycle-time measurement on the robot; the owner's answer on the gripper
+  state on entry.
+
+## movel is checked joint-linear by the station tests, on its TCP line by the replay
+
+The robot moves the TCP of a movel on a straight line; the station tests (`test/Scene/test_station.py`)
+check the taught movel joint-linear, the replay checks it on the TCP line (`Linear_Path`). Measured
+2026-10-18, the two differ by at most 0.0014 / 0.0009 rad per joint on the drops and 0.025 / 0.030 rad
+on the lifts (case 17 / 18); both keep their margins.
+
+- **Impact:** a margin decided at the lift could differ between the two checks; none does today.
+- **What would close it:** checking movel on the TCP line in the station tests as well.
+
 ## The part of case 18 has an unknown size; its holding opening is assumed
 
 Cases 17 and 18 are two independent rotation (regrasp) cases, probably for two parts of different

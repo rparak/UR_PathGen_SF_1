@@ -139,6 +139,37 @@ def Segment_Duration(q_a: tp.Sequence[float], q_b: tp.Sequence[float], a: float,
     return 2.0 * math.sqrt(distance / a)
 
 
+def Profile_Fraction(t: float, distance: float, a: float, v: float) -> float:
+    """
+    Description:
+        The fraction of a rest-to-rest move done at time t under the profile the duration estimates
+        assume: accelerate at a, cruise at v, decelerate at a (a triangle when the distance is too
+        short to reach v). 0 at t <= 0, 1 at the end of the move.
+
+    Args:
+        (1) t [float]: Time since the start of the move (s).
+        (2) distance [float]: The length of the move (rad for a joint, m for the TCP).
+        (3 - 4) a, v [float]: Acceleration and speed (rad/s^2, rad/s or m/s^2, m/s).
+
+    Returns:
+        (1) parameter [float]: The fraction, 0 - 1.
+    """
+
+    if distance <= 0.0:
+        return 1.0
+    peak = min(v, math.sqrt(distance * a))
+    t_ramp = peak / a
+    total = 2.0 * t_ramp + (distance - peak * t_ramp) / peak
+    t = min(max(t, 0.0), total)
+    if t < t_ramp:
+        done = 0.5 * a * t * t
+    elif t <= total - t_ramp:
+        done = 0.5 * peak * t_ramp + peak * (t - t_ramp)
+    else:
+        done = distance - 0.5 * a * (total - t) ** 2
+    return min(1.0, max(0.0, done / distance))
+
+
 def Estimate_Duration(path: tp.Sequence[tp.Sequence[float]], a: float, v: float) -> float:
     """
     Description:

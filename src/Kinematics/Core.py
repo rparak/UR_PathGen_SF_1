@@ -54,6 +54,15 @@ CONST_AXIS_EPS = 1e-9
 # for the skew part to give it accurately.
 #   Unit [float] (rad)
 CONST_SYMMETRIC_BAND = 1e-6
+# Numeric inverse kinematics (Solve_IK_Near): damped least squares on the DH Jacobian, taken by
+# central differences. Converged when the position error is below 1e-9 m and the geodesic angle
+# below 1e-9 rad; at most 100 iterations.
+#   Unit [float] (rad), [float] (-), [float] (m), [float] (rad), [int]
+CONST_IK_DELTA, CONST_IK_DAMPING, CONST_IK_POSITION_TOL, CONST_IK_ANGLE_TOL, CONST_IK_ITERATIONS = 1e-7, 1e-6, 1e-9, 1e-9, 100
+# Largest TCP step between two configurations of a straight-line motion (Linear_Path): 5 mm and
+# 1 deg, so consecutive solutions stay on one branch; the clearance check samples between them.
+#   Unit [float] (m), [float] (rad)
+CONST_LINE_STEP, CONST_LINE_ANGLE_STEP = 0.005, math.radians(1.0)
 
 
 class Kinematics_Error_Cls(ValueError):
@@ -296,3 +305,87 @@ def Check_FK_Consistency(name: str, q: tp.Sequence[float], p: tp.Sequence[float]
             '%.2f mm / %.3f deg. Check that _p and _q were taught together, with the same TCP, on this robot.'
             % (name, position * 1e3, math.degrees(orientation), position_bound * 1e3, math.degrees(orientation_bound)))
     return position, orientation
+
+
+def Pose_Error(T: np.ndarray, T_goal: np.ndarray) -> np.ndarray:
+    """
+    Description:
+        The 6-vector from T to T_goal: the position difference and the rotation vector of
+        R_target * R^T (both in the base frame).
+
+    Args:
+        (1 - 2) T, T_goal [Matrix<float> 4x4]: The poses.
+
+    Returns:
+        (1) parameter [Vector<float> 1x6]: (m, rad).
+    """
+
+    return np.concatenate([T_goal[:3, 3] - T[:3, 3], Matrix_To_Rotvec(T_goal[:3, :3] @ T[:3, :3].T)])
+
+
+def Solve_IK_Near(T_goal: np.ndarray, q_near: tp.Sequence[float], tcp_offset: tp.Sequence[float]) -> np.ndarray:
+    """
+    Description:
+        The joint angles whose DH TCP is T_goal, found from q_near by damped least squares: the
+        solution on q_near's branch, as the robot's controller follows a movel. Joints are never
+        wrapped. A target it cannot reach is an error, never an approximate answer.
+
+    Args:
+        (1) T_goal [Matrix<float> 4x4]: The TCP pose in the Polyscope base frame.
+        (2) q_near [Vector<float> 1x6]: The start (rad), close to the solution.
+        (3) tcp_offset [Vector<float> 1x6]: The configured TCP (m, rad).
+
+    Returns:
+        (1) parameter [Vector<float> 1x6]: The joint angles (rad).
+    """
+
+    q = np.array(q_near, dtype=float)
+    for _ in range(CONST_IK_ITERATIONS):
+        T = TCP_Pose(q, tcp_offset)
+        error = Pose_Error(T, T_goal)
+        if np.linalg.norm(error[:3]) < CONST_IK_POSITION_TOL and Geodesic_Angle(T[:3, :3], T_goal[:3, :3]) < CONST_IK_ANGLE_TOL:
+            return q
+        J = np.zeros((6, 6))
+        for k in range(6):
+            dq = np.zeros(6)
+            dq[k] = CONST_IK_DELTA
+            J[:, k] = (Pose_Error(TCP_Pose(q - dq, tcp_offset), TCP_Pose(q + dq, tcp_offset))) / (2.0 * CONST_IK_DELTA)
+        q = q + J.T @ np.linalg.solve(J @ J.T + CONST_IK_DAMPING ** 2 * np.eye(6), error)
+    raise Kinematics_Error_Cls('No joint solution near %s reaches the TCP pose within %d iterations (left %.3f mm). The pose '
+                               'is out of reach or at a singularity.'
+                               % (np.round(np.asarray(q_near), 4).tolist(), CONST_IK_ITERATIONS, np.linalg.norm(error[:3]) * 1e3))
+
+
+def Linear_Path(q_a: tp.Sequence[float], q_b: tp.Sequence[float], tcp_offset: tp.Sequence[float]) -> tp.List[np.ndarray]:
+    """
+    Description:
+        The joint configurations of a movel from q_a to q_b: the TCP moves on the straight line
+        between their DH TCPs, the orientation turns about one axis at a constant rate, steps of at
+        most CONST_LINE_STEP and CONST_LINE_ANGLE_STEP, each solved from the previous one. The line
+        must end at q_b itself (the movel's target _q), else the controller would reach another
+        branch: an error.
+
+    Args:
+        (1 - 2) q_a, q_b [Vector<float> 1x6]: Start and target (rad).
+        (3) tcp_offset [Vector<float> 1x6]: The configured TCP (m, rad).
+
+    Returns:
+        (1) parameter [List<Vector<float> 1x6>]: The configurations, q_a first and q_b last (rad).
+    """
+
+    T_a, T_b = TCP_Pose(q_a, tcp_offset), TCP_Pose(q_b, tcp_offset)
+    turn = Matrix_To_Rotvec(T_b[:3, :3] @ T_a[:3, :3].T)
+    count = max(1, int(math.ceil(max(np.linalg.norm(T_b[:3, 3] - T_a[:3, 3]) / CONST_LINE_STEP,
+                                     np.linalg.norm(turn) / CONST_LINE_ANGLE_STEP))))
+    path = [np.array(q_a, dtype=float)]
+    for k in range(1, count + 1):
+        T = np.eye(4)
+        T[:3, 3] = T_a[:3, 3] + (T_b[:3, 3] - T_a[:3, 3]) * k / count
+        T[:3, :3] = Rotvec_To_Matrix(turn * k / count) @ T_a[:3, :3]
+        path.append(Solve_IK_Near(T, path[-1], tcp_offset))
+    if np.max(np.abs(path[-1] - np.asarray(q_b, dtype=float))) > 1e-6:
+        raise Kinematics_Error_Cls('The straight line from %s ends at %s, not at its target %s: another branch.'
+                                   % (np.round(np.asarray(q_a), 4).tolist(), np.round(path[-1], 4).tolist(),
+                                      np.round(np.asarray(q_b), 4).tolist()))
+    path[-1] = np.array(q_b, dtype=float)
+    return path
