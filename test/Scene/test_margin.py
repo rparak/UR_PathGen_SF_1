@@ -25,12 +25,19 @@
 import os
 # Math (Mathematical functions)
 import math
+# Collections (Container datatypes)
+import collections
+# Dataclasses (Data Classes)
+import dataclasses
 # Numpy (Array computing) [pip3 install numpy]
 import numpy as np
 # Pytest (Testing framework) [pip3 install pytest]
 import pytest
 # MuJoCo (Physics simulator) [pip3 install mujoco]
 import mujoco
+# Custom Lib.:
+#   ../src/Scene/Core — the cell scene whose contacts are compared with exact distances
+from Scene.Core import Scene_Cls
 
 """
 Description:
@@ -48,6 +55,16 @@ CONST_ROBOT_MARGIN = 0.005
 # Allowed error of the reported distance.
 #   Unit [float] (m)
 CONST_DISTANCE_TOLERANCE = 0.0005
+# Seeded configurations near the station for the agreement of contacts with exact distances: each
+# fixed station point perturbed (normal, sigma per joint) at both openings (50 mm holding, 85 mm open).
+#   Unit [Tuple<string>], [int], [float] (rad), [Tuple<float>] (m), [List<int>]
+CONST_AGREEMENT_POINTS = ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5', 'Waypoint_18', 'pick_rotate_1', 'Waypoint_6')
+CONST_AGREEMENT_PER_POINT, CONST_AGREEMENT_SIGMA = 4, 0.05
+CONST_AGREEMENT_OPENINGS, CONST_AGREEMENT_SEED = (0.050, 0.085), [20261018]
+# The robot - environment geom-type pairs the agreement must have seen within the margin: the gripper
+# pads (boxes) and the meshes, each against the collision set's pieces and the added boxes.
+#   Unit [Set<Tuple<string, string>>]
+CONST_AGREEMENT_KINDS = {('box', 'piece'), ('box', 'added box'), ('mesh', 'piece'), ('mesh', 'added box')}
 # The robot link mesh used (a vendored Menagerie forearm part).
 #   Unit [string]
 CONST_LINK_MESH = os.path.join('models', 'universal_robots_ur10e', 'assets', 'forearm_3.obj')
@@ -153,3 +170,51 @@ def test_mujoco_generates_contacts_up_to_the_sum_of_both_margins():
             assert bool(distances) == expected, (margins, gap, distances)
             assert all(abs(d - gap) < CONST_DISTANCE_TOLERANCE for d in distances)
             assert all(abs(data.contact[i].includemargin - sum(margins)) < 1e-12 for i in range(data.ncon))
+
+
+def test_every_pair_within_the_margin_gets_a_contact_with_its_exact_distance(cfg, points):
+    """
+    Description:
+        On seeded configurations near the station, at both openings, every robot - environment geom
+        pair whose exact distance (mj_geomDistance) is below Clearance.Environment gets a contact from
+        mj_collision, at that distance within CONST_DISTANCE_TOLERANCE; this covers every geom-type
+        pair the scene has there (the gripper pads, boxes, and the meshes, against the collision
+        set's pieces and the added boxes). MuJoCo's box-box collision missed such pairs (gripper pad
+        vs a box primitive, KNOWN_ISSUES), so the added boxes are meshes.
+    """
+
+    rng = np.random.default_rng(CONST_AGREEMENT_SEED)
+    seen, problems = collections.Counter(), []
+    for opening in CONST_AGREEMENT_OPENINGS:
+        scene = Scene_Cls(dataclasses.replace(cfg, Opening=opening))
+        m, d = scene.Model, scene.Data
+        env = [g for g in range(m.ngeom) if m.geom_contype[g] and m.body(m.geom_bodyid[g]).name.startswith('env')]
+        robot = [g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0
+                 and not m.body(m.geom_bodyid[g]).name.startswith('env') and m.body(m.geom_bodyid[g]).name != 'base']
+        for name in CONST_AGREEMENT_POINTS:
+            for _ in range(CONST_AGREEMENT_PER_POINT):
+                q = np.array(points[name].Q) + rng.normal(0.0, CONST_AGREEMENT_SIGMA, 6)
+                scene.Set_Joints(q)
+                mujoco.mj_collision(m, d)
+                contacts = {}
+                for c in d.contact[:d.ncon]:
+                    pair = (min(c.geom1, c.geom2), max(c.geom1, c.geom2))
+                    contacts[pair] = min(contacts.get(pair, np.inf), c.dist)
+                for g in robot:
+                    for e in env:
+                        # Bounding spheres farther apart than the margin cannot come within it.
+                        if (np.linalg.norm(d.geom_xpos[g] - d.geom_xpos[e]) - m.geom_rbound[g] - m.geom_rbound[e]
+                                > cfg.Clearance_Environment):
+                            continue
+                        exact = mujoco.mj_geomDistance(m, d, g, e, 2.0 * cfg.Clearance_Environment, None)
+                        if exact >= cfg.Clearance_Environment:
+                            continue
+                        robot_kind = 'box' if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_BOX else 'mesh'
+                        seen[robot_kind, 'added box' if m.geom(e).name.startswith('env_box_') else 'piece'] += 1
+                        reported = contacts.get((min(g, e), max(g, e)))
+                        if reported is None or abs(reported - exact) > CONST_DISTANCE_TOLERANCE:
+                            problems.append('%s near %s: %s - %s exact %.2f mm, contact %s'
+                                            % (name, opening, m.geom(g).name or m.body(m.geom_bodyid[g]).name, m.geom(e).name,
+                                               exact * 1e3, 'none' if reported is None else '%.2f mm' % (reported * 1e3)))
+    assert CONST_AGREEMENT_KINDS <= set(seen), seen
+    assert problems == [], '\n'.join(problems[:20])

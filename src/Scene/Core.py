@@ -435,15 +435,20 @@ class Scene_Cls(object):
                                           meshname='env_piece_%d' % i, contype=1, conaffinity=1,
                                           group=CONST_COLLISION_GROUP, margin=cfg.Clearance_Environment, gap=0.0,
                                           rgba=[0.3, 0.6, 0.9, 0.3])
-            # Obstacles missing from the STL (Environment.Added_Boxes): box primitives in env, zone
-            # pieces by the same rule as the set's pieces.
+            # Obstacles missing from the STL (Environment.Added_Boxes): convex meshes of their eight
+            # corners in env, like the set's pieces, zone pieces by the same rule. Not box primitives:
+            # MuJoCo's box-box collision misses pairs inside the margin (the gripper pads are boxes;
+            # KNOWN_ISSUES, 2026-10-18), mesh pairs go through the convex collider.
             self.__zone_boxes = []
             for name, lo, hi, _ in cfg.Added_Boxes:
                 lo_v, hi_v = np.asarray(lo), np.asarray(hi)
-                env_bodies['env'].add_geom(name=CONST_ADDED_BOX_PREFIX + name, type=mujoco.mjtGeom.mjGEOM_BOX,
-                                           size=list((hi_v - lo_v) / 2.0), pos=list((hi_v + lo_v) / 2.0), contype=1,
-                                           conaffinity=1, group=CONST_COLLISION_GROUP, margin=cfg.Clearance_Environment,
-                                           gap=0.0, rgba=[0.3, 0.6, 0.9, 0.3])
+                corners = np.array([[x, y, z] for x in (lo_v[0], hi_v[0]) for y in (lo_v[1], hi_v[1]) for z in (lo_v[2], hi_v[2])])
+                spec.add_mesh(name=CONST_ADDED_BOX_PREFIX + name, uservert=corners.flatten().tolist(),
+                              inertia=mujoco.mjtMeshInertia.mjMESH_INERTIA_SHELL)
+                env_bodies['env'].add_geom(name=CONST_ADDED_BOX_PREFIX + name, type=mujoco.mjtGeom.mjGEOM_MESH,
+                                           meshname=CONST_ADDED_BOX_PREFIX + name, contype=1, conaffinity=1,
+                                           group=CONST_COLLISION_GROUP, margin=cfg.Clearance_Environment, gap=0.0,
+                                           rgba=[0.3, 0.6, 0.9, 0.3])
                 if np.all(hi_v >= zone_lo) and np.all(lo_v <= zone_hi):
                     self.__zone_boxes.append(name)
             spec.add_exclude(bodyname1='base', bodyname2='env_stand')

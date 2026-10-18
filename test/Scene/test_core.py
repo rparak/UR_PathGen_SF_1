@@ -439,8 +439,9 @@ def test_a_set_built_with_other_overrides_is_refused(tmp_path, field, entry):
 def test_an_added_box_is_an_env_box_and_a_zone_piece_only_inside_the_zone(cfg):
     """
     Description:
-        Every Environment.Added_Boxes entry becomes a box primitive of body env spanning exactly its
-        configured corners, with the environment margin; it is a zone piece when it meets the
+        Every Environment.Added_Boxes entry becomes a convex mesh of body env whose vertices are
+        exactly its eight configured corners (not a box primitive: box-box contacts are missed inside
+        the margin, KNOWN_ISSUES), with the environment margin; it is a zone piece when it meets the
         station-zone box (a box beside the holder) and not otherwise (a box beside the side table).
     """
 
@@ -448,13 +449,18 @@ def test_an_added_box_is_an_env_box_and_a_zone_piece_only_inside_the_zone(cfg):
              ('test_far', [0.50, 0.60, 0.80], [0.60, 0.70, 0.90], 'test')]
     scene = Scene_Cls(dataclasses.replace(cfg, Added_Boxes=boxes), with_environment=True)
     m = scene.Model
+    mujoco.mj_kinematics(m, scene.Data)
     for name, lo, hi, _ in boxes:
         g = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, 'env_box_' + name)
         assert g >= 0, name
-        assert m.geom_type[g] == mujoco.mjtGeom.mjGEOM_BOX and m.body(m.geom_bodyid[g]).name == 'env'
+        assert m.geom_type[g] == mujoco.mjtGeom.mjGEOM_MESH and m.body(m.geom_bodyid[g]).name == 'env'
         assert m.geom_contype[g] == 1 and m.geom_conaffinity[g] == 1
-        assert np.allclose(m.geom_pos[g], (np.array(lo) + np.array(hi)) / 2.0, atol=1e-12)
-        assert np.allclose(m.geom_size[g], (np.array(hi) - np.array(lo)) / 2.0, atol=1e-12)
+        mesh = m.geom_dataid[g]
+        local = m.mesh_vert[m.mesh_vertadr[mesh]:m.mesh_vertadr[mesh] + m.mesh_vertnum[mesh]]
+        world = local @ scene.Data.geom_xmat[g].reshape(3, 3).T + scene.Data.geom_xpos[g]
+        corners = {(x, y, z) for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])}
+        # MuJoCo stores mesh vertices in single precision (about 2e-8 m here).
+        assert len(world) == 8 and all(min(np.linalg.norm(np.array(c) - world, axis=1)) < 1e-6 for c in corners)
         assert m.geom_margin[g] == pytest.approx(cfg.Clearance_Environment)
     assert scene.Zone_Boxes == ['test_zone']
 

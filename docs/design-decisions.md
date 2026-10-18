@@ -308,22 +308,31 @@ Pinned by `test/Collision/test_core.py::test_the_stl_has_three_objects_and_an_as
 `test/Collision/test_core.py::test_the_configured_shift_moves_the_machine_and_the_side_cabinet_only`
 and `test/Scene/test_core.py::test_a_set_built_with_other_overrides_is_refused`.
 
-## Obstacles missing from the STL are configured box primitives
+## Obstacles missing from the STL are configured boxes, built as convex meshes
 
 **Decision.** `Environment.Added_Boxes` lists world-axis-aligned boxes (name, corners, source). The
-scene adds each as a box primitive to body `env` with the environment margin; a box that meets the
-station-zone box is a zone piece.
+scene adds each to body `env` as a convex mesh of its eight corners, like the collision set's
+pieces, with the environment margin; a box that meets the station-zone box is a zone piece.
 
-**Why.** Some obstacles are seen on the cell (photos) but not in the CAD. A primitive needs no
-collision-set rebuild for a guessed geometry, keeps its source next to its numbers, and gives exact
-distances.
+**Why.** Some obstacles are seen on the cell (photos) but not in the CAD. A configured box needs no
+collision-set rebuild for a guessed geometry and keeps its source next to its numbers. It is a mesh,
+not a box primitive: MuJoCo's box-box collision missed pairs inside the margin against the gripper
+pads, which are box primitives (measured 2026-10-18: 6 of 33 pad - holder pairs within 25 mm got no
+contact, the closest pad - stub pair missed at 7.2 mm). As meshes, every robot - environment pair goes
+through the convex collider, and contacts agree with `mj_geomDistance` to 0.001 mm on seeded
+configurations near the station. *Corrected 2026-10-18: the boxes were box primitives, chosen for
+"exact distances"; the box-box case was not checked.*
 
 **Alternatives.** A box piece in the collision set: rejected, it needs a rebuild and a manifest
-change for every estimate. Editing the STL: rejected, the STL is the owner's hashed CAD.
+change for every estimate. Editing the STL: rejected, the STL is the owner's hashed CAD. The gripper
+pads as meshes instead: it would change the vendored gripper's geometry in the scene; the boxes are
+ours.
 
-**Revisit if** an obstacle needs another shape than a box, or the STL is corrected.
+**Revisit if** an obstacle needs another shape than a box, the STL is corrected, or a primitive is
+added to the environment again (the agreement test then has to cover its pair types).
 
-Pinned by `test/Scene/test_core.py::test_an_added_box_is_an_env_box_and_a_zone_piece_only_inside_the_zone`
+Pinned by `test/Scene/test_core.py::test_an_added_box_is_an_env_box_and_a_zone_piece_only_inside_the_zone`,
+`test/Scene/test_margin.py::test_every_pair_within_the_margin_gets_a_contact_with_its_exact_distance`
 and `test/Configuration/test_core.py::test_an_empty_list_of_added_boxes_is_accepted`.
 
 ## The station zone is a region of the environment, applied fully to taught and near the station points to generated segments
