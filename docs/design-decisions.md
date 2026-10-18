@@ -636,8 +636,16 @@ inside it in case 18 (penalty 0.002 m).
 (SPEC 4.9), but they were planned for another model. Keeping the taught S2: 3.8 s slower per case
 (estimate), 12.5 mm more clearance.
 
+*Updated 2026-10-18: with the deliverable narrowed to case 17 and the machine at −150 mm, S1 – S3
+were re-planned once on the final scene (SPEC §17): 4.76 / 4.31 / 5.27 s (S3 direct), home -> home
+16.66 s against the committed 17.24 s; outside the station neighbourhood they pass at 29.7 / 31.0 /
+23.3 mm (top profile, top profile, post) against the committed 64.0 / 48.9 / 65.6 mm. The same
+objective, now with more free space: time is bought down to the 30 mm penalty threshold and, for
+S3, 6.7 mm inside it. All three use space only the estimated shift frees (`KNOWN_ISSUES.md`).*
+
 **Revisit if** the cell is measured (the machine position is an estimate, `KNOWN_ISSUES.md`), the
-penalty weight changes, or the owner prefers the clearance of the taught S2 to the time.
+penalty weight changes, or the owner prefers the clearance of the taught or committed paths to the
+time.
 
 Pinned by `test/Planner/test_core.py::test_the_committed_paths_pass_the_independent_verification`
 and `test/Example/test_replay.py::test_every_path_visits_its_moves_in_program_order` (entry 3 prints

@@ -111,9 +111,9 @@ the grasp and unload points reach into the modelled parts on the pallet and side
 2718, 236, 237, 243, 244) are touched by up to 3.3 mm.
 
 - **Impact:** no path inside machine (a) can be checked or planned; a result there means nothing.
-  The rotation-sequence segments S1 – S3 (home ↔ station) keep at least 181.2 mm to every one of
-  these pieces (closest: case 17 S2 to component 1638), and component 1638 is outside the station
-  zone.
+  The optimised S1 – S3 (home ↔ station) keep about 228 mm or more to every one of these pieces
+  (closest: S2; re-planned 2026-10-18, every third sample), and component 1638 is outside the
+  station zone.
 - **Evidence:** replay of all 125 unique segments of the 21 cases (the 4 home → first target entries
   included), joint-linear, 50 and 85 mm openings, on the set of each date (SPEC §4.9, §4.11).
 - **Pinned by:** `test/Scene/test_program.py::test_no_program_segment_penetrates_more_than_recorded`
@@ -128,12 +128,17 @@ deliverable) pass the full generated-rule check in simulation. What that does no
 
 - **Durations are estimates:** a trapezoid on the leading joint with the program's a and v, a stop
   at every via point; the controller's profile, blends and the gripper's time are not modelled. The
-  cycle-time gain (about 6 s home -> home) is not measured.
+  cycle-time gain (23.37 -> 16.66 s home -> home, estimate) is not measured.
 - **Clearance has no reserve beyond the margins:** the hard limits are 20 mm, and 5 mm within
-  50 mm of a station point. The clearance penalty (weight 0.5 s/m, the owner's choice)
-  keeps the optimised paths at 29.7 mm or more outside the station neighbourhood (re-planned
-  2026-10-18 on the shifted machine; 26.6 mm on 2026-10-17); without it they went down to 20.4 mm
-  (2026-10-17).
+  50 mm of a station point (the holder only). The clearance penalty (weight 0.5 s/m, the owner's
+  choice) only prefers clearance below 30 mm: outside the station neighbourhood the optimised paths
+  pass the window's top profile at 29.7 mm (S1) and 31.0 mm (S2), and S3 runs direct, 23.3 mm from
+  the post (re-planned 2026-10-18 on the final scene, SPEC §17).
+- **The optimised paths depend on the estimated machine position:** with the machine at the earlier
+  estimate (−100 mm, post fitted) they would penetrate the top profile by 19.6 mm (S1) and 16.2 mm
+  (S2) and the post by 9.8 mm (S3). The space they use is freed only by the owner's estimate of a
+  further 50 mm, which nothing in the program confirms. **Run them on the robot at reduced speed
+  first** (see "The positions of machine (a) and the side cabinet").
 - **Space:** a generated segment stays inside `Clearance.Workspace` (the STL's x/y extents, up to
   2.35 m, the height the taught program reaches); what lies outside the STL is unknown.
 - **The carried part, cables, Polyscope safety limits** as elsewhere in this file.

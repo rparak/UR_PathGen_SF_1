@@ -176,9 +176,10 @@ def test_one_case_is_checked_densely_and_labelled_by_kind(root, scene, tmp_path)
     Description:
         Path 2 (case 17 optimised, home -> home) with the dense clearance check and screenshots,
         without --with-stl: the scene is built without the visual STL (exactly the geoms of the scene
-        without it); its 10 moves (11 motion lines, the start excluded) are each labelled by their
-        own rule and keep it: every generated movej the generated rule, every program line the
-        taught rule; none is near the machine (a) interior; one screenshot is written.
+        without it); its 9 moves (10 motion lines, the start excluded; S3 is direct) are each
+        labelled by their own rule and keep it: every generated movej the generated rule, every
+        program line the taught rule; none is near the machine (a) interior; one screenshot is
+        written.
     """
 
     result = _Run(root, tmp_path, '--path', '2', '--screenshots', str(tmp_path / 'shots'))
@@ -186,7 +187,7 @@ def test_one_case_is_checked_densely_and_labelled_by_kind(root, scene, tmp_path)
     built = re.search(r'Scene built in [\d.]+ s: (\d+) geoms; visual mesh (not loaded|loaded)\.', result.stdout)
     assert built is not None and built.group(2) == 'not loaded' and int(built.group(1)) == scene.Model.ngeom
     moves = re.findall(r'^\[INFO\] Step \d+: (?:movej|movel) -> (\w+) \((taught|generated).*: (.+)\.$', result.stdout, re.M)
-    assert len(moves) == 10
+    assert len(moves) == 9
     assert {rule for _, rule, _ in moves} == {'taught', 'generated'}
     for target, rule, label in moves:
         assert label == 'clearance kept (%s rule)' % rule, (target, label)

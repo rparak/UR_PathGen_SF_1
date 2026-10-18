@@ -19,5 +19,4 @@ movej(get_inverse_kin(pick_rotate_1_p, qnear=pick_rotate_1_q), a=1.3962634015954
 # Gripper close: the program's Robotiq node goes here (rq_set_pos_spd_for(255, 255, 255, "1"))
 movel(Waypoint_6_p, a=1.2, v=0.25)
 # S3 (generated): Waypoint_6 -> home
-movej(via_Waypoint_6_home_01_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
 movej(home_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
