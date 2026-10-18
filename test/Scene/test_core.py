@@ -264,6 +264,23 @@ def test_the_coupling_replaces_the_menagerie_disc(robot_scene, cfg):
     assert m.body(m.geom_bodyid[span]).name == 'gripper_base' and m.geom_contype[span] == 1
 
 
+def test_every_robot_collision_geom_shows_in_one_colour(robot_scene):
+    """
+    Description:
+        In the viewer every robot and gripper collision geom (group 3) has the same translucent red,
+        the gripper's Menagerie geoms and the coupling cylinder included; only the pad-span hull is
+        orange. Colour only: the 35 collision geoms (30 mesh hulls, 4 pad boxes, the coupling;
+        counted 2026-10-17) are all still there.
+    """
+
+    m = robot_scene.Model
+    collision = [g for g in range(m.ngeom) if m.geom_group[g] == 3]
+    assert len(collision) == 35 and all(m.geom_contype[g] for g in collision)
+    for g in collision:
+        expected = [1.0, 0.5, 0.0, 0.3] if m.geom(g).name == 'gripper_pad_span' else [0.9, 0.3, 0.3, 0.3]
+        assert np.allclose(m.geom_rgba[g], expected), (m.geom(g).name, m.body(m.geom_bodyid[g]).name, list(m.geom_rgba[g]))
+
+
 def test_the_vendored_models_are_untouched(root):
     """
     Description:

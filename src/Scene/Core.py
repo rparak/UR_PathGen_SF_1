@@ -95,6 +95,11 @@ CONST_PAD_BOXES = ('left_pad1', 'left_pad2', 'right_pad1', 'right_pad2')
 # Collision geom group (hidden in the viewer by default) and visual environment group.
 #   Unit [int]
 CONST_COLLISION_GROUP = 3
+# Viewer colours of the collision geometry (no effect on collision): every robot and gripper
+# collision geom in one translucent red, the pad-span hull orange so it stays distinguishable.
+#   Unit [Vector<float> 1x4] (RGBA)
+CONST_ROBOT_COLLISION_RGBA = [0.9, 0.3, 0.3, 0.3]
+CONST_PAD_SPAN_RGBA = [1.0, 0.5, 0.0, 0.3]
 CONST_ENV_VISUAL_GROUP = 1
 # Extra radius of the crop sphere beyond the reach bound and the clearance (SPEC 7.1).
 #   Unit [float] (m)
@@ -341,7 +346,7 @@ class Scene_Cls(object):
             if geom.type == mujoco.mjtGeom.mjGEOM_MESH:
                 geom.parent.add_geom(type=mujoco.mjtGeom.mjGEOM_MESH, meshname=geom.meshname, pos=list(geom.pos),
                                      quat=list(geom.quat), contype=1, conaffinity=1, group=CONST_COLLISION_GROUP,
-                                     margin=cfg.Clearance_Self, gap=0.0, rgba=[0.9, 0.3, 0.3, 0.3])
+                                     margin=cfg.Clearance_Self, gap=0.0, rgba=CONST_ROBOT_COLLISION_RGBA)
                 geom.contype, geom.conaffinity = 0, 0
             else:
                 spec.delete(geom)
@@ -353,7 +358,7 @@ class Scene_Cls(object):
         for geom in list(mount.geoms):
             tool.delete(geom)
         half = cfg.Coupling_Thickness / 2.0
-        for contype, group, rgba in ((0, 2, [0.15, 0.15, 0.15, 1.0]), (1, CONST_COLLISION_GROUP, [0.9, 0.3, 0.3, 0.3])):
+        for contype, group, rgba in ((0, 2, [0.15, 0.15, 0.15, 1.0]), (1, CONST_COLLISION_GROUP, CONST_ROBOT_COLLISION_RGBA)):
             mount.add_geom(name='coupling' if contype else 'coupling_visual', type=mujoco.mjtGeom.mjGEOM_CYLINDER,
                            size=[cfg.Coupling_Diameter / 2.0, half, 0.0], pos=[0.0, 0.0, half - CONST_MENAGERIE_MOUNT_Z],
                            contype=contype, conaffinity=contype, group=group, rgba=rgba, margin=cfg.Clearance_Self)
@@ -363,10 +368,12 @@ class Scene_Cls(object):
         tool.add_mesh(name='pad_span', uservert=pad_span.flatten().tolist())
         gripper_base.add_geom(name='pad_span', type=mujoco.mjtGeom.mjGEOM_MESH, meshname='pad_span', contype=1,
                               conaffinity=1, group=CONST_COLLISION_GROUP, margin=cfg.Clearance_Self,
-                              rgba=[1.0, 0.5, 0.0, 0.3])
+                              rgba=CONST_PAD_SPAN_RGBA)
         for geom in tool.geoms:
             if geom.contype != 0 or geom.conaffinity != 0:
                 geom.margin, geom.gap = cfg.Clearance_Self, 0.0
+                if geom.name != 'pad_span':
+                    geom.rgba = CONST_ROBOT_COLLISION_RGBA
         for actuator in list(tool.actuators):
             tool.delete(actuator)
         # The gripper's contact options matter only for simulated grasping, which this kinematic
