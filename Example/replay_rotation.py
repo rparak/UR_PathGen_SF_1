@@ -209,8 +209,8 @@ def main():
             macOS:  .venv/bin/mjpython Example/replay_rotation.py --case 17 --segment S2
             Images: .venv/bin/python Example/replay_rotation.py --case 17 --segment S2 --screenshots DIR
 
-        --collision-only builds the scene without the visual STL and starts the viewer with the
-        collision geometry (geom group 3) shown.
+        The scene is built without the visual STL and the viewer starts with the collision geometry
+        (geom group 3) shown; --with-stl loads the STL (geom group 1) as well.
     """
 
     parser = argparse.ArgumentParser(description='Replay taught vs optimised segments of the rotation sequence.')
@@ -218,8 +218,8 @@ def main():
     parser.add_argument('--case', type=int, choices=sorted(CONST_CASES), default=17)
     parser.add_argument('--segment', choices=('S1', 'S2', 'S3'), default='S2')
     parser.add_argument('--screenshots', default='', help='write PNG files to this directory instead of the viewer')
-    parser.add_argument('--collision-only', action='store_true',
-                        help='no visual STL; the viewer starts with the collision geometry shown')
+    parser.add_argument('--with-stl', action='store_true',
+                        help='load the visual STL of the cell (default: collision geometry only)')
     args = parser.parse_args()
     print('[WARNING] Simulation passed != safe on the robot.')
     try:
@@ -234,9 +234,9 @@ def main():
     station_q = [points[name].Q for name in CONST_STATION_POINTS]
     t0 = time.time()
     scene = Scene_Cls(dataclasses.replace(cfg, Opening=CONST_OPENING[args.segment]), with_environment=True,
-                      with_visual=not args.collision_only)
+                      with_visual=args.with_stl)
     print('[INFO] Scene built in %.1f s: %d geoms; visual mesh %s.'
-          % (time.time() - t0, scene.Model.ngeom, 'not loaded' if args.collision_only else 'loaded'))
+          % (time.time() - t0, scene.Model.ngeom, 'loaded' if args.with_stl else 'not loaded'))
     paths = Paths(args.case, points, generated, args.segment)
     labels = {}
     for kind, path in paths.items():
@@ -265,7 +265,7 @@ def main():
         print('[ERROR] The MuJoCo viewer cannot start (%s). On macOS run: .venv/bin/mjpython Example/replay_rotation.py' % error)
         return 2
     with viewer:
-        if args.collision_only:
+        if not args.with_stl:
             with viewer.lock():
                 viewer.opt.geomgroup[CONST_COLLISION_GROUP] = 1
         while viewer.is_running():

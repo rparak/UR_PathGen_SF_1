@@ -152,15 +152,15 @@ def main():
             Linux:  .venv/bin/python Example/demo_rotate_axis.py
             Tests:  .venv/bin/python Example/demo_rotate_axis.py --headless
 
-        --collision-only builds the scene without the visual STL and starts the viewer with the
-        collision geometry (geom group 3) shown.
+        The scene is built without the visual STL and the viewer starts with the collision geometry
+        (geom group 3) shown; --with-stl loads the STL (geom group 1) as well.
     """
 
     parser = argparse.ArgumentParser(description='Rotate one joint of the UR10e in the SF1 scene.')
     parser.add_argument('--config', default=CONST_DEFAULT_CONFIG_FILE, help='the cell configuration (default: %(default)s)')
     parser.add_argument('--headless', action='store_true', help='check and replay without a viewer')
-    parser.add_argument('--collision-only', action='store_true',
-                        help='no visual STL; the viewer starts with the collision geometry shown')
+    parser.add_argument('--with-stl', action='store_true',
+                        help='load the visual STL of the cell (default: collision geometry only)')
     args = parser.parse_args()
     try:
         cfg = Load_Configuration(args.config)
@@ -172,9 +172,9 @@ def main():
     with open(CONST_POSITIONS, encoding='utf-8') as handle:
         start = Read_URScript(handle.read()).Points[CONST_START].Q
 
-    # 1\ The scene (the visual mesh only when it is shown).
+    # 1\ The scene (the visual mesh only when asked for and shown).
     t0 = time.time()
-    with_visual = not (args.headless or args.collision_only)
+    with_visual = args.with_stl and not args.headless
     scene = Scene_Cls(cfg, with_environment=True, with_visual=with_visual)
     print('[INFO] Scene built in %.1f s: %d geoms; visual mesh %s.'
           % (time.time() - t0, scene.Model.ngeom, 'loaded' if with_visual else 'not loaded'))
@@ -212,7 +212,7 @@ def main():
               'Example/demo_rotate_axis.py' % error)
         return 2
     with viewer:
-        if args.collision_only:
+        if not with_visual:
             with viewer.lock():
                 viewer.opt.geomgroup[CONST_COLLISION_GROUP] = 1
         viewer.set_texts((mujoco.mjtFontScale.mjFONTSCALE_150, mujoco.mjtGridPos.mjGRID_TOPLEFT,

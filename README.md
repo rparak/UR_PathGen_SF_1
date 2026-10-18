@@ -34,9 +34,9 @@ Linux:
 ```
 
 Geom groups in the viewer (toggle with the number keys): `1` the visual STL of the cell, `2` the
-robot's visual meshes, `3` the collision geometry (environment pieces and robot). Both viewer scripts
-take `--collision-only`: the scene is built without the visual STL (faster, lighter) and the viewer
-starts with group 3 shown.
+robot's visual meshes, `3` the collision geometry (environment pieces and robot). Every viewer script
+builds the scene without the visual STL by default (faster, lighter) and starts with group 3 shown;
+`--with-stl` loads the STL as well.
 
 Plan the transfer segments of the rotation sequence (cases 17 and 18; about 35 minutes, writes
 `Data/Generated/` and prints the taught vs optimised report):

@@ -36,16 +36,16 @@ Description:
 """
 
 
-def test_the_collision_only_replay_builds_without_the_visual_mesh(root, scene, tmp_path):
+def test_the_replay_builds_without_the_visual_mesh_by_default(root, scene, tmp_path):
     """
     Description:
-        With --collision-only the replay builds its scene without the visual STL: it says so, and it
-        has exactly the geoms of the scene without the visual mesh (the default build adds one, the
+        Without --with-stl the replay builds its scene without the visual STL: it says so, and it
+        has exactly the geoms of the scene without the visual mesh (--with-stl adds one, the
         1.76 M-triangle STL). Headless: the screenshots replace the viewer.
     """
 
     result = subprocess.run([sys.executable, os.path.join(root, 'Example', 'replay_rotation.py'), '--case', '17',
-                             '--segment', 'S2', '--collision-only', '--screenshots', str(tmp_path)],
+                             '--segment', 'S2', '--screenshots', str(tmp_path)],
                             capture_output=True, text=True, cwd=str(tmp_path), timeout=600)
     assert result.returncode == 0, result.stdout + result.stderr
     built = re.search(r'Scene built in [\d.]+ s: (\d+) geoms; visual mesh (not loaded|loaded)\.', result.stdout)
