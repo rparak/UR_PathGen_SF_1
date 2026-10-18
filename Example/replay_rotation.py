@@ -56,8 +56,8 @@ from Kinematics.Core import TCP_Pose, Matrix_To_Pose, Linear_Path, Kinematics_Er
 from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP, CONST_GRIPPER_PREFIX, CONST_PAD_SPAN_RGBA
 #   ../Planner/Core — the duration estimates and their profile
 from Planner.Core import Segment_Duration, Linear_Duration, Profile_Fraction
-#   ../Example/plan_rotation — the cases, the openings, the outputs and the clearance labels
-from plan_rotation import (CONST_CASES, CONST_TAUGHT_VIAS, CONST_STATION_POINTS, CONST_PROGRAM_DIR, CONST_OUTPUT_DIR, CONST_POSITIONS,
+#   ../Example/plan_rotation — the case, the openings, the outputs and the clearance labels
+from plan_rotation import (CONST_CASE, CONST_TAUGHT_VIAS, CONST_STATION_POINTS, CONST_PROGRAM_DIR, CONST_OUTPUT_DIR, CONST_POSITIONS,
                            CONST_MACHINE_INTERIOR, CONST_LABEL_CLEAR, CONST_LABEL_VIOLATED, CONST_LABEL_INVALID, Segments,
                            Opening)
 
@@ -65,33 +65,29 @@ from plan_rotation import (CONST_CASES, CONST_TAUGHT_VIAS, CONST_STATION_POINTS,
 Description:
     Initialization of constants.
 """
-# The paths that can be replayed: number -> (case, the variants shown one after the other, scope,
-# name). 'whole': the whole case as written (Data/Programs/sf1_plc_v4/ taught, Data/Generated/
-# optimised); 'rotation': its rotation sequence only, home -> ... -> home.
-#   Unit [Dict<int, Tuple<int, Tuple<string>, string, string>>]
+# The paths that can be replayed, each case 17 home -> home: number -> (the variants shown one after
+# the other, name). Taught: Data/Programs/sf1_plc_v4/; optimised: Data/Generated/.
+#   Unit [Dict<int, Tuple<Tuple<string>, string>>]
 CONST_CATALOGUE = {
-    1: (17, ('taught',), 'whole', 'case 17 taught (whole case)'),
-    2: (17, ('optimised',), 'whole', 'case 17 optimised (whole case)'),
-    3: (18, ('taught',), 'whole', 'case 18 taught (whole case)'),
-    4: (18, ('optimised',), 'whole', 'case 18 optimised (whole case)'),
-    5: (17, ('taught', 'optimised'), 'rotation', 'case 17 rotation sequence only (home -> home), taught then optimised'),
-    6: (18, ('taught', 'optimised'), 'rotation', 'case 18 rotation sequence only (home -> home), taught then optimised'),
+    1: (('taught',), 'case 17 taught (home -> home)'),
+    2: (('optimised',), 'case 17 optimised (home -> home)'),
+    3: (('taught', 'optimised'), 'case 17 taught then optimised (home -> home), with the strict comparison'),
 }
 # The files of each variant: (points, motion sequence).
 #   Unit [Dict<string, Tuple<string, string>>]
-CONST_FILES = {'taught': (os.path.join(CONST_PROGRAM_DIR, 'sf1_plc_v4_case_%d.urscript'),
-                          os.path.join(CONST_PROGRAM_DIR, 'sf1_plc_v4_case_%d_sequence.script')),
-               'optimised': (os.path.join(CONST_OUTPUT_DIR, 'SF1_Rotation_%d.urscript'),
-                             os.path.join(CONST_OUTPUT_DIR, 'SF1_Rotation_%d_Sequence.script'))}
-# The gripper state on entering a case: holding its part. Owner, 2026-10-18: the robot holds the part
-# from the start of the case, places it into the magazine and releases it, picks it up again and
-# returns home holding it; the gripper is open only between the release and the re-pick (S2).
+CONST_FILES = {'taught': (os.path.join(CONST_PROGRAM_DIR, 'sf1_plc_v4_case_%d.urscript' % CONST_CASE),
+                          os.path.join(CONST_PROGRAM_DIR, 'sf1_plc_v4_case_%d_sequence.script' % CONST_CASE)),
+               'optimised': (os.path.join(CONST_OUTPUT_DIR, 'SF1_Rotation_%d.urscript' % CONST_CASE),
+                             os.path.join(CONST_OUTPUT_DIR, 'SF1_Rotation_%d_Sequence.script' % CONST_CASE))}
+# The gripper state at home: holding the part. Owner, 2026-10-18: the robot holds the part from the
+# start of the case, places it into the magazine and releases it, picks it up again and returns home
+# holding it; the gripper is open only between the release and the re-pick (S2).
 #   Unit [string]
 CONST_ENTRY_STATE = 'holding'
 # Frames per second of the replay; the playback time of a move is its estimated duration / speed.
 #   Unit [float] (1/s)
 CONST_FPS = 30.0
-# The strict comparison of entries 5 and 6: S1 - S3 of both variants judged by the generated rule.
+# The strict comparison of entry 3: S1 - S3 of both variants judged by the generated rule.
 #   Unit [string]
 CONST_STRICT_CHECKED = 'keeps the generated rule'
 CONST_STRICT_FAILED = 'fails the generated rule'
@@ -144,53 +140,33 @@ def Catalogue_Text() -> str:
         (1) parameter [string]: The lines.
     """
 
-    return '\n'.join('  %d  %s' % (number, entry[3]) for number, entry in sorted(CONST_CATALOGUE.items()))
+    return '\n'.join('  %d  %s' % (number, entry[1]) for number, entry in sorted(CONST_CATALOGUE.items()))
 
 
-def Load_Variant(case: int, variant: str) -> tp.Tuple[tp.List[Motion_Str], tp.Dict]:
+def Load_Variant(variant: str) -> tp.Tuple[tp.List[Motion_Str], tp.Dict]:
     """
     Description:
-        The operations of one variant of a case and its points (the variant's own points file).
+        The operations of one variant and its points (the variant's own points file).
 
     Args:
-        (1) case [int]: 17 or 18.
-        (2) variant [string]: 'taught' or 'optimised'.
+        (1) variant [string]: 'taught' or 'optimised'.
 
     Returns:
         (1) parameter [Tuple<List<Motion_Str>, Dict<string, Robot_Point_Str>>]: Operations and points.
     """
 
-    points_file, sequence_file = (name % case for name in CONST_FILES[variant])
+    points_file, sequence_file = CONST_FILES[variant]
     with open(points_file, encoding='utf-8') as handle:
         points = Read_URScript(handle.read()).Points
     with open(sequence_file, encoding='utf-8') as handle:
         return Read_Motion_Sequence(handle.read()), points
 
 
-def Rotation_Only(operations: tp.List[Motion_Str], home: str) -> tp.List[Motion_Str]:
-    """
-    Description:
-        The rotation sequence of a whole case: from its first move to home to its last, inclusive.
-
-    Args:
-        (1) operations [List<Motion_Str>]: The whole case.
-        (2) home [string]: The home point's name.
-
-    Returns:
-        (1) parameter [List<Motion_Str>]: The operations of home -> ... -> home.
-    """
-
-    homes = [k for k, o in enumerate(operations) if o.Kind == 'movej' and o.Target == home]
-    if len(homes) < 2:
-        raise URScript_Error_Cls('The sequence moves to %s %d time(s); a rotation sequence needs two.' % (home, len(homes)))
-    return operations[homes[0]:homes[-1] + 1]
-
-
 def Build_Moves(operations: tp.List[Motion_Str], points: tp.Dict, cfg: Cell_Configuration_Str) -> tp.List[Move_Str]:
     """
     Description:
         The moves of a path from its operations. The path starts at its first target (the robot
-        enters a case where the previous case left it). A movej is joint-linear, timed by the
+        is at home holding the part). A movej is joint-linear, timed by the
         trapezoid of its leading joint with the line's a and v; a movel is the straight TCP line to
         the DH TCP of its target's _q, solved for joints step by step (Linear_Path), timed by the
         trapezoid on the TCP path. Blends are not replayed: every move stops at its target. A gripper
@@ -346,22 +322,21 @@ def Move_Text(move: Move_Str) -> str:
     return '%s -> %s (%s%s)' % (move.Kind, move.Target, move.Rule, ', ' + section if section else '')
 
 
-def Paths(case: int, points: tp.Dict, generated: tp.Dict, segment: str) -> tp.Dict[str, tp.List[np.ndarray]]:
+def Paths(points: tp.Dict, generated: tp.Dict, segment: str) -> tp.Dict[str, tp.List[np.ndarray]]:
     """
     Description:
         The taught and the optimised path of one segment.
 
     Args:
-        (1) case [int]: 17 or 18.
-        (2) points [Dict<string, Robot_Point_Str>]: The program's points.
-        (3) generated [Dict<string, Robot_Point_Str>]: The points of the generated output.
-        (4) segment [string]: 'S1', 'S2' or 'S3'.
+        (1) points [Dict<string, Robot_Point_Str>]: The program's points.
+        (2) generated [Dict<string, Robot_Point_Str>]: The points of the generated output.
+        (3) segment [string]: 'S1', 'S2' or 'S3'.
 
     Returns:
         (1) parameter [Dict<string, List<Vector<float> 1x6>>]: 'taught' and 'optimised'.
     """
 
-    start, goal = Segments(case)[segment]
+    start, goal = Segments()[segment]
     prefix = 'via_%s_%s_' % (start, goal)
     vias = sorted(name for name in generated if name.startswith(prefix))
     return {'taught': [np.asarray(points[n].Q) for n in [start] + CONST_TAUGHT_VIAS[segment] + [goal]],
@@ -600,10 +575,10 @@ def main():
     Description:
         Replay a path of the catalogue in one viewer window: movej joint-linear, movel on its
         straight TCP line, at the estimated real time times --speed, the gripper switching between
-        the case's holding opening and open at the gripper actions. Every move is labelled by the
+        case 17's holding opening and open at the gripper actions. Every move is labelled by the
         rule of its kind (taught lines: taught rule; generated movej: generated rule); a move inside
-        machine (a) is labelled "model not valid here" (KNOWN_ISSUES). Entries 5 and 6 also print
-        the strict comparison: S1 - S3 of both variants judged by the generated rule.
+        machine (a) is labelled "model not valid here" (KNOWN_ISSUES). Entry 3 also prints the
+        strict comparison: S1 - S3 of both variants judged by the generated rule.
 
             macOS:   .venv/bin/mjpython Example/replay_rotation.py --path 2
             List:    .venv/bin/python Example/replay_rotation.py --list
@@ -614,7 +589,7 @@ def main():
         (geom group 3) shown; --with-stl loads the STL (geom group 1) as well.
     """
 
-    parser = argparse.ArgumentParser(description='Replay a taught or optimised path of the rotation cases.')
+    parser = argparse.ArgumentParser(description='Replay the taught or optimised rotation sequence of case 17.')
     parser.add_argument('--config', default=CONST_DEFAULT_CONFIG_FILE, help='the cell configuration (default: %(default)s)')
     parser.add_argument('--path', type=int, default=0, help='the catalogue number (without it the catalogue is printed and asked)')
     parser.add_argument('--list', action='store_true', help='print the catalogue and exit')
@@ -633,21 +608,18 @@ def main():
     number = Choose_Path(args.path)
     if not number:
         return 1
-    case, variants, scope, name = CONST_CATALOGUE[number]
+    variants, name = CONST_CATALOGUE[number]
     print('[WARNING] Simulation passed != safe on the robot.')
     try:
         cfg = Load_Configuration(args.config)
-        openings = {state: Opening(cfg, case, state) for state in ('holding', 'open')}
-        loaded = {variant: Load_Variant(case, variant) for variant in variants}
-        paths = {}
-        for variant, (operations, points) in loaded.items():
-            chosen = Rotation_Only(operations, CONST_CASES[case]['home']) if scope == 'rotation' else operations
-            paths[variant] = (chosen[0].Target, Build_Moves(chosen, points, cfg))
+        openings = {state: Opening(cfg, state) for state in ('holding', 'open')}
+        loaded = {variant: Load_Variant(variant) for variant in variants}
+        paths = {variant: (operations[0].Target, Build_Moves(operations, points, cfg)) for variant, (operations, points) in loaded.items()}
     except (Configuration_Error_Cls, URScript_Error_Cls, Kinematics_Error_Cls, OSError) as error:
         print('[ERROR] %s' % error)
         return 1
     print('[INFO] Path %d: %s. Gripper: holding %.1f mm (%s), open %.1f mm.'
-          % (number, name, openings['holding'] * 1e3, cfg.Holding_Openings[case][1], openings['open'] * 1e3))
+          % (number, name, openings['holding'] * 1e3, cfg.Holding_Openings[CONST_CASE][1], openings['open'] * 1e3))
     t0 = time.time()
     with_visual = args.with_stl and not (args.headless or args.screenshots)
     scenes = {'holding': Scene_Cls(dataclasses.replace(cfg, Opening=openings['holding']), with_environment=True,
@@ -666,14 +638,14 @@ def main():
         else:
             counts = Check_Moves(moves, scenes, cfg, station_q)
             print('[INFO] %s: %s.' % (variant, '; '.join('%d move(s) %s' % (n, label) for label, n in sorted(counts.items()))))
-    if scope == 'rotation' and not args.skip_check:
+    if len(variants) == 2 and not args.skip_check:
         # The strict comparison: S1 - S3 of both variants by the generated rule (why S2 was optimised).
         for segment in ('S1', 'S2', 'S3'):
             scene = scenes['open' if segment == 'S2' else 'holding']
-            for variant, path in Paths(case, program_points, loaded['optimised'][1], segment).items():
+            for variant, path in Paths(program_points, loaded['optimised'][1], segment).items():
                 label, samples, violations = Label(scene, path, station_q)
                 print('[INFO] Strict comparison (generated rule), case %d %s %s (%d via points): %s - %d samples, %d violations.'
-                      % (case, segment, variant, len(path) - 2, label, samples, violations))
+                      % (CONST_CASE, segment, variant, len(path) - 2, label, samples, violations))
     playlist = [(variant, start, moves, Frames(moves, args.speed)) for variant, (start, moves) in paths.items()]
     if args.headless or args.screenshots:
         Print_Steps(playlist, openings, args.speed)

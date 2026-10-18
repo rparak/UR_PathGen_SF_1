@@ -478,6 +478,27 @@ def Program_Entries(lines: tp.Sequence[Program_Line_Str]) -> tp.List[tp.Tuple[st
     return entries
 
 
+def Rotation_Sequence(lines: tp.Sequence[Program_Line_Str], home: str) -> tp.List[Program_Line_Str]:
+    """
+    Description:
+        The rotation sequence of a case's program lines: from its first movej to home to its last,
+        inclusive (home -> ... -> home). Refuses a case that does not move to home exactly twice.
+
+    Args:
+        (1) lines [List<Program_Line_Str>]: The case's program lines in order (Read_Program_Excerpt).
+        (2) home [string]: The home point's name.
+
+    Returns:
+        (1) parameter [List<Program_Line_Str>]: The lines of home -> ... -> home.
+    """
+
+    homes = [k for k, line in enumerate(lines) if line.Kind == 'movej' and line.Target == home]
+    if len(homes) != 2:
+        raise URScript_Error_Cls('The case moves to %s %d time(s); the rotation sequence needs exactly two (home -> ... -> home).'
+                                 % (home, len(homes)))
+    return list(lines[homes[0]:homes[1] + 1])
+
+
 def Read_Motion_Sequence(text: str) -> tp.List[Motion_Str]:
     """
     Description:

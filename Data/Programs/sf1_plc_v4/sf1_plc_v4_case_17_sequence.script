@@ -1,10 +1,7 @@
-# Case 17 of sf1_plc_v4.script as taught, the whole case: every movej and movel in program order,
-# verbatim (targets, a, v, r), the gripper actions as comments. Left out: the Robotiq URCap code,
-# the PLC I/O and the waits. The robot enters the case where the previous case left it.
+# Case 17 of sf1_plc_v4.script as taught, the rotation sequence home -> home: every movej and movel
+# in program order, verbatim (targets, a, v, r), the gripper actions as comments. Left out: the
+# Robotiq URCap code, the PLC I/O and the waits.
 # Points: sf1_plc_v4_case_17.urscript. Written by Example/write_taught_programs.py.
-movej(get_inverse_kin(load_hower_p, qnear=load_hower_q), a=0.17453292519943295, v=0.17453292519943295)
-movej(get_inverse_kin(load3_p, qnear=load3_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
-movej(get_inverse_kin(load2_p, qnear=load2_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
 movej(get_inverse_kin(home_p, qnear=home_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
 movej(get_inverse_kin(Waypoint_1_p, qnear=Waypoint_1_q), a=1.3962634015954636, v=1.0471975511965976, r=0.05)
 movej(get_inverse_kin(drop_rotate_1_p, qnear=drop_rotate_1_q), a=1.3962634015954636, v=1.0471975511965976)
@@ -20,8 +17,3 @@ movej(get_inverse_kin(pick_rotate_1_p, qnear=pick_rotate_1_q), a=1.3962634015954
 movel(Waypoint_6_p, a=1.2, v=0.25)
 movej(get_inverse_kin(Waypoint_2_p, qnear=Waypoint_2_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
 movej(get_inverse_kin(home_p, qnear=home_q), a=1.3962634015954636, v=1.0471975511965976)
-movej(get_inverse_kin(load2_p, qnear=load2_q), a=1.3962634015954636, v=1.0471975511965976)
-movej(get_inverse_kin(load3_p, qnear=load3_q), a=1.3962634015954636, v=1.0471975511965976)
-movej(get_inverse_kin(Waypoint_10_p, qnear=Waypoint_10_q), a=1.3962634015954636, v=1.0471975511965976)
-movej(get_inverse_kin(Waypoint_13_p, qnear=Waypoint_13_q), a=0.17453292519943295, v=0.17453292519943295)
-movej(get_inverse_kin(bench_drop_11_p, qnear=bench_drop_11_q), a=0.08726646259971647, v=0.08726646259971647)

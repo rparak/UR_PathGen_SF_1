@@ -56,30 +56,16 @@ Description:
 # The program's movej acceleration and speed, typed from sf1_plc_v4.script.
 #   Unit [float] (rad/s^2, rad/s)
 CONST_A, CONST_V = 1.3962634015954636, 1.0471975511965976
-# The cases: station points and the three generated segments (owner).
-#   Unit [Dict]
-CONST_CASES = {
-    17: {'drop': 'drop_rotate_1', 'below': 'Waypoint_4', 'retreat': 'Waypoint_5', 'approach': 'Waypoint_18',
-         'pick': 'pick_rotate_1', 'above': 'Waypoint_6'},
-    18: {'drop': 'drop_rotate_2', 'below': 'Waypoint_7', 'retreat': 'Waypoint_5', 'approach': 'Waypoint_11',
-         'pick': 'pick_rotate_2', 'above': 'Waypoint_8'},
-}
-# The gripper opening of each case's segments, typed here: S1 and S3 hold the case's part
-# (Tool.Holding_Openings: case 17 the 50 x 50 mm part, owner; case 18 assumed equal, KNOWN_ISSUES),
-# S2 runs open at the full 85 mm stroke (owner, 2026-10-18, SPEC 4.9).
-#   Unit [Dict<Tuple<int, string>, float>] (m)
-CONST_OPENING = {(case, segment): (0.085 if segment == 'S2' else 0.050) for case in (17, 18) for segment in ('S1', 'S2', 'S3')}
-CONST_STATION_POINTS = ('drop_rotate_1', 'drop_rotate_2', 'Waypoint_4', 'Waypoint_7', 'Waypoint_5', 'Waypoint_18',
-                        'Waypoint_11', 'pick_rotate_1', 'pick_rotate_2', 'Waypoint_6', 'Waypoint_8')
-# The moves of each whole case before and after its rotation sequence (out of and back into machine
-# (a)), typed from the program, and whether the arrival at home that opens the rotation sequence is
-# written as generated: case 17's program line blends there (r=0.01) into S1, case 18's does not.
-#   Unit [Dict<int, Tuple<string>>], [Dict<int, bool>]
-CONST_BEFORE = {17: ('load_hower', 'load3', 'load2'), 18: ('Waypoint_16', 'load3', 'load2')}
-CONST_AFTER = {17: ('load2', 'load3', 'Waypoint_10', 'Waypoint_13', 'bench_drop_11'),
-               18: ('load2', 'load3', 'Waypoint_12', 'bench_rect_drop', 'bench_drop_12')}
-CONST_LOADING = {case: CONST_BEFORE[case] + CONST_AFTER[case] for case in (17, 18)}
-CONST_GENERATED_ARRIVAL = {17: True, 18: False}
+# The deliverable, case 17 home -> home: its station points and the three generated segments
+# (owner, 2026-10-18).
+#   Unit [Dict<string, string>]
+CONST_CASE = {'drop': 'drop_rotate_1', 'below': 'Waypoint_4', 'retreat': 'Waypoint_5', 'approach': 'Waypoint_18',
+              'pick': 'pick_rotate_1', 'above': 'Waypoint_6'}
+# The gripper opening of each segment, typed here: S1 and S3 hold the 50 x 50 mm part (case 17's
+# Tool.Holding_Openings, owner), S2 runs open at the full 85 mm stroke (owner, 2026-10-18, SPEC 4.9).
+#   Unit [Dict<string, float>] (m)
+CONST_OPENING = {'S1': 0.050, 'S2': 0.085, 'S3': 0.050}
+CONST_STATION_POINTS = ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5', 'Waypoint_18', 'pick_rotate_1', 'Waypoint_6')
 # Via points the taught program uses per segment.
 #   Unit [Dict<string, int>]
 CONST_TAUGHT_VIAS = {'S1': 1, 'S2': 3, 'S3': 1}
@@ -95,8 +81,8 @@ CONST_REDUCED_SEED = 7
 CONST_STATION_BOXES, CONST_BOX_DISTMAX = ('station_bracket',), 0.200
 
 
-def _Segments(case):
-    c = CONST_CASES[case]
+def _Segments():
+    c = CONST_CASE
     return {'S1': ('home', c['drop']), 'S2': (c['retreat'], c['approach']), 'S3': (c['above'], 'home')}
 
 
@@ -119,11 +105,11 @@ def program(root):
 def scenes(cfg):
     """
     Description:
-        The scene with the environment at each segment opening. The configured holding openings must
-        be the ones typed here.
+        The scene with the environment at each segment opening. The configured holding opening must
+        be the one typed here.
     """
 
-    assert {case: cfg.Holding_Openings[case][0] for case in (17, 18)} == {17: CONST_OPENING[17, 'S1'], 18: CONST_OPENING[18, 'S1']}
+    assert cfg.Holding_Openings[17][0] == CONST_OPENING['S1']
     return {o: Scene_Cls(dataclasses.replace(cfg, Opening=o)) for o in sorted(set(CONST_OPENING.values()))}
 
 
@@ -131,19 +117,19 @@ def scenes(cfg):
 def planners(program, scenes):
     """
     Description:
-        A planner per opening, with all fixed station points, penalty weight 0.
+        A planner per segment, with the fixed station points, penalty weight 0.
     """
 
     points, _ = program
     station_q = [points[name].Q for name in CONST_STATION_POINTS]
-    return {key: Planner_Cls(scenes[o], station_q, 0.0, CONST_REDUCED) for key, o in CONST_OPENING.items()}
+    return {segment: Planner_Cls(scenes[o], station_q, 0.0, CONST_REDUCED) for segment, o in CONST_OPENING.items()}
 
 
-def _Output(root, case):
+def _Output(root):
     folder = os.path.join(root, 'Data', 'Generated')
-    with open(os.path.join(folder, 'SF1_Rotation_%d.urscript' % case), encoding='utf-8') as handle:
+    with open(os.path.join(folder, 'SF1_Rotation_17.urscript'), encoding='utf-8') as handle:
         document = Read_URScript(handle.read())
-    with open(os.path.join(folder, 'SF1_Rotation_%d_Sequence.script' % case), encoding='utf-8') as handle:
+    with open(os.path.join(folder, 'SF1_Rotation_17_Sequence.script'), encoding='utf-8') as handle:
         sequence = handle.read()
     return document, sequence
 
@@ -171,8 +157,7 @@ def test_the_duration_estimates_match_hand_computed_values():
     assert Linear_Duration([0.0] * 6, [0.0, 0.04, 0, 0, 0, 0], 1.2, 0.25) == pytest.approx(0.36515, abs=1e-5)
 
 
-@pytest.mark.parametrize('case', sorted(CONST_CASES))
-def test_the_committed_paths_pass_the_independent_verification(root, program, planners, case):
+def test_the_committed_paths_pass_the_independent_verification(root, program, planners):
     """
     Description:
         Every generated segment of the committed output, rebuilt from its via points, passes
@@ -181,10 +166,10 @@ def test_the_committed_paths_pass_the_independent_verification(root, program, pl
     """
 
     points, _ = program
-    document, _ = _Output(root, case)
-    for segment, (start, goal) in _Segments(case).items():
+    document, _ = _Output(root)
+    for segment, (start, goal) in _Segments().items():
         path, vias = _Path(document, points, start, goal)
-        planners[case, segment].Verify_Path(path)
+        planners[segment].Verify_Path(path)
         assert len(vias) <= CONST_TAUGHT_VIAS[segment] - (1 if segment == 'S2' else 0)
 
 
@@ -200,8 +185,7 @@ def _Box_Distance(scene, robot, box, q):
     return distance
 
 
-@pytest.mark.parametrize('case', sorted(CONST_CASES))
-def test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end(root, cfg, program, scenes, case):
+def test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end(root, cfg, program, scenes):
     """
     Description:
         The station boxes (Environment.Added_Boxes, not in the STL; fitted, not measured) are in the
@@ -215,10 +199,10 @@ def test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end(r
     """
 
     points, _ = program
-    document, _ = _Output(root, case)
+    document, _ = _Output(root)
     station_q = [points[name].Q for name in CONST_STATION_POINTS]
-    for segment, (start, goal) in _Segments(case).items():
-        scene = scenes[CONST_OPENING[case, segment]]
+    for segment, (start, goal) in _Segments().items():
+        scene = scenes[CONST_OPENING[segment]]
         m = scene.Model
         robot = [g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0
                  and not m.body(m.geom_bodyid[g]).name.startswith('env') and m.body(m.geom_bodyid[g]).name != 'base']
@@ -237,18 +221,16 @@ def test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end(r
                         segment, name, leg, k, distance, taught)
 
 
-@pytest.mark.parametrize('case', sorted(CONST_CASES))
-def test_the_station_points_keep_their_tokens(root, program, case):
+def test_the_station_points_keep_their_tokens(root, program):
     """
     Description:
-        The output holds home, the station points and the points of the moves before and after the
-        rotation sequence, each the program's point token for token; every other point is a
-        generated via point.
+        The output holds home and the station points, each the program's point token for token, and
+        nothing of the loading moves; every other point is a generated via point.
     """
 
     points, lines = program
-    document, _ = _Output(root, case)
-    fixed = {'home'} | set(CONST_CASES[case].values()) | set(CONST_LOADING[case])
+    document, _ = _Output(root)
+    fixed = {'home'} | set(CONST_CASE.values())
     for name, point in document.Points.items():
         if name in fixed:
             assert (point.P_Tokens, point.Q_Tokens) == (points[name].P_Tokens, points[name].Q_Tokens)
@@ -257,34 +239,27 @@ def test_the_station_points_keep_their_tokens(root, program, case):
     assert fixed <= set(document.Points)
 
 
-@pytest.mark.parametrize('case', sorted(CONST_CASES))
-def test_the_sequence_file_has_the_program_structure(root, program, case):
+def test_the_sequence_file_has_the_program_structure(root, program):
     """
     Description:
-        The sequence file is the whole case. Its motion lines are, in order: the program's moves
-        before the rotation sequence verbatim; the arrival at home (generated with r=0 where the
-        program blends into S1, else verbatim); S1's via points and the drop as generated movej
-        (joint targets, the program's a and v, r=0); the drop's movel, the retreat and the pick
-        verbatim; S2 and S3 as generated movej ending at home; the program's moves after the
-        rotation sequence verbatim. The gripper actions appear as comments; the header says
-        simulation is not safety.
+        The sequence file is case 17 home -> home. Its motion lines are, in order: the start at home
+        (generated with r=0: the program blends into S1); S1's via points and the drop as generated
+        movej (joint targets, the program's a and v, r=0); the drop's movel, the retreat and the pick
+        verbatim; S2 and S3 as generated movej ending at home. Nothing of the loading moves. The
+        gripper actions appear as comments; the header says simulation is not safety.
     """
 
     points, lines = program
-    document, sequence = _Output(root, case)
-    c = CONST_CASES[case]
+    document, sequence = _Output(root)
+    c = CONST_CASE
     def Generated_Lines(names):
         return ['movej(%s_q, a=%s, v=%s, r=0)' % (n, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN) for n in names]
-    def Verbatim_Lines(kind, target, which=0):
-        return [[line.Raw.strip() for line in lines[case] if line.Kind == kind and line.Target == target][which]]
-    def Loading(names, which):
-        return [line for n in names for line in Verbatim_Lines('movej', n, which if n in ('load2', 'load3') else 0)]
-    vias = {s: _Path(document, points, a, b)[1] for s, (a, b) in _Segments(case).items()}
-    arrival = Generated_Lines(['home']) if CONST_GENERATED_ARRIVAL[case] else Verbatim_Lines('movej', 'home', 0)
-    expected = (Loading(CONST_BEFORE[case], 0) + arrival
-                + Generated_Lines(vias['S1'] + [c['drop']]) + Verbatim_Lines('movel', c['below']) + Verbatim_Lines('movej', c['retreat'])
-                + Generated_Lines(vias['S2'] + [c['approach']]) + Verbatim_Lines('movej', c['pick']) + Verbatim_Lines('movel', c['above'])
-                + Generated_Lines(vias['S3'] + ['home']) + Loading(CONST_AFTER[case], 1))
+    def Verbatim_Lines(kind, target):
+        return [[line.Raw.strip() for line in lines[17] if line.Kind == kind and line.Target == target][0]]
+    vias = {s: _Path(document, points, a, b)[1] for s, (a, b) in _Segments().items()}
+    expected = (Generated_Lines(['home'] + vias['S1'] + [c['drop']]) + Verbatim_Lines('movel', c['below'])
+                + Verbatim_Lines('movej', c['retreat']) + Generated_Lines(vias['S2'] + [c['approach']])
+                + Verbatim_Lines('movej', c['pick']) + Verbatim_Lines('movel', c['above']) + Generated_Lines(vias['S3'] + ['home']))
     motion = [line for line in sequence.splitlines() if line and not line.startswith('#')]
     assert motion == expected
     comments = [line for line in sequence.splitlines() if line.startswith('# Gripper')]
@@ -292,23 +267,21 @@ def test_the_sequence_file_has_the_program_structure(root, program, case):
     assert 'Simulation passed != safe on the robot' in sequence
 
 
-@pytest.mark.parametrize('case', sorted(CONST_CASES))
-def test_the_optimised_case_is_the_taught_case_with_s1_to_s3_replaced(root, case):
+def test_the_optimised_case_is_the_taught_case_with_s1_to_s3_replaced(root):
     """
     Description:
-        The optimised whole case (Data/Generated/) and the simplified taught program
+        The optimised home -> home (Data/Generated/) and the simplified taught program
         (Data/Programs/sf1_plc_v4/) differ only in S1 - S3: aligned line by line, every taught line
         that is not kept is a move of S1 - S3 (to Waypoint_1/2/3, the drop, the approach or the
-        closing home) or, where the program blends into S1, the arrival at home; every optimised
-        line that is not taught is a generated movej (joint target, r=0). The gripper comments are
-        identical, so the two files can be compared and pasted side by side.
+        closing home) or the blended start at home; every optimised line that is not taught is a
+        generated movej (joint target, r=0). The gripper comments are identical, so the two files
+        can be compared and pasted side by side.
     """
 
-    c = CONST_CASES[case]
-    with open(os.path.join(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_case_%d_sequence.script' % case),
-              encoding='utf-8') as handle:
+    c = CONST_CASE
+    with open(os.path.join(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_case_17_sequence.script'), encoding='utf-8') as handle:
         taught = [line for line in handle.read().splitlines() if not line.startswith('#') or line.startswith('# Gripper')]
-    optimised = [line for line in _Output(root, case)[1].splitlines() if not line.startswith('#') or line.startswith('# Gripper')]
+    optimised = [line for line in _Output(root)[1].splitlines() if not line.startswith('#') or line.startswith('# Gripper')]
     generated = re.compile(r'^movej\(\w+_q, a=%s, v=%s, r=0\)$' % (re.escape(CONST_MOVEJ_A_TOKEN), re.escape(CONST_MOVEJ_V_TOKEN)))
     replaced_targets = {'Waypoint_1', 'Waypoint_2', 'Waypoint_3', c['drop'], c['approach'], 'home'}
     removed, added = [], []
@@ -318,7 +291,7 @@ def test_the_optimised_case_is_the_taught_case_with_s1_to_s3_replaced(root, case
             added += optimised[j1:j2]
     targets = [re.match(r'^movej\(get_inverse_kin\((\w+)_p, qnear=\1_q\)', line).group(1) for line in removed]
     assert set(targets) <= replaced_targets, targets
-    assert targets.count('home') == (2 if CONST_GENERATED_ARRIVAL[case] else 1)
+    assert targets.count('home') == 2
     assert all(generated.match(line) for line in added), added
     assert [line for line in taught if line.startswith('# Gripper')] == [line for line in optimised if line.startswith('# Gripper')]
 
@@ -332,7 +305,7 @@ def test_a_reduced_planning_run_is_byte_identical_twice(cfg, program):
 
     points, _ = program
     station_q = [points[name].Q for name in CONST_STATION_POINTS]
-    scene = Scene_Cls(dataclasses.replace(cfg, Opening=CONST_OPENING[17, 'S3']))
+    scene = Scene_Cls(dataclasses.replace(cfg, Opening=CONST_OPENING['S3']))
     texts = []
     for _ in range(2):
         result = Planner_Cls(scene, station_q, 0.0, CONST_REDUCED).Plan(points['Waypoint_6'].Q, points['home'].Q, CONST_REDUCED_SEED)
@@ -381,8 +354,8 @@ def test_the_penalty_counts_only_far_from_the_station(planners, program):
     """
 
     points, _ = program
-    far = planners[17, 'S2'].Segment_Penalty(np.array(points['hover_obj_1'].Q), np.array(points['pick_obj_1'].Q))
-    near = planners[17, 'S1'].Segment_Penalty(np.array(points['drop_rotate_1'].Q), np.array(points['Waypoint_4'].Q))
+    far = planners['S2'].Segment_Penalty(np.array(points['hover_obj_1'].Q), np.array(points['pick_obj_1'].Q))
+    near = planners['S1'].Segment_Penalty(np.array(points['drop_rotate_1'].Q), np.array(points['Waypoint_4'].Q))
     assert far >= 0.030 + 0.0027
     assert near == 0.0
 
@@ -399,7 +372,7 @@ def test_rrt_connect_is_reproducible_with_both_sample_sources(planners, program)
 
     points, _ = program
     start, goal = np.array(points['Waypoint_5'].Q), np.array(points['Waypoint_18'].Q)
-    paths = [planners[17, 'S2'].RRT_Connect(start, goal, np.random.default_rng([8, 0])) for _ in range(2)]
+    paths = [planners['S2'].RRT_Connect(start, goal, np.random.default_rng([8, 0])) for _ in range(2)]
     assert paths[0] is not None and len(paths[0]) > 2
     assert np.array(paths[0]).tobytes() == np.array(paths[1]).tobytes()
 

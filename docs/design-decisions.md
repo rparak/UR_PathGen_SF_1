@@ -510,9 +510,8 @@ Pinned by `test/Planner/test_core.py::test_a_reduced_planning_run_is_byte_identi
 ## The holding opening is configured per program case
 
 **Decision.** `Tool.Holding_Openings` gives the gripper opening while the part of each program
-case is held, with its source: case 17 = 0.050 m (owner), case 18 = 0.050 m (assumption,
-`KNOWN_ISSUES.md`). Planning, the verification of the committed output and the replay take it per
-case; open is the full 85 mm stroke (a gripper property, a code constant). `Tool.Opening` stays
+case is held, with its source: case 17 = 0.050 m (owner). Planning, the verification of the
+committed output and the replay take case 17's entry; open is the full 85 mm stroke (a gripper property, a code constant). `Tool.Opening` stays
 the opening of a scene that names no case (the demo, the tests).
 
 **Why.** Cases 17 and 18 are independent and probably handle parts of different size (owner,
@@ -525,8 +524,12 @@ the owner.
 
 **Revisit if** a case handles more than one part, or the URCap's position for a part is measured.
 
+*Corrected 2026-10-18: case 18 = 0.050 m (an assumption, its part's size unknown) was listed while
+case 18 was a deliverable; it is removed with it. The ground-truth check of case 18 types its own
+assumed opening (`test/Scene/test_station.py`).*
+
 Pinned by `test/Configuration/test_core.py::test_the_shipped_configuration_loads_in_si_units`,
-`test/Example/test_plan_rotation.py` and the per-case scenes of `test/Scene/test_station.py` and
+`test/Example/test_plan_rotation.py` and the scenes of `test/Scene/test_station.py` and
 `test/Planner/test_core.py`.
 
 ## Inside machine (a) the label is "model not valid here", not a collision
@@ -592,5 +595,31 @@ inside it in case 18 (penalty 0.002 m).
 penalty weight changes, or the owner prefers the clearance of the taught S2 to the time.
 
 Pinned by `test/Planner/test_core.py::test_the_committed_paths_pass_the_independent_verification`
-and `test/Example/test_replay.py::test_every_path_visits_its_moves_in_program_order` (entries 5 and 6
-print the strict comparison).
+and `test/Example/test_replay.py::test_every_path_visits_its_moves_in_program_order` (entry 3 prints
+the strict comparison).
+
+## The deliverable is case 17 home -> home; case 18 and the whole cases are ground truth only
+
+**Decision.** The planner, the taught-program writer, the replay and `Data/` deliver one sequence:
+case 17 of `sf1_plc_v4.script` from home to home, taught (`Data/Programs/sf1_plc_v4/sf1_plc_v4_case_17*`)
+and optimised (`Data/Generated/SF1_Rotation_17*`: S1 home -> drop_rotate_1, S2 Waypoint_5 ->
+Waypoint_18 and S3 Waypoint_6 -> home generated, the station lines verbatim). The replay catalogue
+is 1 taught, 2 optimised, 3 both with the strict comparison. The program extract (every learned
+point, the whole cases 17 and 18) and the tests that check the model against real program segments
+stay: the taught replay of cases 17 and 18 and the placement of the grasp points. The generated rule's station points are case 17's six.
+
+**Why.** Owner, 2026-10-18: this exact taught sequence and its optimised version are the only
+deliverable; the holder exists so that the robot can grip the part from the other side. The loading
+moves run inside machine (a), where the model is not valid (`KNOWN_ISSUES.md`), so a whole-case
+deliverable carried lines the tool cannot check. The other cases still run on the real robot, so
+they remain the evidence the fitted geometry is checked against.
+
+**Alternatives.** Keeping case 18 as a second deliverable: rejected by the owner; its part's size
+was an assumption. Removing case 18 from the tests as well: rejected, it is ground truth that
+constrains the station geometry as much as case 17.
+
+**Revisit if** the owner asks for another case or for the whole case again.
+
+Pinned by `test/Example/test_write_taught_programs.py`, `test/Planner/test_core.py::test_the_sequence_file_has_the_program_structure`,
+`test/Example/test_replay.py::test_list_prints_the_catalogue` and, for the ground truth,
+`test/Scene/test_station.py::test_the_taught_rotation_sequence_keeps_its_margins`.

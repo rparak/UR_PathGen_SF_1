@@ -31,7 +31,7 @@ import pytest
 #   ../src/URScript/Core — the reader and writer under test
 from URScript.Core import (Read_URScript, Write_URScript, Write_Movej_Sequence, Make_Generated_Point, Make_Document,
                            Format_Generated, URScript_Error_Cls, Read_Program_Excerpt, Write_Motion_Sequence, Program_Entries,
-                           Gripper_Comment, Read_Motion_Sequence)
+                           Gripper_Comment, Read_Motion_Sequence, Rotation_Sequence)
 
 """
 Description:
@@ -211,6 +211,28 @@ def test_the_case_extract_reads_in_program_order(root):
     cases = Read_Program_Excerpt(_Read_File(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_cases_17_18.script'))
     for case, order in CONST_PLC_CASE_ORDER.items():
         assert [(line.Kind, line.Target) for line in cases[case] if line.Kind != 'other'] == order
+
+
+def test_the_rotation_sequence_runs_from_the_first_home_to_the_last(root):
+    """
+    Description:
+        Rotation_Sequence returns case 17's lines from its first movej to home to its second,
+        inclusive: the moves typed from the program (between load2 before it and load2 after it),
+        the two gripper actions inside; a case that moves to home once or three times is refused.
+    """
+
+    lines = Read_Program_Excerpt(_Read_File(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_cases_17_18.script'))[17]
+    rotation = Rotation_Sequence(lines, 'home')
+    moves = [(line.Kind, line.Target) for line in rotation if line.Kind != 'other']
+    assert moves == [('movej', 'home'), ('movej', 'Waypoint_1'), ('movej', 'drop_rotate_1'), ('movel', 'Waypoint_4'),
+                     ('gripper', 'open'), ('movej', 'Waypoint_5'), ('movej', 'Waypoint_1'), ('movej', 'Waypoint_2'),
+                     ('movej', 'Waypoint_3'), ('movej', 'Waypoint_18'), ('movej', 'pick_rotate_1'), ('gripper', 'close'),
+                     ('movel', 'Waypoint_6'), ('movej', 'Waypoint_2'), ('movej', 'home')]
+    homes = [k for k, line in enumerate(lines) if line.Kind == 'movej' and line.Target == 'home']
+    with pytest.raises(URScript_Error_Cls, match='moves to home 1 time'):
+        Rotation_Sequence(lines[:homes[1]], 'home')
+    with pytest.raises(URScript_Error_Cls, match='moves to home 3 time'):
+        Rotation_Sequence(list(lines) + [lines[homes[0]]], 'home')
 
 
 @pytest.mark.parametrize('text, fragment', [

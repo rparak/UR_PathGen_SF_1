@@ -1,12 +1,8 @@
-# Case 17 of sf1_plc_v4.script, the whole case, optimised: the program's lines verbatim except the
-# transfer segments S1-S3 of the rotation sequence, which are generated movej (the program's a and v,
-# r=0). The robot enters the case where the previous case left it. Points: SF1_Rotation_17.urscript.
+# Case 17 of sf1_plc_v4.script, the rotation sequence home -> home, optimised: the station lines
+# verbatim from the program, the transfer segments S1-S3 generated movej (the program's a and v,
+# r=0). Points: SF1_Rotation_17.urscript.
 # Simulation passed != safe on the robot: run it at reduced speed first.
-# Before the rotation sequence (verbatim from the program)
-movej(get_inverse_kin(load_hower_p, qnear=load_hower_q), a=0.17453292519943295, v=0.17453292519943295)
-movej(get_inverse_kin(load3_p, qnear=load3_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
-movej(get_inverse_kin(load2_p, qnear=load2_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
-# Arrival at home (generated, r=0): the program's line blends (r=0.01) into S1, and a blend into a generated segment is not checked
+# Start at home (generated, r=0): the program's line blends (r=0.01) into S1, and a blend into a generated segment is not checked
 movej(home_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
 # S1 (generated): home -> drop_rotate_1
 movej(via_home_drop_rotate_1_01_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
@@ -25,9 +21,3 @@ movel(Waypoint_6_p, a=1.2, v=0.25)
 # S3 (generated): Waypoint_6 -> home
 movej(via_Waypoint_6_home_01_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
 movej(home_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
-# After the rotation sequence (verbatim from the program)
-movej(get_inverse_kin(load2_p, qnear=load2_q), a=1.3962634015954636, v=1.0471975511965976)
-movej(get_inverse_kin(load3_p, qnear=load3_q), a=1.3962634015954636, v=1.0471975511965976)
-movej(get_inverse_kin(Waypoint_10_p, qnear=Waypoint_10_q), a=1.3962634015954636, v=1.0471975511965976)
-movej(get_inverse_kin(Waypoint_13_p, qnear=Waypoint_13_q), a=0.17453292519943295, v=0.17453292519943295)
-movej(get_inverse_kin(bench_drop_11_p, qnear=bench_drop_11_q), a=0.08726646259971647, v=0.08726646259971647)

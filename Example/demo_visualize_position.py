@@ -44,8 +44,8 @@ from Configuration.Core import Load_Configuration, Configuration_Error_Cls, CONS
 from URScript.Core import Read_URScript, Robot_Point_Str
 #   ../Scene/Core — the scene
 from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP
-#   ../Example/plan_rotation — the program extract, the cases, the openings and the clearance label
-from plan_rotation import CONST_POSITIONS, CONST_CASES, Opening, Configuration_Label
+#   ../Example/plan_rotation — the program extract, the case, the openings and the clearance label
+from plan_rotation import CONST_POSITIONS, CONST_CASE, Opening, Configuration_Label
 
 
 def Resolve_Name(name: str, points: tp.Dict[str, Robot_Point_Str]) -> tp.Tuple[str, str]:
@@ -77,7 +77,7 @@ def main():
     """
     Description:
         Show the robot static at one learned position of the program extract, with the gripper at
-        the case's holding opening or open, and report its clearance under the taught rule.
+        case 17's holding opening or open, and report its clearance under the taught rule.
 
             macOS:  .venv/bin/mjpython Example/demo_visualize_position.py --pos home_q
             List:   .venv/bin/python Example/demo_visualize_position.py --list
@@ -92,8 +92,6 @@ def main():
     parser.add_argument('--pos', default='', help='a learned position: NAME or NAME_q (not NAME_p)')
     parser.add_argument('--list', action='store_true', help='print every learned position and exit')
     parser.add_argument('--opening', choices=('holding', 'open'), default='holding', help='gripper state (default: %(default)s)')
-    parser.add_argument('--case', type=int, choices=sorted(CONST_CASES), default=17,
-                        help='the case whose holding opening applies (default: %(default)s)')
     parser.add_argument('--with-stl', action='store_true', help='load the visual STL of the cell (default: collision geometry only)')
     parser.add_argument('--headless', action='store_true', help='report without a viewer')
     args = parser.parse_args()
@@ -114,11 +112,11 @@ def main():
     print('[WARNING] Simulation passed != safe on the robot.')
     try:
         cfg = Load_Configuration(args.config)
-        opening = Opening(cfg, args.case, args.opening)
+        opening = Opening(cfg, args.opening)
     except Configuration_Error_Cls as error:
         print('[ERROR] %s' % error)
         return 1
-    source = cfg.Holding_Openings[args.case][1] if args.opening == 'holding' else 'the full 2F-85 stroke'
+    source = cfg.Holding_Openings[CONST_CASE][1] if args.opening == 'holding' else 'the full 2F-85 stroke'
     t0 = time.time()
     with_visual = args.with_stl and not args.headless
     scene = Scene_Cls(dataclasses.replace(cfg, Opening=opening), with_environment=True, with_visual=with_visual)
@@ -126,7 +124,7 @@ def main():
           % (time.time() - t0, scene.Model.ngeom, 'loaded' if with_visual else 'not loaded'))
     q = points[name].Q
     label, violations, interior = Configuration_Label(scene, cfg, q, 'taught')
-    print('[INFO] Position %s_q, gripper %s at %.1f mm (case %d: %s).' % (name, args.opening, opening * 1e3, args.case, source))
+    print('[INFO] Position %s_q, gripper %s at %.1f mm (case %d: %s).' % (name, args.opening, opening * 1e3, CONST_CASE, source))
     for component, distance in interior:
         print('[WARNING] Within the margin of the machine (a) interior hull (component %d): %.1f mm.' % (component, distance * 1e3))
     for v in violations:
@@ -149,7 +147,7 @@ def main():
             if not with_visual:
                 viewer.opt.geomgroup[CONST_COLLISION_GROUP] = 1
         viewer.set_texts((mujoco.mjtFontScale.mjFONTSCALE_150, mujoco.mjtGridPos.mjGRID_TOPLEFT,
-                          '%s_q  gripper %s %.1f mm (case %d)' % (name, args.opening, opening * 1e3, args.case),
+                          '%s_q  gripper %s %.1f mm (case %d)' % (name, args.opening, opening * 1e3, CONST_CASE),
                           label + ('\n' + pairs if pairs else '')))
         while viewer.is_running():
             viewer.sync()

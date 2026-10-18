@@ -112,12 +112,12 @@ the grasp and unload points reach into the modelled parts on the pallet and side
 
 ## Generated transfer segments: estimates, margins without reserve, unproven space
 
-The optimised segments S1 - S3 of the rotation sequence (`Data/Generated/`) pass the full
-generated-rule check in simulation. What that does not cover:
+The optimised segments S1 - S3 of case 17's rotation sequence (`Data/Generated/`, the only
+deliverable) pass the full generated-rule check in simulation. What that does not cover:
 
 - **Durations are estimates:** a trapezoid on the leading joint with the program's a and v, a stop
   at every via point; the controller's profile, blends and the gripper's time are not modelled. The
-  cycle-time gain (about 6 s home -> home per case) is not measured.
+  cycle-time gain (about 6 s home -> home) is not measured.
 - **Clearance has no reserve beyond the margins:** the hard limits are 20 mm, and 5 mm within
   50 mm of a station point. The clearance penalty (weight 0.5 s/m, the owner's choice)
   keeps the optimised paths at 29.7 mm or more outside the station neighbourhood (re-planned
@@ -153,20 +153,6 @@ on the lifts (case 17 / 18); both keep their margins.
 
 - **Impact:** a margin decided at the lift could differ between the two checks; none does today.
 - **What would close it:** checking movel on the TCP line in the station tests as well.
-
-## The part of case 18 has an unknown size; its holding opening is assumed
-
-Cases 17 and 18 are two independent rotation (regrasp) cases, probably for two parts of different
-size; the operator runs one or the other (owner, 2026-10-18). Case 17 holds the 50 × 50 mm part at
-50 mm. The size of case 18's part is unknown, so its holding opening (`Tool.Holding_Openings`) is
-set to the same 50 mm.
-
-- **Impact:** every holding segment of case 18 (S1, S3, the station's holding moves, the loading
-  moves) is checked and planned with the fingers at 50 mm. A larger part opens them wider: the
-  fingers then reach further out sideways, and the margins measured at 50 mm do not hold.
-- **Evidence:** owner, 2026-10-18; no measurement of the second part.
-- **What would close it:** the part's width from the owner, entered in `Tool.Holding_Openings`
-  with its source, then a re-run of `Example/plan_rotation.py --case 18` and the replay.
 
 ## The carried part is not modelled
 

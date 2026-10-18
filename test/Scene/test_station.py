@@ -41,14 +41,15 @@ Description:
 
     The rotation (regrasp) sequence of the owner's program sf1_plc_v4.script, cases 17 and 18, from
     home to home (owner-confirmed boundaries), typed from the program lines 3407-3463 and
-    3490-3546. Every segment runs on the real robot without collision (owner). movel segments
+    3490-3546. Every segment runs on the real robot without collision (owner). Case 17 is the
+    deliverable; both cases are ground truth for the model here (SPEC 1). movel segments
     are checked joint-linear here (an approximation; the robot moves the TCP on a line), and blended
     corners (r > 0) are checked through the corner, not along the blend.
 """
-# Gripper opening per case and state, typed here: holding the case's part (Tool.Holding_Openings:
-# case 17 the 50 x 50 mm part, owner; case 18 assumed equal, the second part's size is unknown,
-# KNOWN_ISSUES) and open after rq_set_pos_spd_for(0, ...), the full 85 mm stroke (owner,
-# 2026-10-18: the release opening is real, SPEC 4.9).
+# Gripper opening per case and state, typed here: holding the case's part (case 17: the 50 x 50 mm
+# part, owner, its Tool.Holding_Openings entry; case 18 is not a deliverable and has no entry: its
+# part's size is unknown and 50 mm is assumed for this check) and open after rq_set_pos_spd_for(0, ...),
+# the full 85 mm stroke (owner, 2026-10-18: the release opening is real, SPEC 4.9).
 #   Unit [Dict<Tuple<int, string>, float>] (m)
 CONST_OPENING = {(17, 'holding'): 0.050, (17, 'open'): 0.085, (18, 'holding'): 0.050, (18, 'open'): 0.085}
 # The segments (from, to, gripper state) of each case.
@@ -99,11 +100,10 @@ def scenes(cfg):
     """
     Description:
         The scene with the environment at the opening of each case and gripper state (one scene per
-        distinct opening). The configured holding openings must be the ones typed here.
+        distinct opening). Case 17's configured holding opening must be the one typed here.
     """
 
-    assert {case: cfg.Holding_Openings[case][0] for case in (17, 18)} == {17: CONST_OPENING[17, 'holding'],
-                                                                         18: CONST_OPENING[18, 'holding']}
+    assert cfg.Holding_Openings[17][0] == CONST_OPENING[17, 'holding']
     built = {opening: Scene_Cls(dataclasses.replace(cfg, Opening=opening)) for opening in sorted(set(CONST_OPENING.values()))}
     return {key: built[opening] for key, opening in CONST_OPENING.items()}
 

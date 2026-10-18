@@ -43,10 +43,27 @@ Generate and verify, in simulation, a collision-free joint-space path for the UR
 before it is run on the real robot.
 
 **Current goal (owner, 2026-10-17): optimise the 90° part rotation (regrasp) sequence** of the robot
-program `sf1_plc_v4.script` (cases 17 and 18). The station operations stay verbatim; the transfer
-segments between them (S1 home → drop, S2 retreat → approach, S3 lift → home) are generated with
-the planner of §10.6 and compared with the taught baseline. The A → B planner below is the tool for
-that.
+program `sf1_plc_v4.script`. The station operations stay verbatim; the transfer segments between
+them (S1 home → drop, S2 retreat → approach, S3 lift → home) are generated with the planner of §10.6
+and compared with the taught baseline. The A → B planner below is the tool for that. The holder at
+the station exists so that the robot can grip the part from the other side.
+
+**The only deliverable (owner, 2026-10-18) is case 17 from home to home**, this taught sequence and
+its optimised version:
+
+```
+movej home (r=0.01) → Waypoint_1 (r=0.05) → drop_rotate_1 → movel Waypoint_4 → [gripper open]
+→ Waypoint_5 → Waypoint_1 (r=0.05) → Waypoint_2 (r=0.01) → Waypoint_3 (r=0.05) → Waypoint_18
+→ pick_rotate_1 → [gripper close] → movel Waypoint_6 → Waypoint_2 (r=0.01) → home
+```
+
+Optimised: S1 (home → drop_rotate_1), S2 (Waypoint_5 → Waypoint_18) and S3 (Waypoint_6 → home)
+replaced, the station operations verbatim. *Corrected 2026-10-18: the deliverables were cases 17
+and 18, each as the whole case including the loading moves into and out of machine (a).* **Case 18
+and the other 19 cases of the program remain as ground truth only:** the program extract (every
+learned point and the whole cases 17 and 18, §10.1) and the tests that validate the model against
+real program segments (the replay of cases 17 and 18, §11; the placement of the grasp points, §4.6)
+are kept. Nothing is planned, written or replayed for them.
 
 Long-term pipeline:
 
@@ -510,22 +527,23 @@ CAD/Collision/SF1_Environment_Collision.json  manifest (§7.6)
 Configuration/Cell_SF1.yaml                   cell configuration (§8)
 Data/Programs/sf1_plc_v4/                     extracts of the owner's program, verbatim, with its sha256:
                                               its 156 global _p/_q lines, and the whole cases 17 and 18
-                                              (§10.1); the simplified taught programs
-                                              sf1_plc_v4_case_<n>.urscript + _sequence.script (§10.4)
+                                              (§10.1, ground truth); the simplified taught program of
+                                              case 17 home → home, sf1_plc_v4_case_17.urscript +
+                                              _sequence.script (§10.4)
 models/MANIFEST.json                          Menagerie commit, licence, sha256 of every vendored file
 models/universal_robots_ur10e/                xml, assets/, LICENSE, README.md, CHANGELOG.md (no png)
 models/robotiq_2f85/                          same
 src/Configuration/Core.py   Load_Configuration → Cell_Configuration_Str (the only YAML reader)
-src/URScript/Core.py        Read_URScript, Write_URScript, Write_Movej_Sequence, Write_Motion_Sequence, Program_Entries
-                            (the only URScript reader/writer)
+src/URScript/Core.py        Read_URScript, Write_URScript, Write_Movej_Sequence, Write_Motion_Sequence, Program_Entries,
+                            Rotation_Sequence (the only URScript reader/writer)
 src/Kinematics/Core.py      UR10e DH FK, rotvec ↔ matrix, Geodesic_Angle, Normalize_Rotvec, Derive_TCP_Offset
 src/Collision/Core.py       Build_Collision_Set, Write_Collision_Set, Read_Collision_Set (the only npz/manifest reader/writer)
 src/Scene/Core.py           Build_Scene (MjSpec), Set_Configuration, Check_Clearance, the taught / generated rule
 src/Planner/Core.py         Planner_Cls (direct, RRT-Connect, shortcut, refinement), Verify_Path, duration estimates
-Example/plan_rotation.py    plans S1 - S3 of cases 17 and 18, writes Data/Generated/, prints the report
+Example/plan_rotation.py    plans S1 - S3 of case 17, writes Data/Generated/, prints the report
 Example/replay_rotation.py  viewer replay of a numbered catalogue of taught and optimised paths (§10.7); screenshots
-Data/Generated/             SF1_Rotation_<case>.urscript (points) and SF1_Rotation_<case>_Sequence.script
-Example/write_taught_programs.py  writes the simplified taught programs of the extract (Data/Programs/sf1_plc_v4/)
+Data/Generated/             SF1_Rotation_17.urscript (points) and SF1_Rotation_17_Sequence.script (home → home)
+Example/write_taught_programs.py  writes the simplified taught program of case 17 home → home (Data/Programs/sf1_plc_v4/)
 Example/build_collision.py  regenerates CAD/Collision/ from the STL (runs CoACD; not in the test suite)
 Example/demo_rotate_axis.py the viewer demo
 Example/demo_visualize_position.py  the robot static at one learned position, clearance by the taught rule (§10.7)
@@ -656,7 +674,7 @@ field without a reader.
 | `Tool.Coupling.Spigot_Depth` | depth of the Ø71 bore receiving the gripper: `0.0029`; gripper datum = thickness − depth = 14.0 mm (measured on the robot) | m | REQUIRED |
 | `Tool.Mount_Yaw` | rotation of the gripper about the flange z axis relative to the Menagerie default: `0.0`, the fingers open along flange ±x. **Confirmed on the robot by the owner (2026-10-18)**; a statement of 90° made that day was withdrawn (§9.3) | deg | REQUIRED |
 | `Tool.Opening` | inner pad-face gap of a scene that names no program case (the demo, the tests): `0.050`, the 50 × 50 mm part (owner) | m | REQUIRED |
-| `Tool.Holding_Openings` | inner pad-face gap while the part of a program case is held, `{Case, Opening, Source}` each, used by planning, verification and replay of that case: case 17 `0.050` (owner, 2026-10-18: the 50 × 50 mm part), case 18 `0.050` (**assumption**: the size of the second part is unknown, `KNOWN_ISSUES.md`). Load rejects: an empty list, an opening ≤ 0 or above the 85 mm stroke, an empty source, a case named twice; a script refuses a case without an entry | m | REQUIRED |
+| `Tool.Holding_Openings` | inner pad-face gap while the part of a program case is held, `{Case, Opening, Source}` each, used by planning, verification and replay of that case: case 17 `0.050` (owner, 2026-10-18: the 50 × 50 mm part), the only deliverable (§1). *Corrected 2026-10-18: case 18 `0.050` was listed, an assumption.* Load rejects: an empty list, an opening ≤ 0 or above the 85 mm stroke, an empty source, a case named twice; a script refuses a case without an entry | m | REQUIRED |
 | `Tool.TCP_Offset` | TCP in the flange frame `[x, y, z, rx, ry, rz]`: `[0.0, 0.0, 0.174, 0.0, 0.0, 0.0]`. Source: the Polyscope TCP of SF1 (owner, 2026-10-17), identical to the Robotiq value (manual rev. 2020/02/11 p. 127, §5.2.3) | m, rad (rotvec) | REQUIRED |
 | `Clearance.Environment` | minimum robot/gripper ↔ environment distance: `0.020` | m | REQUIRED |
 | `Clearance.Self` | minimum distance between non-excluded robot/gripper bodies: `0.005` | m | REQUIRED |
@@ -948,13 +966,15 @@ Speed does not change the path of a `movej` with `r=0`. `r=0` is written explici
 the one argument that does change the path. Joint targets only, never `movej(p[...])`. `_p` of via
 points is informational: the robot would otherwise solve its own IK and could pick another branch.
 
-**Simplified taught programs** (`Example/write_taught_programs.py`,
-`Data/Programs/sf1_plc_v4/sf1_plc_v4_case_<n>.urscript` and `…_case_<n>_sequence.script`): the whole
-case as its motion program, written by `Write_Motion_Sequence` from `Program_Entries`: every movej
-and movel of the case in program order, verbatim without indentation (targets, a, v, r), each
+**Simplified taught program** (`Example/write_taught_programs.py`,
+`Data/Programs/sf1_plc_v4/sf1_plc_v4_case_17.urscript` and `…_case_17_sequence.script`): the rotation
+sequence of case 17, home → … → home (`Rotation_Sequence`: from the case's first movej to home to its
+second, inclusive), as its motion program, written by `Write_Motion_Sequence` from `Program_Entries`:
+every movej and movel in program order, verbatim without indentation (targets, a, v, r), each
 gripper action as a `# Gripper open/close` comment naming the program line, nothing else (no URCap
-code, no PLC I/O, no waits). The points file holds the points the case moves to, with the
-program's tokens. The robot enters a case where the previous case left it.
+code, no PLC I/O, no waits). The points file holds the points it moves to, with the program's
+tokens. *Corrected 2026-10-18: the files held the whole case, loading moves included, for cases 17
+and 18.*
 
 **Exception: station lines copied verbatim.** In a motion sequence (`Write_Motion_Sequence`) the
 station operations of the robot program are copied verbatim (without indentation), with their own
@@ -973,10 +993,12 @@ synthetic point with a joint at 4.0 rad that must come out as 4.0.
 *Since the machine shift (2026-10-18) the taught S1 – S3 all keep the generated rule; S2 is optimised
 for time (−3.8 s, estimate), not for clearance (§17).*
 
-**Segments.** Per case, S1 home → drop (holding: the case's `Tool.Holding_Openings`, 50 mm for both
-cases), S2 retreat → approach (open, 85 mm: the full stroke for `rq_set_pos_spd_for(0, ...)`; the
-release opening is real, owner 2026-10-18, §4.9), S3 lift → home (holding). The ends are the
-program's `_q` tokens, never wrapped.
+**Segments** (case 17, §1). S1 home → drop_rotate_1 (holding: case 17's `Tool.Holding_Openings`
+entry, 50 mm), S2 Waypoint_5 → Waypoint_18 (open, 85 mm: the full stroke for `rq_set_pos_spd_for(0, ...)`; the
+release opening is real, owner 2026-10-18, §4.9), S3 Waypoint_6 → home (holding). The ends are the
+program's `_q` tokens, never wrapped. The fixed station points of the generated rule (§9.7) are case
+17's six: drop_rotate_1, Waypoint_4, Waypoint_5, Waypoint_18, pick_rotate_1, Waypoint_6. *Corrected
+2026-10-18: both cases' eleven, while case 18 was a deliverable.*
 
 **Planner** (`Planner_Cls.Plan`):
 1. Both ends must keep the generated rule (§9.7), else `Planner_Error_Cls`.
@@ -1011,17 +1033,17 @@ via points.
 that fails is never written.
 
 **Output** (`Example/plan_rotation.py`, `Data/Generated/`):
-- `SF1_Rotation_<case>.urscript`: the learned points the optimised case moves to, with the
+- `SF1_Rotation_17.urscript`: the learned points the optimised sequence moves to, with the
   program's tokens, in the order of first use, then the via points `via_<from>_<to>_<nn>` (§10.1
   format, `_p` informational).
-- `SF1_Rotation_<case>_Sequence.script`: **the whole case** in program order, in the form of the
-  simplified taught program (§10.4), so the two compare line by line: the program's moves before
-  and after the rotation sequence (out of and back into machine (a)) and the station lines copied
+- `SF1_Rotation_17_Sequence.script`: **case 17 home → … → home** in program order, in the form of the
+  simplified taught program (§10.4), so the two compare line by line: the station lines copied
   verbatim, the gripper nodes as comments, S1 – S3 as generated movej (§10.4) to their via points
-  and ends. The arrival at home that opens the rotation sequence is the program's line, except
-  where it blends into S1 (case 17, `r=0.01`): a blend into a generated segment is not checked
-  (§8.5), so it is written as the generated `movej(home_q, a=…, v=…, r=0)` with a comment (owner,
-  2026-10-18). *Corrected 2026-10-18: the file held home → … → home only.*
+  and ends (`Rotation_Entries`). The program's move to home blends into S1 (`r=0.01`) and a blend
+  into a generated segment is not checked (§8.5), so the start is written as the generated
+  `movej(home_q, a=…, v=…, r=0)` with a comment (owner, 2026-10-18). *Corrected 2026-10-18: the file
+  held the whole case, the loading moves out of and back into machine (a) verbatim, for cases 17
+  and 18.*
 - The script prints, per segment, taught vs optimised: via points, estimated duration, Σ|Δq|,
   max-joint length, the smallest robot – environment distance and its robot body, the generated-rule
   violations, and the home → home totals (station operations estimated with the same model, movel
@@ -1035,17 +1057,16 @@ shown; `--with-stl` loads the cell STL as well. Learned points come from the pro
 **`Example/demo_visualize_position.py`** shows the robot static at one learned position: `--pos
 NAME` or `NAME_q` (a `NAME_p` is refused: the viewer shows joint positions, the robot's own IK would
 decide the joints of a pose; an unknown name is refused), `--list` prints every name, `--opening
-{holding, open}` (default holding) with `--case {17, 18}` for the holding width
-(`Tool.Holding_Openings`). It prints and overlays the clearance under the taught rule, listing every
+{holding, open}` (default holding; holding is case 17's `Tool.Holding_Openings` width). It prints and overlays the clearance under the taught rule, listing every
 violating pair.
 
-**`Example/replay_rotation.py`** replays one path of a numbered catalogue in one viewer window:
-1 – 4 the whole case 17 / 18, taught (`Data/Programs/sf1_plc_v4/`) or optimised (`Data/Generated/`);
-5 / 6 the rotation sequence only (home → home) of case 17 / 18, taught then optimised. `--path N`
+**`Example/replay_rotation.py`** replays one path of a numbered catalogue in one viewer window,
+each case 17 home → home: 1 taught (`Data/Programs/sf1_plc_v4/`), 2 optimised (`Data/Generated/`),
+3 taught then optimised with the strict comparison. *Corrected 2026-10-18: 1 – 4 were the whole
+cases 17 and 18, 5 and 6 their rotation sequences.* `--path N`
 selects, without it the catalogue is printed and a number asked; `--list` prints it. Read through
 `Read_Motion_Sequence`, the one reader of the motion-sequence format.
-- **Motion.** The path starts at its first target (the robot enters a case where the previous case
-  left it). A movej is joint-linear; a movel moves the TCP on the straight line to the DH TCP of its
+- **Motion.** The path starts at its first target, home. A movej is joint-linear; a movel moves the TCP on the straight line to the DH TCP of its
   target's `_q` (orientation turning about one axis), solved for joints step by step from the
   previous solution (`Linear_Path`, `Solve_IK_Near`, steps ≤ 5 mm / 1°) and required to end at that
   `_q`. Blends are not replayed: every move stops at its target.
@@ -1053,39 +1074,40 @@ selects, without it the catalogue is printed and a number asked; `--list` prints
   the trapezoid of §10.6 with the line's own a and v (the leading joint for a movej, the TCP path for
   a movel), position along it by `Profile_Fraction`. The gripper's time and the program's waits are
   not modelled.
-- **Gripper.** The case is entered holding its part (owner, 2026-10-18: the part is held from the
+- **Gripper.** The path starts at home holding the part (owner, 2026-10-18: the part is held from the
   start of the case through the loading moves to the release at the magazine, and again from the
-  re-pick back home; the gripper is open only between the release and the re-pick, S2); the opening switches
-  between the case's holding width and open (85 mm) at the gripper actions. The window shows the
+  re-pick back home; the gripper is open only between the release and the re-pick, S2); the opening
+  switches between the holding width and open (85 mm) at the gripper actions. The window shows the
   holding scene; the open state is shown by its finger joints, the pad-span hull hidden. Every check
   uses the scene of the move's own state.
 - **Labels.** Each move is checked by the rule of its kind: generated movej by the generated rule,
-  program lines by the taught rule; a movel along its TCP line. Entries 5 and 6 also print the strict
+  program lines by the taught rule; a movel along its TCP line. Entry 3 also prints the strict
   comparison: S1 – S3 of both variants judged by the generated rule. `--skip-check` replays without
   the check (labelled so). The overlay shows the path, the variant, the move and its section, the
   gripper state and width, the estimated elapsed time and the label.
 
 **Machine (a) interior.** A configuration that comes within `Clearance.Environment` of the interior
 hull of machine (a) (component 1638, `KNOWN_ISSUES.md`) is labelled *model not valid here*, never as
-a collision: the hull fills the space the loading moves use (`Scene_Cls.Components_Within`).
+a collision: the hull fills the space the loading moves use (`Scene_Cls.Components_Within`). The
+replayed home → home paths stay far from it; the position viewer shows the label at the loading points.
 
 ## 11. Tests of the first milestone
 
 | Test file | What it pins |
 |---|---|
-| `test/URScript/test_core.py` | exact float values of all 24 numbers; byte-identical round trip; `.238`, `-.175`, `E-5` tokens; strict errors (malformed, missing pair, duplicate, wrong length, line number in message); generated-point format; no wrapping (4.0 rad); `movej` line uses `_q` and `r=0`; renamed file tokens == original export; the case extract reads in program order (the whole case), equals its source lines 3397–3478 / 3480–3561 — the whole body of each case's branch — when `SF1_PLC_V4_SCRIPT` is set (otherwise skipped), and a malformed excerpt is refused; `Program_Entries` keeps movej/movel verbatim, comments the gripper and drops every other line; `Read_Motion_Sequence` reads program movej/movel, generated movej, gripper comments with a, v, r and sections, the header naming no section, and refuses any other line by number; the `sf1_plc_v4` positions extract is read strictly with every token, and equals its source lines 2453–2608 byte for byte with the recorded sha256 when `SF1_PLC_V4_SCRIPT` names the program (otherwise skipped, never passed) |
+| `test/URScript/test_core.py` | exact float values of all 24 numbers; byte-identical round trip; `.238`, `-.175`, `E-5` tokens; strict errors (malformed, missing pair, duplicate, wrong length, line number in message); generated-point format; no wrapping (4.0 rad); `movej` line uses `_q` and `r=0`; renamed file tokens == original export; the case extract reads in program order (the whole case), equals its source lines 3397–3478 / 3480–3561 — the whole body of each case's branch — when `SF1_PLC_V4_SCRIPT` is set (otherwise skipped), and a malformed excerpt is refused; `Program_Entries` keeps movej/movel verbatim, comments the gripper and drops every other line; `Rotation_Sequence` returns case 17 from its first to its last move to home (typed) and refuses one or three; `Read_Motion_Sequence` reads program movej/movel, generated movej, gripper comments with a, v, r and sections, the header naming no section, and refuses any other line by number; the `sf1_plc_v4` positions extract is read strictly with every token, and equals its source lines 2453–2608 byte for byte with the recorded sha256 when `SF1_PLC_V4_SCRIPT` names the program (otherwise skipped, never passed) |
 | `test/Configuration/test_core.py` | shipped file loads; each REQUIRED field missing → named failure; invalid values (wrong length, limits outside ±360°, min ≥ max, coupling spigot depth ≥ thickness, negative clearance or sanity bound, an assembly or component override beyond 150 mm, without a source or named twice, an added box with Min ≥ Max, without a source or named twice, an empty list of added boxes accepted, a zone margin above `Clearance.Environment`, a zone box with Min ≥ Max, a zero endpoint radius) fail; all problems listed at once; unknown key → WARNING |
 | `test/Kinematics/test_core.py` | `Solve_IK_Near` returns, from 0.05 rad away, the configuration of 20 seeded targets (1e-9 m / rad, same branch) and refuses a target 3 m away; `Linear_Path` of the drop and lift movel keeps every TCP on the straight line (1e-9 m) in order, ≤ 5 mm apart, turning evenly, from the start's `_q` to the target's `_q` exactly; `FK_DH(q) · TCP_config` vs `_p`: regression pin (§9.4) of 1.72 mm / 0.261° and 4.02 mm / 0.376° (±0.01 mm / ±0.001°); diagnostic derived TCP pinned the same way and never read by any check; both points within the sanity bound; `Check_Learned_Point` rejects a point beyond it (perturbed `_q`) with the numbers in the message; configured TCP == (0, 0, 0.174, 0, 0, 0); geodesic angle 0 between r and its π-equivalent; `Normalize_Rotvec` rule incl. near-π |
 | `test/Scene/test_core.py` | `Components_Within` names component 1638 at `load3` (−99.5 mm ± 1 mm), nothing at `home`, and refuses a threshold above `Clearance.Environment`; scene compiles; base body world position == `Base_Position` exactly and yaw == `Base_Yaw`; **at `Base_Yaw` = 90° (a temporary copy of the configuration) `home`'s TCP lands at `Base_Position` + (−y, x, z) of its `_p` within 3 mm, in MuJoCo and through the base frame (the file is in degrees; read as radians the test fails)**; **MuJoCo flange FK (after the MjSpec offset override) == DH flange FK within 1e-9 m / 1e-9 rad (atan2 geodesic, §9.5) for 1000 seeded random joint vectors within the limits**, plus A and B; pad-span hull present in the gripper rigid group; fingers open along the configured `Mount_Yaw` (flange ±x at 0); visual mesh has no hull (`mesh_graphadr = −1`); base↔env build check runs; loader rejects an elbow limit beyond ±180°; gripper opening == `Tool.Opening` ± 0.5 mm, equality residual < 0.1 mm; coupling cylinder present (visual + collision), Menagerie `base_mount` mesh geoms absent, vendored files byte-identical to `models/MANIFEST.json`; pad end from the flange face 163.3 mm open and 176.8 mm closed (± 0.5 mm, manual chain) and the 50 mm values 154.39 / 173.23 mm (± 0.05 mm, regression); exclusion set == configuration expansion + `base–env_stand`, filterparent disabled; joint ranges == `Joint_Position_Limits`; **placement (§4.6): `pick_obj_1..8` on the pallet table, `unload_obj_1..8` on the side table (between the plate top and the highest part), `bench_drop_1..8` inside object (a); the same check at `Base_Yaw` = 0 refuses all 24**; A and B pass `Check_Clearance`, and **any violation fails the test, listing every pair with its distance and margin** (no report-only path); `hover_unload_2` (clear) pushed into the side table is reported as a collision; a collision set whose recorded assembly or component overrides differ from the configuration is refused; an added box is a box primitive of `env` spanning its configured corners with the environment margin, a zone piece only when it meets the zone box; the station zone applies to a generated configuration only within `Endpoint_Radius` of a station point (DH distances); a segment kind other than taught/generated is refused; a generated configuration with the tool pointing up above 2.35 m violates the workspace (excursion = the pad end's, from DH), the taught rule does not apply the box; the van der Corput order is a permutation of the samples |
 | `test/Scene/test_station.py` | the taught rotation sequence of cases 17 and 18 (home → … → home, typed from the program, 50 mm holding / 85 mm open) checked as taught has no violation: no penetration, the zone margin at the zone pieces, the global margins elsewhere; every taught segment also keeps the generated rule (it comes within 20 mm of the station only within 50 mm of a station point), and drop_rotate_1 → Waypoint_4 is clear as generated only with the station points; the holder box is a zone piece in both scenes, every taught sample keeps the zone margin to it and comes within the global margin, and MuJoCo's contact at the closest sample has the exact distance; the manifest records exactly the assembly shift and the fitted post override, which are the configured ones; `Environment_Distance` equals the exact distance in the 20 – 30 mm band (start of Waypoint_5 → Waypoint_1); the zone holds every piece of the post and the top profile, no piece of the side table, pallet table, machine-interior hull or right window profile; the early-exit check agrees with the full check on 72 seeded segments from the taught points (both verdicts occur) |
-| `test/Planner/test_core.py` | `Profile_Fraction` is 0 at the start, 1 at the estimated duration (triangle and trapezoid, movej and movel), 0.5 at half time, a t²/2 early, never decreasing; duration estimates against hand-computed values (triangle, trapezoid, leading joint, path sum, movel); the committed paths of both cases pass `Verify_Path`, S2 with fewer via points than taught, S1 and S3 no more; the station and loading points keep their tokens; the sequence file is the whole case, its motion lines in program order (the moves before and after the rotation sequence verbatim; case 17's blended arrival at home generated with r=0, case 18's verbatim; generated movej with the program's a, v and r=0; station lines verbatim; gripper comments; the safety sentence); aligned with the simplified taught program, it differs only in S1 – S3 (and case 17's arrival at home), every added line a generated movej, the gripper comments identical; within the global margin no generated sample comes closer to a station box than the segment's closer taught end, and every sample keeps the generated rule's margin to it; one reduced planning run is byte-identical twice; RRT-Connect alone is byte-identical twice on a seed that draws from both sample sources (box around the ends, whole range); an impossible plan raises (inflated margin, no iterations, six via points); the penalty counts only far from the station (a grasp approach of case 1 counts, the drop's descent does not) |
+| `test/Planner/test_core.py` | `Profile_Fraction` is 0 at the start, 1 at the estimated duration (triangle and trapezoid, movej and movel), 0.5 at half time, a t²/2 early, never decreasing; duration estimates against hand-computed values (triangle, trapezoid, leading joint, path sum, movel); the committed paths of case 17 pass `Verify_Path`, S2 with fewer via points than taught, S1 and S3 no more; home and the station points keep their tokens, no loading point is written; the sequence file is case 17 home → home, its motion lines in program order (the blended start at home generated with r=0; generated movej with the program's a, v and r=0; station lines verbatim; gripper comments; the safety sentence); aligned with the simplified taught program, it differs only in S1 – S3 and the start at home, every added line a generated movej, the gripper comments identical; within the global margin no generated sample comes closer to a station box than the segment's closer taught end, and every sample keeps the generated rule's margin to it; one reduced planning run is byte-identical twice; RRT-Connect alone is byte-identical twice on a seed that draws from both sample sources (box around the ends, whole range); an impossible plan raises (inflated margin, no iterations, six via points); the penalty counts only far from the station (a grasp approach of case 1 counts, the drop's descent does not) |
 | `test/Scene/test_margin.py` | margin accuracy on **mesh hull vs mesh hull** (robot geom on a joint, so not static): a robot link hull at 3 orientations vs a box-hull face, and box-hull edge vs edge; at 10 mm a violation is reported, at 30 mm none; reported distance error < 0.5 mm (prototype: 0.000 mm, §4.5) |
 | `test/Collision/test_core.py` | `Build_Collision_Set` on three synthetic cubes, hull only (no CoACD): an assembly override moves the touching pair, a component override adds on top, the manifest records the members `[0, 1]` and both overrides with their sources, each piece translated by exactly its sum, the third cube untouched; manifest STL hash == sha256 of the file; the STL splits into three objects of 1749 / 951 / 56 components, an assembly named by the machine body moves exactly object (a) with a component override added on top, and the manifest records the configured assemblies' members; `R_crop` ≥ the bound recomputed from the current scene, and no robot collision vertex leaves the sphere over 1000 seeded random `q`; conservativeness violations == 0 at `eps` (vertices + 1 sample/cm² for CoACD components, hull-only exempt); degenerate components thickened and containing the original; excess metrics present and equal to a recomputation on a fixed sample; no robot body at A/B inside a flagged open-shell piece; mismatched hash → `Collision_Error_Cls` |
 | `test/Example/test_demo.py` | headless demo runs N steps without exception; only the chosen joint changes, monotonically between turning points; it stays within `Joint_Position_Limits`; the pre-check runs on the dense segment samples of §9.7; the label equals the check result ("clearance checked" iff no violation, otherwise "VISUAL ONLY — UNCHECKED"); the shipped motion's label is pinned |
-| `test/Example/test_write_taught_programs.py` | each case's simplified program is, after its header, exactly the case's movej/movel lines in program order (the program's line without indentation) and a gripper comment naming the program line at each gripper action, nothing else; its points file holds exactly the case's targets in first-use order with the extract's tokens; the script reproduces the committed files byte for byte |
-| `test/Example/test_plan_rotation.py` | the holding opening of a case is its configured `Tool.Holding_Openings` value (not `Tool.Opening`), open is 85 mm; a case without an entry is refused |
+| `test/Example/test_write_taught_programs.py` | the simplified program is, after its header, exactly case 17 home → home as the owner states it (§1, typed in the test) and one contiguous run of the program: each movej/movel the program's line without indentation (home `r=0.01`), a gripper comment naming the program line at each gripper action, nothing else; its points file holds exactly those targets in first-use order with the extract's tokens; the script writes exactly the committed two files, byte for byte |
+| `test/Example/test_plan_rotation.py` | the holding opening is case 17's configured `Tool.Holding_Openings` value (not another entry's, not `Tool.Opening`), open is 85 mm; a configuration without case 17 is refused; `Rotation_Entries` is home → … → home only: a generated start at home (the program blends, r=0.01), S1 – S3 generated, the station lines verbatim, no loading move |
 | `test/Example/test_visualize_position.py` | headless: `home_q` reports "clearance kept (taught rule)" and `load3` "model not valid here", each at case 17's configured 50 mm with its source; `home_p` and an unknown name are refused (exit 1, no scene built); `--list` prints every position of the extract in order |
-| `test/Example/test_replay.py` | every catalogue entry (headless, `--skip-check`) visits the moves of its files in order (patterns typed in the test), each by the rule of its kind, the gripper switching at the actions (85 mm open, 50 mm closed) and every move run in the state after them, each movel on its TCP line (≥ 9 steps), starting at the first target; `--speed 4` plays in a quarter of the estimated time, `1.0` in the estimated time, within a frame per move; a path outside the catalogue (given or typed), and a speed that is 0, negative or NaN, are refused before a scene is built; `--list` prints the six entries; path 2 with the dense check and screenshots, without `--with-stl`: built without the visual STL (same geoms), every generated move keeps the generated rule, every move with an end inside machine (a) is "model not valid here", every other program line keeps the taught rule |
+| `test/Example/test_replay.py` | every catalogue entry (case 17 home → home; headless, `--skip-check`) visits the moves of its files in order (patterns typed in the test), each by the rule of its kind, the gripper switching at the actions (85 mm open, 50 mm closed) and every move run in the state after them, each movel on its TCP line (≥ 9 steps), starting at home; `--speed 4` plays in a quarter of the estimated time, `1.0` in the estimated time, within a frame per move; a path outside the catalogue (given or typed), and a speed that is 0, negative or NaN, are refused before a scene is built; `--list` prints the three entries; path 2 with the dense check and screenshots, without `--with-stl`: built without the visual STL (same geoms), its 10 moves each keep the rule of their kind (generated movej the generated rule, program lines the taught rule) |
 | `test/Install/test_install.py` | `bash -n`; sourced steps under a hermetic `PATH`: OS detection (Darwin arm64, Linux), Python 3.11 resolution (`python3` never called), hash verification fails on a tampered model file, every log line in the log format |
 | `.claude/skills/project-style-rpx/scripts/test_check_style.py` | the checker itself (outside `test/`) |
 

@@ -45,15 +45,16 @@ Show the robot static at one learned position of the program, with its clearance
 .venv/bin/python Example/demo_visualize_position.py --list
 ```
 
-`--opening open` shows the gripper open (85 mm), `--case 18` uses case 18's holding width. A
-position inside machine (a) is labelled "model not valid here" (see `KNOWN_ISSUES.md`).
+`--opening open` shows the gripper open (85 mm). A position inside machine (a) is labelled "model
+not valid here" (see `KNOWN_ISSUES.md`).
 
-Plan the transfer segments of the rotation sequence (cases 17 and 18; about 35 minutes, writes
-`Data/Generated/` and prints the taught vs optimised report). `Data/Generated/` holds, per case, the
-optimised whole case in the same form as the simplified taught program in `Data/Programs/sf1_plc_v4/`:
-`SF1_Rotation_<case>.urscript` (the points, including the generated via points) and
-`SF1_Rotation_<case>_Sequence.script` (the taught lines unchanged except S1 – S3, which are generated
-movej with `r=0`). Both can be pasted into the robot program; run them at reduced speed first:
+The deliverable is case 17 of the program from home to home: the taught sequence and its optimised
+version. Plan its transfer segments S1 – S3 (about 12 minutes, writes `Data/Generated/` and prints
+the taught vs optimised report). `Data/Generated/` holds the optimised sequence in the same form as
+the simplified taught program in `Data/Programs/sf1_plc_v4/`: `SF1_Rotation_17.urscript` (the
+points, including the generated via points) and `SF1_Rotation_17_Sequence.script` (the taught lines
+unchanged except S1 – S3, which are generated movej with `r=0`). Both can be pasted into the robot
+program; run them at reduced speed first:
 
 ```bash
 .venv/bin/python Example/plan_rotation.py
@@ -63,31 +64,29 @@ Replay a path in the viewer (macOS: `mjpython`), or write screenshots instead:
 
 ```bash
 .venv/bin/mjpython Example/replay_rotation.py --path 2
-.venv/bin/mjpython Example/replay_rotation.py --path 5 --speed 0.5
+.venv/bin/mjpython Example/replay_rotation.py --path 3 --speed 0.5
 .venv/bin/python Example/replay_rotation.py --path 2 --screenshots <directory>
 ```
 
-| `--path` | Path |
+| `--path` | Path (case 17, home → home) |
 |---|---|
-| 1 | case 17 taught (whole case) |
-| 2 | case 17 optimised (whole case) |
-| 3 | case 18 taught (whole case) |
-| 4 | case 18 optimised (whole case) |
-| 5 | case 17 rotation sequence only (home → home), taught then optimised |
-| 6 | case 18 rotation sequence only (home → home), taught then optimised |
+| 1 | taught |
+| 2 | optimised |
+| 3 | taught, then optimised, with the strict comparison |
 
 Without `--path` the catalogue is printed and a number asked; `--list` prints it. `--speed` is
 relative to the estimated real time (1.0). movel moves the TCP on a straight line; the gripper
-switches between the case's holding width and open at the gripper actions. Each move is labelled by
-its clearance (taught lines by the taught rule, generated moves by the generated rule); a move
-inside machine (a) is labelled "model not valid here". Entries 5 and 6 also print S1 – S3 of both
-variants judged by the generated rule. `--headless` prints every move instead of opening the viewer.
+switches between the holding width and open at the gripper actions. Each move is labelled by its
+clearance (taught lines by the taught rule, generated moves by the generated rule). Entry 3 also
+prints S1 – S3 of both variants judged by the generated rule. `--headless` prints every move instead
+of opening the viewer.
 
 `Data/Programs/sf1_plc_v4/` holds verbatim extracts of the owner's robot program (its learned points
-and the whole cases 17 and 18) and, written from them, the simplified taught program of each case:
-`sf1_plc_v4_case_<n>.urscript` (the points) and `sf1_plc_v4_case_<n>_sequence.script` (every movej and
-movel of the case in program order with the program's a, v, r; gripper actions as comments; no URCap
-code, no PLC I/O). Rewrite them after the extracts change:
+and the whole cases 17 and 18, kept as ground truth for the model) and, written from them, the
+simplified taught program of case 17 home → home: `sf1_plc_v4_case_17.urscript` (the points) and
+`sf1_plc_v4_case_17_sequence.script` (every movej and movel in program order with the program's a,
+v, r; gripper actions as comments; no URCap code, no PLC I/O). Rewrite them after the extracts
+change:
 
 ```bash
 .venv/bin/python Example/write_taught_programs.py

@@ -46,7 +46,7 @@ from Configuration.Core import (Load_Configuration, Cell_Configuration_Str, Conf
                                 CONST_PROJECT_ROOT)
 #   ../URScript/Core — the program extracts and the output files
 from URScript.Core import (Read_URScript, Read_Program_Excerpt, Make_Generated_Point, Make_Document, Write_URScript,
-                           Write_Motion_Sequence, Program_Entries, Gripper_Comment, Program_Line_Str)
+                           Write_Motion_Sequence, Rotation_Sequence, Gripper_Comment, Program_Line_Str, URScript_Error_Cls)
 #   ../Kinematics/Core — the informational _p of a via point
 from Kinematics.Core import TCP_Pose, Matrix_To_Pose
 #   ../Scene/Core — the scene at each gripper opening
@@ -65,30 +65,29 @@ CONST_PROGRAM_DIR = os.path.join(CONST_PROJECT_ROOT, 'Data', 'Programs', 'sf1_pl
 CONST_POSITIONS = os.path.join(CONST_PROGRAM_DIR, 'sf1_plc_v4_positions.urscript')
 CONST_CASES_FILE = os.path.join(CONST_PROGRAM_DIR, 'sf1_plc_v4_cases_17_18.script')
 CONST_OUTPUT_DIR = os.path.join(CONST_PROJECT_ROOT, 'Data', 'Generated')
-# The rotation sequence of each case: the station points (fixed, taught) and the taught via points
-# of the three generated segments S1 home -> drop, S2 retreat -> approach, S3 lift -> home (owner).
-#   Unit [Dict<int, Dict<string, string>>]
-CONST_CASES = {
-    17: {'home': 'home', 'drop': 'drop_rotate_1', 'below': 'Waypoint_4', 'retreat': 'Waypoint_5',
-         'approach': 'Waypoint_18', 'pick': 'pick_rotate_1', 'above': 'Waypoint_6'},
-    18: {'home': 'home', 'drop': 'drop_rotate_2', 'below': 'Waypoint_7', 'retreat': 'Waypoint_5',
-         'approach': 'Waypoint_11', 'pick': 'pick_rotate_2', 'above': 'Waypoint_8'},
-}
+# The deliverable (owner, 2026-10-18): case 17 of the program, home -> ... -> home. The other cases
+# of the extract are ground truth for the model only (SPEC 1).
+#   Unit [int]
+CONST_CASE = 17
+# Its points: home, the station points (fixed, taught) and the taught via points of the three
+# generated segments S1 home -> drop, S2 retreat -> approach, S3 lift -> home (owner).
+#   Unit [Dict<string, string>], [Dict<string, List<string>>]
+CONST_POINTS = {'home': 'home', 'drop': 'drop_rotate_1', 'below': 'Waypoint_4', 'retreat': 'Waypoint_5',
+                'approach': 'Waypoint_18', 'pick': 'pick_rotate_1', 'above': 'Waypoint_6'}
 CONST_TAUGHT_VIAS = {'S1': ['Waypoint_1'], 'S2': ['Waypoint_1', 'Waypoint_2', 'Waypoint_3'], 'S3': ['Waypoint_2']}
-# The fixed station points of both cases (the endpoint neighbourhood of the generated rule).
+# The fixed station points (the endpoint neighbourhood of the generated rule).
 #   Unit [Tuple<string>]
-CONST_STATION_POINTS = ('drop_rotate_1', 'drop_rotate_2', 'Waypoint_4', 'Waypoint_7', 'Waypoint_5', 'Waypoint_18',
-                        'Waypoint_11', 'pick_rotate_1', 'pick_rotate_2', 'Waypoint_6', 'Waypoint_8')
+CONST_STATION_POINTS = ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5', 'Waypoint_18', 'pick_rotate_1', 'Waypoint_6')
 # Gripper opening after rq_set_pos_spd_for(0, ...): the full 85 mm stroke; the release opening of
 # 85 mm is real, the part is released into a magazine with free space (owner, 2026-10-18, SPEC 4.9).
-# While the part is held, the case's Tool.Holding_Openings applies (Segment_Opening).
+# While the part is held, case 17's Tool.Holding_Openings entry applies (Opening).
 #   Unit [float] (m)
 CONST_RELEASE_OPENING = 0.085
 # The gripper state of each generated segment: S1 and S3 carry the part, S2 runs open.
 #   Unit [Dict<string, string>]
 CONST_SEGMENT_STATE = {'S1': 'holding', 'S2': 'open', 'S3': 'holding'}
-# The recorded seed of every planning run; segment k (0 = S1) of a case plans with
-# seed * 1000 + case * 10 + k.
+# The recorded seed of every planning run; segment k (0 = S1) plans with seed * 1000 + case * 10 + k
+# (case 17).
 #   Unit [int]
 CONST_SEED = 20261017
 # Weight of the clearance penalty in the objective (SPEC 10.6), chosen by the owner (2026-10-17):
@@ -119,32 +118,28 @@ CONST_BLEND = re.compile(r', r=([^,()]+)\)\s*$')
 CONST_REPORT_DISTMAX = 0.200
 
 
-def Segments(case: int) -> tp.Dict[str, tp.Tuple[str, str]]:
+def Segments() -> tp.Dict[str, tp.Tuple[str, str]]:
     """
     Description:
-        The ends of the three generated segments of a case.
-
-    Args:
-        (1) case [int]: 17 or 18.
+        The ends of the three generated segments.
 
     Returns:
         (1) parameter [Dict<string, Tuple<string, string>>]: S1, S2, S3 -> (from, to).
     """
 
-    c = CONST_CASES[case]
+    c = CONST_POINTS
     return {'S1': (c['home'], c['drop']), 'S2': (c['retreat'], c['approach']), 'S3': (c['above'], c['home'])}
 
 
-def Opening(cfg: Cell_Configuration_Str, case: int, state: str) -> float:
+def Opening(cfg: Cell_Configuration_Str, state: str) -> float:
     """
     Description:
-        The gripper opening of a case in a gripper state: the case's Tool.Holding_Openings while the
+        The gripper opening of case 17 in a gripper state: its Tool.Holding_Openings entry while the
         part is held, CONST_RELEASE_OPENING when open.
 
     Args:
         (1) cfg [Cell_Configuration_Str(object)]: The cell configuration.
-        (2) case [int]: The program case.
-        (3) state [string]: 'holding' or 'open'.
+        (2) state [string]: 'holding' or 'open'.
 
     Returns:
         (1) parameter [float]: The inner pad-face gap (m).
@@ -152,10 +147,10 @@ def Opening(cfg: Cell_Configuration_Str, case: int, state: str) -> float:
 
     if state == 'open':
         return CONST_RELEASE_OPENING
-    if case not in cfg.Holding_Openings:
+    if CONST_CASE not in cfg.Holding_Openings:
         raise Configuration_Error_Cls('Tool.Holding_Openings has no entry for case %d; add {Case: %d, Opening: <m>, '
-                                      'Source: <text>} to the configuration.' % (case, case))
-    return cfg.Holding_Openings[case][0]
+                                      'Source: <text>} to the configuration.' % (CONST_CASE, CONST_CASE))
+    return cfg.Holding_Openings[CONST_CASE][0]
 
 
 def Configuration_Label(scene: Scene_Cls, cfg: Cell_Configuration_Str, q: tp.Sequence[float], kind: str,
@@ -221,7 +216,7 @@ def Measure(scene: Scene_Cls, path: tp.Sequence[np.ndarray], station_q: tp.Seque
             'violations': violations}
 
 
-def Station_Duration(points: tp.Dict, c: tp.Dict[str, str]) -> float:
+def Station_Duration(points: tp.Dict) -> float:
     """
     Description:
         Estimated duration of the station operations (unchanged): the drop's movel, the retreat
@@ -229,12 +224,12 @@ def Station_Duration(points: tp.Dict, c: tp.Dict[str, str]) -> float:
 
     Args:
         (1) points [Dict<string, Robot_Point_Str>]: The program's points.
-        (2) c [Dict<string, string>]: The case's point names.
 
     Returns:
         (1) parameter [float]: The duration (s).
     """
 
+    c = CONST_POINTS
     a, v = float(CONST_MOVEJ_A_TOKEN), float(CONST_MOVEJ_V_TOKEN)
     return (Linear_Duration(points[c['drop']].P, points[c['below']].P, CONST_MOVEL_A, CONST_MOVEL_V)
             + Estimate_Duration([points[c['below']].Q, points[c['retreat']].Q], a, v)
@@ -277,56 +272,28 @@ def Program_Line(lines: tp.Sequence[Program_Line_Str], kind: str, target: str) -
     return Program_Item(lines, kind, target).Raw
 
 
-def Rotation_Bounds(lines: tp.Sequence[Program_Line_Str], home: str) -> tp.Tuple[int, int]:
+def Rotation_Entries(lines: tp.Sequence[Program_Line_Str], vias: tp.Dict[str, tp.List[str]]) -> tp.List[tp.Tuple[str, str]]:
     """
     Description:
-        The rotation sequence inside a whole case: the indices of its first and its last movej to
-        home (home -> ... -> home); refuses a case that does not move to home exactly twice.
+        The optimised rotation sequence, home -> ... -> home, as motion-sequence entries: the start at
+        home and S1 - S3 as generated movej to their via points and ends, the station operations
+        verbatim from the program. The program's own move to home blends (case 17: r=0.01) into S1,
+        and a blend into a generated segment is not checked (SPEC 8.5), so the start is the
+        generated movej to home with r=0 (owner, 2026-10-18).
 
     Args:
-        (1) lines [List<Program_Line_Str>]: The case's program lines.
-        (2) home [string]: The home point's name.
-
-    Returns:
-        (1) parameter [Tuple<int, int>]: The indices of the two movej to home.
-    """
-
-    homes = [k for k, line in enumerate(lines) if line.Kind == 'movej' and line.Target == home]
-    if len(homes) != 2:
-        raise Planner_Error_Cls('The case moves to %s %d times; the rotation sequence needs exactly two (home -> ... -> home).'
-                                % (home, len(homes)))
-    return homes[0], homes[1]
-
-
-def Whole_Case_Entries(lines: tp.Sequence[Program_Line_Str], c: tp.Dict[str, str],
-                       vias: tp.Dict[str, tp.List[str]]) -> tp.List[tp.Tuple[str, str]]:
-    """
-    Description:
-        The optimised whole case as motion-sequence entries: the program's lines before and after
-        the rotation sequence verbatim (Program_Entries), the station operations verbatim, S1 - S3
-        as generated movej to their via points and ends. The arrival at home that opens the
-        rotation sequence stays the program's line unless that line blends (r > 0): a blend into a
-        generated segment is not checked (SPEC 8.5), so the arrival is then a generated movej with
-        r=0 (owner, 2026-10-18).
-
-    Args:
-        (1) lines [List<Program_Line_Str>]: The case's program lines.
-        (2) c [Dict<string, string>]: The case's point names (CONST_CASES).
-        (3) vias [Dict<string, List<string>>]: The via point names of S1, S2 and S3.
+        (1) lines [List<Program_Line_Str>]: The program lines of the rotation sequence (Rotation_Sequence).
+        (2) vias [Dict<string, List<string>>]: The via point names of S1, S2 and S3.
 
     Returns:
         (1) parameter [List<Tuple<string, string>>]: The entries in order.
     """
 
-    first, last = Rotation_Bounds(lines, c['home'])
-    blend = CONST_BLEND.search(lines[first].Raw)
-    if blend is not None and float(blend.group(1)) > 0.0:
-        arrival = [('comment', 'Arrival at %s (generated, r=0): the program\'s line blends (r=%s) into S1, and a blend into a '
-                               'generated segment is not checked' % (c['home'], blend.group(1))), ('movej', c['home'])]
-    else:
-        arrival = [('comment', 'Arrival at %s (verbatim from the program)' % c['home']), ('program', lines[first].Raw)]
-    return ([('comment', 'Before the rotation sequence (verbatim from the program)')] + Program_Entries(lines[:first]) + arrival
-            + [('comment', 'S1 (generated): %s -> %s' % (c['home'], c['drop']))]
+    c = CONST_POINTS
+    blend = CONST_BLEND.search(lines[0].Raw)
+    return ([('comment', 'Start at %s (generated, r=0): the program\'s line blends (r=%s) into S1, and a blend into a '
+                         'generated segment is not checked' % (c['home'], blend.group(1) if blend else '0')), ('movej', c['home']),
+             ('comment', 'S1 (generated): %s -> %s' % (c['home'], c['drop']))]
             + [('movej', name) for name in vias['S1']] + [('movej', c['drop'])]
             + [('comment', 'Station: drop (verbatim from the program)'),
                ('program', Program_Line(lines, 'movel', c['below'])),
@@ -338,8 +305,7 @@ def Whole_Case_Entries(lines: tp.Sequence[Program_Line_Str], c: tp.Dict[str, str
                ('comment', Gripper_Comment(Program_Item(lines, 'gripper', 'close'))),
                ('program', Program_Line(lines, 'movel', c['above'])),
                ('comment', 'S3 (generated): %s -> %s' % (c['above'], c['home']))]
-            + [('movej', name) for name in vias['S3']] + [('movej', c['home'])]
-            + [('comment', 'After the rotation sequence (verbatim from the program)')] + Program_Entries(lines[last + 1:]))
+            + [('movej', name) for name in vias['S3']] + [('movej', c['home'])])
 
 
 def Learned_Order(entries: tp.Sequence[tp.Tuple[str, str]], lines: tp.Sequence[Program_Line_Str]) -> tp.List[str]:
@@ -350,7 +316,7 @@ def Learned_Order(entries: tp.Sequence[tp.Tuple[str, str]], lines: tp.Sequence[P
 
     Args:
         (1) entries [List<Tuple<string, string>>]: The motion-sequence entries.
-        (2) lines [List<Program_Line_Str>]: The case's program lines (the targets of the program entries).
+        (2) lines [List<Program_Line_Str>]: The program lines (the targets of the program entries).
 
     Returns:
         (1) parameter [List<string>]: The point names.
@@ -365,98 +331,112 @@ def Learned_Order(entries: tp.Sequence[tp.Tuple[str, str]], lines: tp.Sequence[P
     return names
 
 
+def Write_Outputs(out: str, cfg: Cell_Configuration_Str, points: tp.Dict, lines: tp.Sequence[Program_Line_Str],
+                  generated: tp.Dict[str, tp.List[np.ndarray]], penalty_weight: float) -> None:
+    """
+    Description:
+        Write the optimised rotation sequence: SF1_Rotation_17.urscript (the learned points it moves
+        to, in the order of first use, then the generated via points via_<from>_<to>_<nn>) and
+        SF1_Rotation_17_Sequence.script (Rotation_Entries).
+
+    Args:
+        (1) out [string]: The output directory.
+        (2) cfg [Cell_Configuration_Str(object)]: The cell configuration (the TCP of the informational _p).
+        (3) points [Dict<string, Robot_Point_Str>]: The program's points.
+        (4) lines [List<Program_Line_Str>]: The program lines of the rotation sequence (Rotation_Sequence).
+        (5) generated [Dict<string, List<Vector<float> 1x6>>]: The verified path of S1, S2 and S3, ends included (rad).
+        (6) penalty_weight [float]: The clearance penalty weight the paths were planned with (s/m).
+    """
+
+    vias = {segment: ['via_%s_%s_%02d' % (Segments()[segment][0], Segments()[segment][1], k + 1)
+                      for k in range(len(path) - 2)] for segment, path in generated.items()}
+    via_points = [Make_Generated_Point(name, Matrix_To_Pose(TCP_Pose(q, cfg.TCP_Offset)), list(q))
+                  for segment in ('S1', 'S2', 'S3') for name, q in zip(vias[segment], generated[segment][1:-1])]
+    entries = Rotation_Entries(lines, vias)
+    # The learned points of the optimised sequence, in the order of first use (the taught via points
+    # of S1 - S3 are no longer used), then the generated via points.
+    learned = Learned_Order(entries, lines)
+    header = ['# Case %d of sf1_plc_v4.script, the rotation sequence home -> home, optimised: the learned points it' % CONST_CASE,
+              '# moves to (verbatim, in the order of first use) and the generated via points of S1-S3 (_p informational,',
+              '# the robot is driven by _q). Generated by Example/plan_rotation.py, seed %d, penalty weight %g s/m.'
+              % (CONST_SEED, penalty_weight),
+              '# Simulation passed != safe on the robot: run it on the real cell at reduced speed first.']
+    os.makedirs(out, exist_ok=True)
+    with open(os.path.join(out, 'SF1_Rotation_%d.urscript' % CONST_CASE), 'w', encoding='utf-8') as handle:
+        handle.write(Write_URScript(Make_Document([points[name] for name in learned] + via_points, header)))
+    sequence_header = ['# Case %d of sf1_plc_v4.script, the rotation sequence home -> home, optimised: the station lines' % CONST_CASE,
+                       '# verbatim from the program, the transfer segments S1-S3 generated movej (the program\'s a and v,',
+                       '# r=0). Points: SF1_Rotation_%d.urscript.' % CONST_CASE,
+                       '# Simulation passed != safe on the robot: run it at reduced speed first.']
+    with open(os.path.join(out, 'SF1_Rotation_%d_Sequence.script' % CONST_CASE), 'w', encoding='utf-8') as handle:
+        handle.write(Write_Motion_Sequence(entries, sequence_header, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN))
+
+
 def main():
     """
     Description:
-        Plan the generated segments S1-S3 of the rotation sequence of cases 17 and 18, verify each
-        independently, write Data/Generated/SF1_Rotation_<case>.urscript (the points) and
-        SF1_Rotation_<case>_Sequence.script (home -> ... -> home in program order), and print the
-        report: taught vs optimised per segment and the home -> home totals.
+        Plan the generated segments S1-S3 of the rotation sequence of case 17, verify each
+        independently, write Data/Generated/SF1_Rotation_17.urscript (the points) and
+        SF1_Rotation_17_Sequence.script (home -> ... -> home in program order), and print the report:
+        taught vs optimised per segment and the home -> home totals.
 
             .venv/bin/python Example/plan_rotation.py [--penalty-weight W] [--out DIR]
     """
 
-    parser = argparse.ArgumentParser(description='Plan the transfer segments of the rotation sequence.')
+    parser = argparse.ArgumentParser(description='Plan the transfer segments of the rotation sequence of case 17.')
     parser.add_argument('--config', default=CONST_DEFAULT_CONFIG_FILE, help='the cell configuration (default: %(default)s)')
     parser.add_argument('--penalty-weight', type=float, default=CONST_PENALTY_WEIGHT, help='clearance penalty weight [s/m]')
     parser.add_argument('--out', default=CONST_OUTPUT_DIR, help='output directory (default: %(default)s)')
-    parser.add_argument('--case', type=int, choices=sorted(CONST_CASES), action='append', help='one case (default: both)')
     args = parser.parse_args()
     print('[WARNING] Simulation passed != safe on the robot. Run every generated path on the real cell at reduced speed first.')
-    cases = args.case or sorted(CONST_CASES)
     try:
         cfg = Load_Configuration(args.config)
-        openings = {(case, segment): Opening(cfg, case, state) for case in cases for segment, state in CONST_SEGMENT_STATE.items()}
-    except Configuration_Error_Cls as error:
+        openings = {segment: Opening(cfg, state) for segment, state in CONST_SEGMENT_STATE.items()}
+        with open(CONST_POSITIONS, encoding='utf-8') as handle:
+            points = Read_URScript(handle.read()).Points
+        with open(CONST_CASES_FILE, encoding='utf-8') as handle:
+            lines = Rotation_Sequence(Read_Program_Excerpt(handle.read())[CONST_CASE], CONST_POINTS['home'])
+    except (Configuration_Error_Cls, URScript_Error_Cls, OSError) as error:
         print('[ERROR] %s' % error)
         return 1
-    for case in cases:
-        print('[INFO] Case %d: holding opening %.1f mm (%s), open %.1f mm.'
-              % (case, cfg.Holding_Openings[case][0] * 1e3, cfg.Holding_Openings[case][1], CONST_RELEASE_OPENING * 1e3))
-    with open(CONST_POSITIONS, encoding='utf-8') as handle:
-        points = Read_URScript(handle.read()).Points
-    with open(CONST_CASES_FILE, encoding='utf-8') as handle:
-        program = Read_Program_Excerpt(handle.read())
+    print('[INFO] Case %d: holding opening %.1f mm (%s), open %.1f mm.'
+          % (CONST_CASE, cfg.Holding_Openings[CONST_CASE][0] * 1e3, cfg.Holding_Openings[CONST_CASE][1], CONST_RELEASE_OPENING * 1e3))
     station_q = [points[name].Q for name in CONST_STATION_POINTS]
     scenes = {opening: Scene_Cls(dataclasses.replace(cfg, Opening=opening)) for opening in sorted(set(openings.values()))}
     budget = Planner_Budget_Str()
-    os.makedirs(args.out, exist_ok=True)
-    for case in cases:
-        c, rows, generated = CONST_CASES[case], [], {}
-        for index, (segment, (start, goal)) in enumerate(Segments(case).items()):
-            scene = scenes[openings[(case, segment)]]
-            planner = Planner_Cls(scene, station_q, args.penalty_weight, budget)
-            started = time.time()
-            try:
-                result = planner.Plan(points[start].Q, points[goal].Q, CONST_SEED * 1000 + case * 10 + index)
-            except Planner_Error_Cls as error:
-                print('[ERROR] Case %d %s (%s -> %s): %s Nothing is written for this case.' % (case, segment, start, goal, error))
-                return 1
-            taught = [np.asarray(points[n].Q) for n in [start] + CONST_TAUGHT_VIAS[segment] + [goal]]
-            generated[segment] = result.Path
-            rows.append((segment, start, goal, Measure(scene, taught, station_q), Measure(scene, result.Path, station_q),
-                         result, time.time() - started))
-        # Outputs: the points and the sequence, written only after every segment is verified.
-        vias = {segment: ['via_%s_%s_%02d' % (Segments(case)[segment][0], Segments(case)[segment][1], k + 1)
-                          for k in range(len(path) - 2)] for segment, path in generated.items()}
-        via_points = [Make_Generated_Point(name, Matrix_To_Pose(TCP_Pose(q, cfg.TCP_Offset)), list(q))
-                      for segment in ('S1', 'S2', 'S3') for name, q in zip(vias[segment], generated[segment][1:-1])]
-        lines = program[case]
-        entries = Whole_Case_Entries(lines, c, vias)
-        # The learned points of the optimised case, in the order of first use (the taught via points
-        # of S1 - S3 are no longer used), then the generated via points.
-        learned = Learned_Order(entries, lines)
-        header = ['# Case %d of sf1_plc_v4.script, the whole case, optimised: the learned points it moves to (verbatim, in' % case,
-                  '# the order of first use) and the generated via points of S1-S3 (_p informational, the robot is driven',
-                  '# by _q). Generated by Example/plan_rotation.py, seed %d, penalty weight %g s/m. Simulation passed !='
-                  % (CONST_SEED, args.penalty_weight),
-                  '# safe on the robot: run it on the real cell at reduced speed first.']
-        with open(os.path.join(args.out, 'SF1_Rotation_%d.urscript' % case), 'w', encoding='utf-8') as handle:
-            handle.write(Write_URScript(Make_Document([points[name] for name in learned] + via_points, header)))
-        sequence_header = ['# Case %d of sf1_plc_v4.script, the whole case, optimised: the program\'s lines verbatim except the' % case,
-                           '# transfer segments S1-S3 of the rotation sequence, which are generated movej (the program\'s a and v,',
-                           '# r=0). The robot enters the case where the previous case left it. Points: SF1_Rotation_%d.urscript.' % case,
-                           '# Simulation passed != safe on the robot: run it at reduced speed first.']
-        with open(os.path.join(args.out, 'SF1_Rotation_%d_Sequence.script' % case), 'w', encoding='utf-8') as handle:
-            handle.write(Write_Motion_Sequence(entries, sequence_header, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN))
-        # Report.
-        print('[INFO] Case %d (estimated durations: trapezoid on the leading joint, a=%s, v=%s, blends and gripper excluded;'
-              % (case, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN))
-        print('[INFO]   "far": outside the 50 mm station neighbourhood, where the penalty counts):')
-        print('[INFO]   %-3s %-9s %4s %8s %9s %9s %9s %-25s %10s %-25s %9s %4s %s'
-              % ('S', 'path', 'vias', 'T_est/s', 'sum|dq|', 'max-jnt', 'min d/mm', 'robot body', 'far d/mm', 'robot body (far)',
-                 'penalty/m', 'viol', 'wall/s'))
-        totals = {'taught': 0.0, 'optimised': 0.0}
-        for segment, start, goal, before, after, result, wall in rows:
-            for label, m in (('taught', before), ('optimised', after)):
-                totals[label] += m['duration']
-                print('[INFO]   %-3s %-9s %4d %8.2f %9.3f %9.3f %9.1f %-25s %10.1f %-25s %9.3f %4d %s'
-                      % (segment, label, m['vias'], m['duration'], m['sum'], m['max'], m['closest'] * 1e3, m['body'] or '-',
-                         m['far'] * 1e3, m['far_body'] or '-', m['penalty'], m['violations'],
-                         '%.0f (%s)' % (wall, result.Origin) if label == 'optimised' else ''))
-        fixed = Station_Duration(points, c)
-        print('[INFO]   home -> home: taught %.2f s, optimised %.2f s (S1-S3 + station operations %.2f s; estimate)'
-              % (totals['taught'] + fixed, totals['optimised'] + fixed, fixed))
+    rows, generated = [], {}
+    for index, (segment, (start, goal)) in enumerate(Segments().items()):
+        scene = scenes[openings[segment]]
+        planner = Planner_Cls(scene, station_q, args.penalty_weight, budget)
+        started = time.time()
+        try:
+            result = planner.Plan(points[start].Q, points[goal].Q, CONST_SEED * 1000 + CONST_CASE * 10 + index)
+        except Planner_Error_Cls as error:
+            print('[ERROR] %s (%s -> %s): %s Nothing is written.' % (segment, start, goal, error))
+            return 1
+        taught = [np.asarray(points[n].Q) for n in [start] + CONST_TAUGHT_VIAS[segment] + [goal]]
+        generated[segment] = result.Path
+        rows.append((segment, Measure(scene, taught, station_q), Measure(scene, result.Path, station_q), result, time.time() - started))
+    # Outputs: the points and the sequence, written only after every segment is verified.
+    Write_Outputs(args.out, cfg, points, lines, generated, args.penalty_weight)
+    # Report.
+    print('[INFO] Case %d (estimated durations: trapezoid on the leading joint, a=%s, v=%s, blends and gripper excluded;'
+          % (CONST_CASE, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN))
+    print('[INFO]   "far": outside the 50 mm station neighbourhood, where the penalty counts):')
+    print('[INFO]   %-3s %-9s %4s %8s %9s %9s %9s %-25s %10s %-25s %9s %4s %s'
+          % ('S', 'path', 'vias', 'T_est/s', 'sum|dq|', 'max-jnt', 'min d/mm', 'robot body', 'far d/mm', 'robot body (far)',
+             'penalty/m', 'viol', 'wall/s'))
+    totals = {'taught': 0.0, 'optimised': 0.0}
+    for segment, before, after, result, wall in rows:
+        for label, m in (('taught', before), ('optimised', after)):
+            totals[label] += m['duration']
+            print('[INFO]   %-3s %-9s %4d %8.2f %9.3f %9.3f %9.1f %-25s %10.1f %-25s %9.3f %4d %s'
+                  % (segment, label, m['vias'], m['duration'], m['sum'], m['max'], m['closest'] * 1e3, m['body'] or '-',
+                     m['far'] * 1e3, m['far_body'] or '-', m['penalty'], m['violations'],
+                     '%.0f (%s)' % (wall, result.Origin) if label == 'optimised' else ''))
+    fixed = Station_Duration(points)
+    print('[INFO]   home -> home: taught %.2f s, optimised %.2f s (S1-S3 + station operations %.2f s; estimate)'
+          % (totals['taught'] + fixed, totals['optimised'] + fixed, fixed))
     print('[INFO] Written to %s. Simulation passed != safe on the robot.' % os.path.relpath(args.out, CONST_PROJECT_ROOT))
     return 0
 
