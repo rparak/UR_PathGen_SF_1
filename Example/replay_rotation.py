@@ -83,9 +83,9 @@ CONST_FILES = {'taught': (os.path.join(CONST_PROGRAM_DIR, 'sf1_plc_v4_case_%d.ur
                           os.path.join(CONST_PROGRAM_DIR, 'sf1_plc_v4_case_%d_sequence.script')),
                'optimised': (os.path.join(CONST_OUTPUT_DIR, 'SF1_Rotation_%d.urscript'),
                              os.path.join(CONST_OUTPUT_DIR, 'SF1_Rotation_%d_Sequence.script'))}
-# The gripper state on entering a case: holding its part. Inferred: the case drops a part at the
-# station first and picks it up again, and no gripper action precedes the drop or follows the last
-# pick (assumption; the owner did not confirm it, 2026-10-18).
+# The gripper state on entering a case: holding its part. Owner, 2026-10-18: the robot holds the part
+# from the start of the case, places it into the magazine and releases it, picks it up again and
+# returns home holding it; the gripper is open only between the release and the re-pick (S2).
 #   Unit [string]
 CONST_ENTRY_STATE = 'holding'
 # Frames per second of the replay; the playback time of a move is its estimated duration / speed.

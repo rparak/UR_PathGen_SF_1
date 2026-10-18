@@ -130,21 +130,19 @@ generated-rule check in simulation. What that does not cover:
   stop button; no real robot is available.
 - **Pinned by:** `test/Planner/test_core.py` (the committed paths pass `Verify_Path`).
 
-## The replay's timing and gripper state on entry are estimates
+## The replay's timing is an estimate
 
 `Example/replay_rotation.py` plays each move for its estimated duration (the trapezoid of SPEC
 §10.6 with the line's a and v). Blends are not replayed (every move stops), and the gripper's time
-and the program's waits are left out, so the elapsed time shown is not the robot's. A case is
-entered holding its part: inferred from the program (no gripper action before the drop or after the
-pick), not confirmed by the owner (asked 2026-10-18, not answered).
+and the program's waits are left out, so the elapsed time shown is not the robot's. The gripper
+state is not an estimate: the robot holds the part from the start of the case, places it into the
+magazine and releases it, picks it up again and returns home holding it; the gripper is open only
+between the release and the re-pick (S2) (owner fact, 2026-10-18).
 
 - **Impact:** the replay shows the order, the shape and the relative timing of the moves; real cycle
-  times must be measured on the robot. If the part is not held on entry, the moves before the drop
-  are replayed and checked at the wrong opening (they lie inside machine (a), where the model is not
-  valid anyway).
+  times must be measured on the robot.
 - **Pinned by:** `test/Example/test_replay.py::test_the_speed_scales_the_playback`.
-- **What would close it:** a cycle-time measurement on the robot; the owner's answer on the gripper
-  state on entry.
+- **What would close it:** a cycle-time measurement on the robot.
 
 ## movel is checked joint-linear by the station tests, on its TCP line by the replay
 

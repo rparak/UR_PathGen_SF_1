@@ -1050,8 +1050,9 @@ selects, without it the catalogue is printed and a number asked; `--list` prints
   the trapezoid of §10.6 with the line's own a and v (the leading joint for a movej, the TCP path for
   a movel), position along it by `Profile_Fraction`. The gripper's time and the program's waits are
   not modelled.
-- **Gripper.** The case is entered holding its part (an inference: no gripper action precedes the
-  drop or follows the pick; not confirmed by the owner, `KNOWN_ISSUES.md`); the opening switches
+- **Gripper.** The case is entered holding its part (owner, 2026-10-18: the part is held from the
+  start of the case through the loading moves to the release at the magazine, and again from the
+  re-pick back home; the gripper is open only between the release and the re-pick, S2); the opening switches
   between the case's holding width and open (85 mm) at the gripper actions. The window shows the
   holding scene; the open state is shown by its finger joints, the pad-span hull hidden. Every check
   uses the scene of the move's own state.
