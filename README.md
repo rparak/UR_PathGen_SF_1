@@ -38,6 +38,16 @@ robot's visual meshes, `3` the collision geometry (environment pieces and robot)
 builds the scene without the visual STL by default (faster, lighter) and starts with group 3 shown;
 `--with-stl` loads the STL as well.
 
+Show the robot static at one learned position of the program, with its clearance (taught rule):
+
+```bash
+.venv/bin/mjpython Example/demo_visualize_position.py --pos home_q
+.venv/bin/python Example/demo_visualize_position.py --list
+```
+
+`--opening open` shows the gripper open (85 mm), `--case 18` uses case 18's holding width. A
+position inside machine (a) is labelled "model not valid here" (see `KNOWN_ISSUES.md`).
+
 Plan the transfer segments of the rotation sequence (cases 17 and 18; about 35 minutes, writes
 `Data/Generated/` and prints the taught vs optimised report). `Data/Generated/` holds, per case, the
 optimised whole case in the same form as the simplified taught program in `Data/Programs/sf1_plc_v4/`:

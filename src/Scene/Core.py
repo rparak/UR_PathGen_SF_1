@@ -307,6 +307,9 @@ class Scene_Cls(object):
         # Environment geoms, whose margins Environment_Distance raises for one collision pass.
         self.__env_geoms = np.array([g for g in range(m.ngeom) if m.geom_contype[g]
                                      and m.body(m.geom_bodyid[g]).name.startswith('env')], dtype=int)
+        # The STL component of each environment piece's geom (Components_Within).
+        self.__geom_component = {mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, 'env_piece_%d' % i): int(c)
+                                 for i, c in enumerate(self.__piece_components)}
         self.__Set_Gripper()
         self.Set_Joints(np.zeros(6))
         if with_environment:
@@ -445,9 +448,10 @@ class Scene_Cls(object):
                     self.__zone_boxes.append(name)
             spec.add_exclude(bodyname1='base', bodyname2='env_stand')
             self.__collision_manifest = collision_set.Manifest
+            self.__piece_components = list(collision_set.Components)
         else:
             self.__collision_manifest = {}
-            self.__zone_pieces, self.__zone_boxes = [], []
+            self.__zone_pieces, self.__zone_boxes, self.__piece_components = [], [], []
         if with_visual:
             vertices, faces = Read_Binary_STL(cfg.Visual_Mesh)
             spec.add_mesh(name='env_visual', uservert=vertices.flatten().tolist(), userface=faces.flatten().tolist(),
@@ -897,6 +901,38 @@ class Scene_Cls(object):
                 body = m.body(m.geom_bodyid[g]).name
                 worst[body] = max(worst.get(body, 0.0), excursion)
         return [Violation_Str(body, 'workspace', -e, 0.0) for body, e in sorted(worst.items(), key=lambda x: -x[1])]
+
+    def Components_Within(self, q: tp.Sequence[float], components: tp.Sequence[int], distance: float) -> tp.List[tp.Tuple[int, float]]:
+        """
+        Description:
+            The given STL components that a robot or gripper geom comes closer to than distance at q,
+            each with its smallest signed distance. MuJoCo generates every contact below the sum of
+            the geom margins (at least Clearance.Environment), so distance may not exceed it.
+
+        Args:
+            (1) q [Vector<float> 1x6]: Joint angles (rad).
+            (2) components [List<int>]: STL component ids (the collision set's piece -> component map).
+            (3) distance [float]: The threshold (m), at most Clearance.Environment.
+
+        Returns:
+            (1) parameter [List<Tuple<int, float>>]: (component, distance (m)), sorted by distance.
+        """
+
+        if distance > self.__cfg.Clearance_Environment:
+            raise Scene_Error_Cls('Components_Within sees contacts only below Clearance.Environment (%.3f m), not %.3f m.'
+                                  % (self.__cfg.Clearance_Environment, distance))
+        m, d = self.__model, self.__data
+        wanted = {int(c) for c in components}
+        self.Set_Joints(q)
+        mujoco.mj_collision(m, d)
+        found: tp.Dict[int, float] = {}
+        for i in range(d.ncon):
+            contact = d.contact[i]
+            for env, other in ((contact.geom1, contact.geom2), (contact.geom2, contact.geom1)):
+                component = self.__geom_component.get(env)
+                if component in wanted and other not in self.__geom_component and contact.dist < distance:
+                    found[component] = min(found.get(component, np.inf), float(contact.dist))
+        return sorted(found.items(), key=lambda item: item[1])
 
     def Environment_Distance(self, q: tp.Sequence[float], distmax: float) -> tp.Tuple[float, str]:
         """

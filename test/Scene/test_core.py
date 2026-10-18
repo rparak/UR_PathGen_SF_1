@@ -638,3 +638,20 @@ def test_contacts_beyond_the_configured_margin_are_not_violations(scene, cfg):
                     if tuple(sorted((m.body(m.geom_bodyid[d.contact[i].geom1]).name,
                                      m.body(m.geom_bodyid[d.contact[i].geom2]).name))) == pair]
         assert contacts and band[0] < min(contacts) < band[1], (pair, contacts)
+
+
+def test_components_within_names_the_machine_interior_hull(scene, cfg, points):
+    """
+    Description:
+        Components_Within reports the STL component a robot geom comes within the margin of: load3
+        (the taught grinder-loading point, inside machine (a)) lies in the interior hull, component
+        1638, penetrating it by 99.5 mm (KNOWN_ISSUES, measured 2026-10-18, +-1 mm); home is far
+        from it. A threshold above Clearance.Environment is refused: no contact is generated there.
+    """
+
+    found = scene.Components_Within(points['load3'].Q, [1638], cfg.Clearance_Environment)
+    assert [c for c, _ in found] == [1638]
+    assert found[0][1] == pytest.approx(-0.0995, abs=0.001)
+    assert scene.Components_Within(points['home'].Q, [1638], cfg.Clearance_Environment) == []
+    with pytest.raises(Scene_Error_Cls, match='only below Clearance.Environment'):
+        scene.Components_Within(points['home'].Q, [1638], cfg.Clearance_Environment + 0.001)

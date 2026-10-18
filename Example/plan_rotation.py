@@ -100,6 +100,17 @@ CONST_PENALTY_WEIGHT = 0.5
 # duration estimate only; their lines are copied verbatim.
 #   Unit [float] (m/s^2, m/s)
 CONST_MOVEL_A, CONST_MOVEL_V = 1.2, 0.25
+# The STL component whose hull fills the interior of machine (a): the set's only fallback piece, an
+# open shell with 235 mm excess; the loading moves of the program penetrate it by up to 145 mm, so
+# the model is not valid there (KNOWN_ISSUES, SPEC 4.9). A configuration within the environment
+# margin of it is labelled CONST_LABEL_INVALID, never as a collision.
+#   Unit [Tuple<int>]
+CONST_MACHINE_INTERIOR = (1638,)
+# The clearance labels of a configuration or a segment shown in a viewer.
+#   Unit [string]
+CONST_LABEL_CLEAR = 'clearance kept (%s rule)'
+CONST_LABEL_VIOLATED = 'CLEARANCE VIOLATED (%s rule)'
+CONST_LABEL_INVALID = 'model not valid here (machine (a) interior, KNOWN_ISSUES)'
 # The blend radius token of a program movej (absent = no blend).
 #   Unit [Pattern]
 CONST_BLEND = re.compile(r', r=([^,()]+)\)\s*$')
@@ -145,6 +156,34 @@ def Opening(cfg: Cell_Configuration_Str, case: int, state: str) -> float:
         raise Configuration_Error_Cls('Tool.Holding_Openings has no entry for case %d; add {Case: %d, Opening: <m>, '
                                       'Source: <text>} to the configuration.' % (case, case))
     return cfg.Holding_Openings[case][0]
+
+
+def Configuration_Label(scene: Scene_Cls, cfg: Cell_Configuration_Str, q: tp.Sequence[float], kind: str,
+                        station_tcps: tp.Optional[np.ndarray] = None) -> tp.Tuple[str, tp.List, tp.List[tp.Tuple[int, float]]]:
+    """
+    Description:
+        The clearance label of one configuration under the rule of its kind: CONST_LABEL_INVALID when
+        a robot geom comes within Clearance.Environment of the machine (a) interior (the model is not
+        valid there, whatever the check says), else clear or violated.
+
+    Args:
+        (1) scene [Scene_Cls(object)]: The scene with the environment.
+        (2) cfg [Cell_Configuration_Str(object)]: The cell configuration (Clearance.Environment).
+        (3) q [Vector<float> 1x6]: Joint angles (rad).
+        (4) kind [string]: 'taught' or 'generated'.
+        (5) station_tcps [Matrix<float> Nx3]: The station points' TCPs (generated rule only).
+
+    Returns:
+        (1) parameter [Tuple<string, List<Violation_Str>, List<Tuple<int, float>>>]: The label, the
+                                                                                   violations and the
+                                                                                   machine-interior contacts.
+    """
+
+    violations = scene.Check_Configuration(q, kind, station_tcps)
+    interior = scene.Components_Within(q, CONST_MACHINE_INTERIOR, cfg.Clearance_Environment)
+    if interior:
+        return CONST_LABEL_INVALID, violations, interior
+    return (CONST_LABEL_VIOLATED if violations else CONST_LABEL_CLEAR) % kind, violations, interior
 
 
 def Measure(scene: Scene_Cls, path: tp.Sequence[np.ndarray], station_q: tp.Sequence[tp.Sequence[float]]) -> tp.Dict:

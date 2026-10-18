@@ -528,3 +528,23 @@ the owner.
 Pinned by `test/Configuration/test_core.py::test_the_shipped_configuration_loads_in_si_units`,
 `test/Example/test_plan_rotation.py` and the per-case scenes of `test/Scene/test_station.py` and
 `test/Planner/test_core.py`.
+
+## Inside machine (a) the label is "model not valid here", not a collision
+
+**Decision.** A configuration whose robot or gripper geometry comes within `Clearance.Environment`
+of the interior hull of machine (a) (component 1638) is labelled *model not valid here* by the
+viewers, whatever the clearance check reports there. The violating pairs are still listed.
+
+**Why.** That hull is an open shell filled by its hull (235 mm excess, `KNOWN_ISSUES.md`); every
+taught loading point inside the machine penetrates it by 99 – 144 mm (measured 2026-10-18 at 50 mm:
+load3 −99.5, Waypoint_13 −137.4, bench_drop_11 −140.8 mm), although the program runs there on the
+real robot. Calling those moves collisions would be false; calling them clear would be worse.
+
+**Alternatives.** Excluding the piece from the check: rejected, it would hide a real contact with
+the machine's outer wall. Rebuilding the piece: open, it needs a decomposition that passes the
+conservativeness check (`KNOWN_ISSUES.md`).
+
+**Revisit if** component 1638 is decomposed or the machine interior is modelled.
+
+Pinned by `test/Scene/test_core.py::test_components_within_names_the_machine_interior_hull` and
+`test/Example/test_visualize_position.py::test_a_known_position_reports_its_clearance`.
