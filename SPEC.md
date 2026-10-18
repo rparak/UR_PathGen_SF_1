@@ -1127,8 +1127,9 @@ synthetic point with a joint at 4.0 rad that must come out as 4.0.
 ### 10.6 Planner and the rotation-sequence output
 
 *Since the machine shift (2026-10-18) the taught S1 – S3 all keep the generated rule; S1 – S3 are
-optimised for time (home → home 23.37 → 16.66 s, estimate), not for clearance, and the paths
-written on the final scene use the space the estimated shift frees (§17).*
+optimised for time (home → home 23.37 → 17.50 s, estimate), not for clearance, and the paths
+written on the final scene use the space the estimated shift frees, keeping 30 mm to machine (a)
+outside the zone (§9.7, §17).*
 
 **Segments** (case 17, §1). S1 home → drop_rotate_1 (holding: case 17's `Tool.Holding_Openings`
 entry, 50 mm), S2 Waypoint_5 → Waypoint_18 (open, 85 mm: the full stroke for `rq_set_pos_spd_for(0, ...)`; the
@@ -1247,7 +1248,7 @@ replayed home → home paths stay far from it; the position viewer shows the lab
 | `test/Example/test_write_taught_programs.py` | the simplified program is, after its header, exactly case 17 home → home as the owner states it (§1, typed in the test) and one contiguous run of the program: each movej/movel the program's line without indentation (home `r=0.01`), a gripper comment naming the program line at each gripper action, nothing else; its points file holds exactly those targets in first-use order with the extract's tokens; the script writes exactly the committed two files, byte for byte |
 | `test/Example/test_plan_rotation.py` | the holding opening is case 17's configured `Tool.Holding_Openings` value (not another entry's, not `Tool.Opening`), open is 85 mm; a configuration without case 17 is refused; `Rotation_Entries` is home → … → home only: a generated start at home (the program blends, r=0.01), S1 – S3 generated, the station lines verbatim, no loading move |
 | `test/Example/test_visualize_position.py` | headless: `home_q` reports "clearance kept (taught rule)" and `load3` "model not valid here", each at case 17's configured 50 mm with its source; `home_p` and an unknown name are refused (exit 1, no scene built); `--list` prints every position of the extract in order |
-| `test/Example/test_replay.py` | every catalogue entry (case 17 home → home; headless, `--skip-check`) visits the moves of its files in order (patterns typed in the test), each by the rule of its kind, the gripper switching at the actions (85 mm open, 50 mm closed) and every move run in the state after them, each movel on its TCP line (≥ 9 steps), starting at home; `--speed 4` plays in a quarter of the estimated time, `1.0` in the estimated time, within a frame per move; a path outside the catalogue (given or typed), and a speed that is 0, negative or NaN, are refused before a scene is built; `--list` prints the three entries; path 2 with the dense check and screenshots, without `--with-stl`: built without the visual STL (same geoms), its 9 moves each keep the rule of their kind (generated movej the generated rule, program lines the taught rule) |
+| `test/Example/test_replay.py` | every catalogue entry (case 17 home → home; headless, `--skip-check`) visits the moves of its files in order (patterns typed in the test), each by the rule of its kind, the gripper switching at the actions (85 mm open, 50 mm closed) and every move run in the state after them, each movel on its TCP line (≥ 9 steps), starting at home; `--speed 4` plays in a quarter of the estimated time, `1.0` in the estimated time, within a frame per move; a path outside the catalogue (given or typed), and a speed that is 0, negative or NaN, are refused before a scene is built; `--list` prints the three entries; path 2 with the dense check and screenshots, without `--with-stl`: built without the visual STL (same geoms), its 11 moves each keep the rule of their kind (generated movej the generated rule, program lines the taught rule) |
 | `test/Install/test_install.py` | `bash -n`; sourced steps under a hermetic `PATH`: OS detection (Darwin arm64, Linux), Python 3.11 resolution (`python3` never called), hash verification fails on a tampered model file, every log line in the log format |
 | `.claude/skills/project-style-rpx/scripts/test_check_style.py` | the checker itself (outside `test/`) |
 
@@ -1488,5 +1489,27 @@ Measured on the development Mac (M2 Pro), Python 3.11, mujoco 3.16.0.
   the top profile by 19.6 mm (S1) and 16.2 mm (S2) and the post by 9.8 mm (S3). They keep ≥ 228 mm to
   the machine-interior hull and the parts on the tables. Not repeated: a second identical run (the
   determinism is pinned by `test_a_reduced_planning_run_is_byte_identical_twice`).
+- **Re-plan with the machine margin, the stub and the station-box rule (2026-10-18, §4.13, §9.7).**
+  The added boxes are convex meshes; `Clearance.Machine_Extra` +10 mm (30 mm to machine (a) outside
+  the zone, generated only); the stub box at its largest size; the planner keeps the station-box
+  rule. The committed S1 – S3 broke the new scene: S1 and S3 the machine margin (29.9 / 23.3 mm), S2
+  the station-box rule (9.5 mm to the stub, 0.6 mm closer than its taught end). Re-planned once:
+  seed 20261017, full budget, w = 0.5 s/m; 891 s (M2 Pro); each `Verify_Path`-checked, 0 violations.
+  On the final scene (exact distances, every sample; "outside" = outside the 50 mm station
+  neighbourhood, from the planner's report):
+
+  | S | Taught | Before (written 2026-10-18, §17 above) | After (written) |
+  |---|---|---|---|
+  | S1 | 5.95 s, 1 via; min 13.6 mm (coupler – stub); holder 146.8, stub 13.6; outside 60.3 | 4.76 s, 1 via; 13.6 (coupler – stub); holder 146.8, stub 13.6; outside 29.7 (22 violations) | 4.76 s, 1 via; 13.6 (coupler – stub); holder 146.8, stub 13.6; outside 30.4 (gripper base) |
+  | S2 | 8.30 s, 3 vias; 8.3 (pad span – stub); holder 15.1, stub 8.3; outside 75.9 (51 violations) | 4.31 s, 1 via; 9.5 (pad span – stub); holder 15.1, stub 9.5; outside 31.0 (10 violations) | 4.81 s, 2 vias; 10.1 (pad – stub); holder 15.1, stub 10.1; outside 41.7 (gripper base) |
+  | S3 | 6.81 s, 1 via; 45.0 (pad – post 2710); holder ≥ 200, stub 63.3 | 5.27 s, direct; 23.3 (wrist 2 – post); stub 63.3 (124 violations) | 5.62 s, 1 via; 45.0 (pad – post); holder ≥ 200, stub 63.3; outside 49.3 |
+  | home → home | 23.37 s | 16.66 s | **17.50 s** |
+
+  Violations: the current generated rule (the 30 mm machine margin, the station-box floors). The
+  taught S2 breaks the station-box rule itself (it passes the stub at 8.3 mm, its ends keep 10.1 mm);
+  the strict comparison reports it. The cost of the new rules: +0.84 s home → home (estimate), S2
+  +0.50 s (one via more, kept at its taught end's 10.1 mm to the stub), S3 +0.35 s (no longer direct).
+  At the earlier −100 mm the new paths would still pass into the top profile (S1 −18.5 mm, S2
+  −0.8 mm); S3 would keep 11.5 mm: the 10 mm margin covers the stated ±10 mm, not the whole shift.
 - **Demo** (base ±45° around `home`): 1234 joint-linear samples, every margin kept, label
   **"clearance checked"**. At 180° (2026-10-17) the same: 1234 samples, every margin kept.

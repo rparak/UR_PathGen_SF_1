@@ -49,7 +49,7 @@ Show the robot static at one learned position of the program, with its clearance
 not valid here" (see `KNOWN_ISSUES.md`).
 
 The deliverable is case 17 of the program from home to home: the taught sequence and its optimised
-version. Plan its transfer segments S1 – S3 (about 10 minutes, writes `Data/Generated/` and prints
+version. Plan its transfer segments S1 – S3 (about 15 minutes, writes `Data/Generated/` and prints
 the taught vs optimised report). `Data/Generated/` holds the optimised sequence in the same form as
 the simplified taught program in `Data/Programs/sf1_plc_v4/`: `SF1_Rotation_17.urscript` (the
 points, including the generated via points) and `SF1_Rotation_17_Sequence.script` (the taught lines

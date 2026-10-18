@@ -131,15 +131,16 @@ deliverable) pass the full generated-rule check in simulation. What that does no
 
 - **Durations are estimates:** a trapezoid on the leading joint with the program's a and v, a stop
   at every via point; the controller's profile, blends and the gripper's time are not modelled. The
-  cycle-time gain (23.37 -> 16.66 s home -> home, estimate) is not measured.
+  cycle-time gain (23.37 -> 17.50 s home -> home, estimate) is not measured.
 - **Clearance has no reserve beyond the margins:** the hard limits are 20 mm, and 5 mm within
   50 mm of a station point (the holder only). The clearance penalty (weight 0.5 s/m, the owner's
-  choice) only prefers clearance below 30 mm: outside the station neighbourhood the optimised paths
-  pass the window's top profile at 29.7 mm (S1) and 31.0 mm (S2), and S3 runs direct, 23.3 mm from
-  the post (re-planned 2026-10-18 on the final scene, SPEC §17).
-- **The optimised paths depend on the estimated machine position:** with the machine at the earlier
-  estimate (−100 mm, post fitted) they would penetrate the top profile by 19.6 mm (S1) and 16.2 mm
-  (S2) and the post by 9.8 mm (S3). The space they use is freed only by the owner's estimate of a
+  choice) only prefers clearance below 30 mm, and machine (a) outside the zone is held at 30 mm
+  (±10 mm position accuracy): outside the station neighbourhood the optimised paths keep 30.4 mm
+  (S1), 41.7 mm (S2) and 49.3 mm (S3); near the station S2 passes the stub at 10.1 mm, as close as
+  its taught end (re-planned 2026-10-18 on the final scene, SPEC §17).
+- **The optimised paths depend on the estimated machine position:** they keep 30 mm to it, which
+  covers the stated ±10 mm; with the machine at the earlier estimate (−100 mm, post fitted) S1 would
+  penetrate the top profile by 18.5 mm and S2 by 0.8 mm (S3 would keep 11.5 mm). The space they use is freed only by the owner's estimate of a
   further 50 mm, which nothing in the program confirms; the owner judges it closer to the real cell
   (2026-10-18), still unmeasured. **Run them on the robot at reduced speed first** (see "The
   positions of machine (a) and the side cabinet").

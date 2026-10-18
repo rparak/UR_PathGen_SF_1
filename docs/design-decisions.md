@@ -654,6 +654,10 @@ were re-planned once on the final scene (SPEC §17): 4.76 / 4.31 / 5.27 s (S3 di
 objective, now with more free space: time is bought down to the 30 mm penalty threshold and, for
 S3, 6.7 mm inside it. All three use space only the estimated shift frees (`KNOWN_ISSUES.md`).*
 
+*Updated 2026-10-18 (later): with the machine margin (+10 mm), the stub and the station-box rule,
+S1 - S3 were re-planned once more (SPEC §17): 4.76 / 4.81 / 5.62 s, home -> home 17.50 s (+0.84 s);
+S2 needs two via points to stay as far from the stub as its taught end, S3 is no longer direct.*
+
 **Revisit if** the cell is measured (the machine position is an estimate, `KNOWN_ISSUES.md`), the
 penalty weight changes, or the owner prefers the clearance of the taught or committed paths to the
 time.
