@@ -28,7 +28,7 @@ import pytest
 # Custom Lib.:
 #   ../src/Collision/Core — the conservativeness check under test
 from Collision.Core import (Read_Collision_Set, Read_Binary_STL, Connected_Components, Conservativeness_Points, Hull_Of,
-                            Union_Distances, Point_Triangle_Distance)
+                            Union_Distances, Point_Triangle_Distance, Component_Translations)
 
 """
 Description:
@@ -80,8 +80,8 @@ def setup(root, cfg):
     """
     Description:
         The committed set, the STL by component, the pieces of each CoACD component, and the
-        configured component translations (the build checks an overridden component against its
-        translated surface, so the recomputation does too).
+        configured translations (the build checks a moved component against its translated surface,
+        so the recomputation does too).
     """
 
     collision = Read_Collision_Set(cfg.Collision_Set, root)
@@ -91,7 +91,7 @@ def setup(root, cfg):
     for i, (c, m) in enumerate(zip(collision.Components, collision.Methods)):
         if m == 'coacd':
             pieces.setdefault(c, []).append(i)
-    shift = {c: np.asarray(t) for c, t, _ in cfg.Component_Overrides}
+    shift, _ = Component_Translations(vertices, faces, labels, cfg.Assembly_Overrides, cfg.Component_Overrides)
     return collision, (vertices, shift), faces, labels, pieces
 
 

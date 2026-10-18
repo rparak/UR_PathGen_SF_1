@@ -43,7 +43,9 @@ Description:
 # Every field of the shipped file, as a dotted path.
 #   Unit [List<string>]
 CONST_REQUIRED = ['Environment.Visual_Mesh', 'Environment.Collision_Set', 'Environment.Stand_Region.Min',
-                  'Environment.Stand_Region.Max', 'Environment.Component_Overrides', 'Robot.Model', 'Robot.Base_Position', 'Robot.Base_Yaw',
+                  'Environment.Stand_Region.Max', 'Environment.Assembly_Overrides', 'Environment.Component_Overrides',
+                  'Environment.Added_Boxes',
+                  'Robot.Model', 'Robot.Base_Position', 'Robot.Base_Yaw',
                   'Robot.Joint_Position_Limits.Min', 'Robot.Joint_Position_Limits.Max', 'Tool.Model',
                   'Tool.Coupling.Thickness', 'Tool.Coupling.Diameter', 'Tool.Coupling.Spigot_Depth', 'Tool.Mount_Yaw',
                   'Tool.Opening', 'Tool.TCP_Offset', 'Clearance.Environment', 'Clearance.Self',
@@ -92,6 +94,7 @@ def test_the_shipped_configuration_loads_in_si_units():
     assert cfg.Joint_Limits_Max[0] == pytest.approx(2.0 * math.pi)
     assert cfg.Clearance_Environment == 0.020 and cfg.Clearance_Self == 0.005
     assert cfg.Self_Pair_Overrides == [('base', 'upper_arm_link', 0.0)]
+    assert cfg.Assembly_Overrides == [] and cfg.Added_Boxes == []
 
 
 @pytest.mark.parametrize('field', CONST_REQUIRED)
@@ -126,6 +129,20 @@ def test_a_missing_required_field_fails_naming_it(tmp_path, field):
     ('Environment.Component_Overrides', [{'Component': 1, 'Translation': [0.0, 0.0, 0.0], 'Source': 'a'},
                                          {'Component': 1, 'Translation': [0.0, 0.0, 0.0], 'Source': 'b'}],
      'more than once'),
+    ('Environment.Assembly_Overrides', [{'Name': 'a', 'Object_Of': 1154, 'Translation': [-0.151, 0.0, 0.0], 'Source': 'x'}],
+     'more than 150 mm'),
+    ('Environment.Assembly_Overrides', [{'Name': 'a', 'Object_Of': 1154, 'Translation': [0.0, 0.0, 0.0], 'Source': ''}],
+     'Source: text'),
+    ('Environment.Assembly_Overrides', [{'Name': 'a', 'Object_Of': 1, 'Translation': [0.0, 0.0, 0.0], 'Source': 'x'},
+                                        {'Name': 'a', 'Object_Of': 2, 'Translation': [0.0, 0.0, 0.0], 'Source': 'y'}],
+     'more than once'),
+    ('Environment.Added_Boxes', [{'Name': 'b', 'Min': [0.0, 0.0, 0.1], 'Max': [0.1, 0.1, 0.1], 'Source': 'photo'}],
+     'not below Max'),
+    ('Environment.Added_Boxes', [{'Name': 'b', 'Min': [0.0, 0.0, 0.0], 'Max': [0.1, 0.1, 0.1], 'Source': ''}],
+     'Source: text'),
+    ('Environment.Added_Boxes', [{'Name': 'b', 'Min': [0.0, 0.0, 0.0], 'Max': [0.1, 0.1, 0.1], 'Source': 'a'},
+                                 {'Name': 'b', 'Min': [0.0, 0.0, 0.0], 'Max': [0.1, 0.1, 0.1], 'Source': 'b'}],
+     'more than once'),
     ('Clearance.Station_Zone.Environment', 0.021, 'must not exceed Clearance.Environment'),
     ('Clearance.Station_Zone.Max', [-0.85, -0.20, 1.85], 'below Max'),
     ('Clearance.Station_Zone.Endpoint_Radius', 0.0, 'greater than 0'),
@@ -142,6 +159,19 @@ def test_an_invalid_value_fails_and_never_falls_back(tmp_path, field, value, fra
     _Set(data, field, value)
     with pytest.raises(Configuration_Error_Cls, match=fragment):
         _Load(tmp_path, data)
+
+
+def test_an_empty_list_of_added_boxes_is_accepted(tmp_path):
+    """
+    Description:
+        Environment.Added_Boxes is REQUIRED but may be empty: a cell without obstacles missing from
+        the STL loads with no box and no note.
+    """
+
+    data = _Shipped()
+    _Set(data, 'Environment.Added_Boxes', [])
+    cfg = _Load(tmp_path, data)
+    assert cfg.Added_Boxes == [] and cfg.Notes == []
 
 
 def test_every_problem_is_listed_at_once(tmp_path):

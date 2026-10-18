@@ -231,10 +231,11 @@ def test_the_fingers_at_50_mm_are_pinned(robot_scene):
     assert face == pytest.approx(CONST_PAD_FACE_50, abs=CONST_REGRESSION_MM)
 
 
-def test_the_fingers_open_along_flange_x(robot_scene):
+def test_the_fingers_open_along_the_configured_mount_yaw(robot_scene, cfg):
     """
     Description:
-        At Mount_Yaw = 0 the pads separate along the flange x axis (the documented assumption).
+        The pads separate along the flange axis (cos Mount_Yaw, sin Mount_Yaw, 0): flange y at the
+        shipped 90 deg (owner, 2026-10-18), flange x at the Menagerie default 0.
     """
 
     m, d = robot_scene.Model, robot_scene.Data
@@ -242,7 +243,8 @@ def test_the_fingers_open_along_flange_x(robot_scene):
     F = robot_scene.Flange_Pose()
     axis = F[:3, :3].T @ (d.xpos[_Body(m, 'gripper_left_pad')] - d.xpos[_Body(m, 'gripper_right_pad')])
     axis /= np.linalg.norm(axis)
-    assert abs(axis[0]) > 0.999
+    expected = np.array([math.cos(cfg.Mount_Yaw), math.sin(cfg.Mount_Yaw), 0.0])
+    assert abs(float(axis @ expected)) > 0.999
 
 
 def test_the_coupling_replaces_the_menagerie_disc(robot_scene, cfg):
@@ -412,21 +414,48 @@ def test_a_pose_pushed_into_the_side_table_is_a_collision(scene, cfg, plc_points
         Check_Learned_Point(scene, cfg, point)
 
 
-def test_a_set_built_with_other_overrides_is_refused(cfg, tmp_path):
+@pytest.mark.parametrize('field, entry', [
+    ('Component_Overrides', {'Component': 5, 'Translation': [0.001, 0.0, 0.0], 'Source': 'test'}),
+    ('Assembly_Overrides', {'Name': 'test', 'Object_Of': 2643, 'Translation': [0.001, 0.0, 0.0], 'Source': 'test'}),
+])
+def test_a_set_built_with_other_overrides_is_refused(tmp_path, field, entry):
     """
     Description:
-        The scene compares the collision set's recorded component overrides with the configuration
-        and refuses a mismatch, naming the rebuild; a set never silently misses or keeps a correction.
+        The scene compares the collision set's recorded assembly and component overrides with the
+        configuration and refuses a mismatch of either, naming the rebuild; a set never silently
+        misses or keeps a correction.
     """
 
     with open(CONST_DEFAULT_CONFIG_FILE, encoding='utf-8') as handle:
         data = yaml.safe_load(handle)
-    data['Environment']['Component_Overrides'] = list(data['Environment']['Component_Overrides']) + [
-        {'Component': 5, 'Translation': [0.001, 0.0, 0.0], 'Source': 'test'}]
+    data['Environment'][field] = list(data['Environment'][field]) + [entry]
     path = tmp_path / 'cell_override.yaml'
     path.write_text(yaml.safe_dump(data), encoding='utf-8')
     with pytest.raises(Scene_Error_Cls, match='Rebuild it with'):
         Scene_Cls(Load_Configuration(str(path)), with_environment=True)
+
+
+def test_an_added_box_is_an_env_box_and_a_zone_piece_only_inside_the_zone(cfg):
+    """
+    Description:
+        Every Environment.Added_Boxes entry becomes a box primitive of body env spanning exactly its
+        configured corners, with the environment margin; it is a zone piece when it meets the
+        station-zone box (a box at the station) and not otherwise (a box beside the side table).
+    """
+
+    boxes = [('test_zone', [-0.70, -0.35, 1.40], [-0.68, -0.33, 1.42], 'test'),
+             ('test_far', [0.50, 0.60, 0.80], [0.60, 0.70, 0.90], 'test')]
+    scene = Scene_Cls(dataclasses.replace(cfg, Added_Boxes=boxes), with_environment=True)
+    m = scene.Model
+    for name, lo, hi, _ in boxes:
+        g = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, 'env_box_' + name)
+        assert g >= 0, name
+        assert m.geom_type[g] == mujoco.mjtGeom.mjGEOM_BOX and m.body(m.geom_bodyid[g]).name == 'env'
+        assert m.geom_contype[g] == 1 and m.geom_conaffinity[g] == 1
+        assert np.allclose(m.geom_pos[g], (np.array(lo) + np.array(hi)) / 2.0, atol=1e-12)
+        assert np.allclose(m.geom_size[g], (np.array(hi) - np.array(lo)) / 2.0, atol=1e-12)
+        assert m.geom_margin[g] == pytest.approx(cfg.Clearance_Environment)
+    assert scene.Zone_Boxes == ['test_zone']
 
 
 def test_the_station_zone_applies_within_the_endpoint_radius(robot_scene, cfg, plc_points):

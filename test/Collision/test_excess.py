@@ -28,7 +28,7 @@ import pytest
 # Custom Lib.:
 #   ../src/Collision/Core — the set and the distance functions
 from Collision.Core import (Read_Collision_Set, Read_Binary_STL, Connected_Components, Hull_Of, Sample_Surface,
-                            Surface_Distance, Point_Triangle_Distance)
+                            Surface_Distance, Point_Triangle_Distance, Component_Translations)
 
 """
 Description:
@@ -56,14 +56,14 @@ CONST_COMPONENT_PIECES = 3
 def setup(root, cfg):
     """
     Description:
-        The committed set, the STL by component, and the configured component translations (an
-        overridden component's excess is measured against its translated surface).
+        The committed set, the STL by component, and the configured translations (assembly and
+        component overrides; a moved component's excess is measured against its translated surface).
     """
 
     collision = Read_Collision_Set(cfg.Collision_Set, root)
     vertices, faces = Read_Binary_STL(cfg.Visual_Mesh)
     _, labels = Connected_Components(faces)
-    shift = {c: np.asarray(t) for c, t, _ in cfg.Component_Overrides}
+    shift, _ = Component_Translations(vertices, faces, labels, cfg.Assembly_Overrides, cfg.Component_Overrides)
     return collision, vertices, faces, labels, shift
 
 

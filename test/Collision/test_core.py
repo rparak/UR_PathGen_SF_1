@@ -40,7 +40,7 @@ from scipy.spatial import ConvexHull
 # Custom Lib.:
 #   ../src/Collision/Core — the collision set under test
 from Collision.Core import (Read_Collision_Set, Read_Binary_STL, Thicken_Degenerate, Connected_Components,
-                            Collision_Error_Cls, CONST_THICKEN)
+                            Collision_Error_Cls, CONST_THICKEN, Component_Objects, Component_Translations)
 
 """
 Description:
@@ -55,6 +55,12 @@ CONST_STL_FACES = 1757948
 # Connected components by manifold edge, as measured independently with trimesh (SPEC 4.1).
 #   Unit [int]
 CONST_STL_COMPONENTS = 2756
+# Components of the objects (SPEC 4.1): the machine body, the left window post at the station
+# and the lower cabinet panel (object (a)); the stand profile, the pallet and side tables and the
+# side cabinet (objects (b) and (c)).
+#   Unit [int], [Tuple<int>]
+CONST_MACHINE_BODY, CONST_STATION_POST, CONST_CABINET_PANEL = 1154, 2710, 180
+CONST_NOT_MACHINE = (2681, 1060, 1061, 2643)
 
 
 @pytest.fixture(scope='module')
@@ -101,6 +107,32 @@ def test_components_are_split_at_non_manifold_edges(stl):
     fan = np.array([[0, 1, 2], [1, 0, 3], [0, 1, 4]])
     assert Connected_Components(fan)[0] == 3
     assert Connected_Components(np.array([[0, 1, 2], [1, 0, 3]]))[0] == 1
+
+
+def test_the_stl_has_three_objects_and_an_assembly_moves_exactly_one(stl, collision, cfg):
+    """
+    Description:
+        Components grouped by touching bounding boxes form the three objects of SPEC 4.1: the machine
+        (a) with 1749 components, the robot side (b) with 951, the side cabinet (c) with 56. The
+        machine holds the body, the station post and the lower cabinet panel, and none of the stand,
+        the side tables or the side cabinet. An assembly named by the body moves exactly that
+        object, and a component override adds its own translation on top. The manifest records the
+        members of the configured assemblies.
+    """
+
+    vertices, faces = stl
+    _, labels = Connected_Components(faces)
+    objects = Component_Objects(vertices, faces, labels)
+    assert sorted(np.bincount(objects).tolist()) == [56, 951, 1749]
+    machine = set(np.flatnonzero(objects == objects[CONST_MACHINE_BODY]).tolist())
+    assert len(machine) == 1749 and {CONST_STATION_POST, CONST_CABINET_PANEL} <= machine
+    assert not machine & set(CONST_NOT_MACHINE)
+    shift, members = Component_Translations(vertices, faces, labels, [('test', CONST_MACHINE_BODY, [-0.1, 0.0, 0.0], 'test')],
+                                            [(CONST_STATION_POST, [-0.01, 0.0, 0.0], 'test')])
+    assert set(members['test']) == machine and set(shift) == machine
+    assert np.allclose(shift[CONST_MACHINE_BODY], [-0.1, 0.0, 0.0]) and np.allclose(shift[CONST_STATION_POST], [-0.11, 0.0, 0.0])
+    _, configured = Component_Translations(vertices, faces, labels, cfg.Assembly_Overrides, cfg.Component_Overrides)
+    assert collision.Manifest.get('assembly_components', {}) == {name: sorted(c) for name, c in configured.items()}
 
 
 def test_the_manifest_names_the_stl_it_was_built_from(root, cfg, collision):
@@ -161,13 +193,13 @@ def test_every_hull_piece_contains_its_component(stl, collision, cfg):
     """
     Description:
         Hull and thickened pieces are conservative by convexity: every vertex of the original
-        component, translated by its configured override if it has one, lies inside the piece's
-        hull (checked here, independently of the build).
+        component, translated by its configured assembly and component overrides, lies inside the
+        piece's hull (checked here, independently of the build).
     """
 
     vertices, faces = stl
     _, labels = Connected_Components(faces)
-    shift = {c: np.asarray(t) for c, t, _ in cfg.Component_Overrides}
+    shift, _ = Component_Translations(vertices, faces, labels, cfg.Assembly_Overrides, cfg.Component_Overrides)
     checked = 0
     for piece, component, method in zip(collision.Pieces, collision.Components, collision.Methods):
         if method not in ('hull', 'thickened', 'fallback'):

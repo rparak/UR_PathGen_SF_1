@@ -25,6 +25,8 @@
 import os
 # Math (Mathematical functions)
 import math
+# Re (Regular expressions)
+import re
 # Typing (Support for type hints)
 import typing as tp
 # Dataclasses (Data Classes)
@@ -57,15 +59,16 @@ CONST_ELBOW_LIMIT = 180.0
 # The index of the elbow joint in a joint vector.
 #   Unit [int]
 CONST_ELBOW_INDEX = 2
-# The largest translation a component override may apply: corrections derived from the taught
-# program are bounded (owner, 2026-10-17), so a large one is a configuration error, not a fit.
+# The largest translation one assembly or component override may apply: corrections are bounded
+# (owner, 2026-10-17), so a large one is a configuration error, not a fit. Each entry is bounded on
+# its own: an assembly shift and a component fit on top of it are separate claims (owner, 2026-10-18).
 #   Unit [float] (m)
 CONST_OVERRIDE_TRANSLATION_MAX = 0.150
 # The known keys, as nested dictionaries; a leaf is None. Used to report unknown keys.
 #   Unit [Dict]
 CONST_SCHEMA = {
     'Environment': {'Visual_Mesh': None, 'Collision_Set': None, 'Stand_Region': {'Min': None, 'Max': None},
-                    'Component_Overrides': None},
+                    'Assembly_Overrides': None, 'Component_Overrides': None, 'Added_Boxes': None},
     'Robot': {'Model': None, 'Base_Position': None, 'Base_Yaw': None, 'Joint_Position_Limits': {'Min': None, 'Max': None}},
     'Tool': {'Model': None, 'Coupling': {'Thickness': None, 'Diameter': None, 'Spigot_Depth': None},
              'Mount_Yaw': None, 'Opening': None, 'TCP_Offset': None},
@@ -102,10 +105,18 @@ class Cell_Configuration_Str:
     #   Unit [Vector<float> 1x3] (m)
     Stand_Region_Min: tp.List[float] = field(default_factory=list)
     Stand_Region_Max: tp.List[float] = field(default_factory=list)
-    # Rigid translations applied to STL components before the collision set is built
-    # (component, translation, source).
+    # Rigid translations of whole STL objects (SPEC 4.1) before the collision set is built
+    # (name, a component of the object, translation, source).
+    #   Unit [List<Tuple<string, int, List<float> 1x3, string>>] (-, -, m, -)
+    Assembly_Overrides: tp.List[tp.Tuple[str, int, tp.List[float], str]] = field(default_factory=list)
+    # Rigid translations applied to STL components before the collision set is built, added to any
+    # assembly translation (component, translation, source).
     #   Unit [List<Tuple<int, List<float> 1x3, string>>] (-, m, -)
     Component_Overrides: tp.List[tp.Tuple[int, tp.List[float], str]] = field(default_factory=list)
+    # Obstacles missing from the STL, added to the environment as world-axis-aligned boxes
+    # (name, lower corner, upper corner, source).
+    #   Unit [List<Tuple<string, List<float> 1x3, List<float> 1x3, string>>] (-, m, m, -)
+    Added_Boxes: tp.List[tp.Tuple[str, tp.List[float], tp.List[float], str]] = field(default_factory=list)
     # The robot MJCF.
     #   Unit [string]
     Robot_Model: str = ''
@@ -219,6 +230,62 @@ def Valid_Component_Override(item: tp.Any) -> bool:
             and isinstance(item['Component'], int) and not isinstance(item['Component'], bool) and item['Component'] >= 0
             and isinstance(item['Translation'], list) and len(item['Translation']) == 3
             and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in item['Translation'])
+            and isinstance(item['Source'], str) and item['Source'].strip() != '')
+
+
+def Valid_Point(value: tp.Any) -> bool:
+    """
+    Description:
+        Whether a value read from YAML is a list of three finite numbers (booleans excluded).
+
+    Args:
+        (1) value [Any]: The value.
+
+    Returns:
+        (1) parameter [bool]: True for [x, y, z].
+    """
+
+    return (isinstance(value, list) and len(value) == 3
+            and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) for v in value))
+
+
+def Valid_Assembly_Override(item: tp.Any) -> bool:
+    """
+    Description:
+        Whether one entry of Environment.Assembly_Overrides has exactly the keys Name (letters, digits
+        and underscores), Object_Of (a component id >= 0), Translation (three finite numbers) and
+        Source (non-empty text).
+
+    Args:
+        (1) item [Any]: The entry as read from YAML.
+
+    Returns:
+        (1) parameter [bool]: True when the entry is well formed.
+    """
+
+    return (isinstance(item, dict) and set(item) == {'Name', 'Object_Of', 'Translation', 'Source'}
+            and isinstance(item['Name'], str) and re.fullmatch(r'[A-Za-z0-9_]+', item['Name']) is not None
+            and isinstance(item['Object_Of'], int) and not isinstance(item['Object_Of'], bool) and item['Object_Of'] >= 0
+            and Valid_Point(item['Translation'])
+            and isinstance(item['Source'], str) and item['Source'].strip() != '')
+
+
+def Valid_Added_Box(item: tp.Any) -> bool:
+    """
+    Description:
+        Whether one entry of Environment.Added_Boxes has exactly the keys Name (letters, digits and
+        underscores), Min and Max (three finite numbers each) and Source (non-empty text).
+
+    Args:
+        (1) item [Any]: The entry as read from YAML.
+
+    Returns:
+        (1) parameter [bool]: True when the entry is well formed.
+    """
+
+    return (isinstance(item, dict) and set(item) == {'Name', 'Min', 'Max', 'Source'}
+            and isinstance(item['Name'], str) and re.fullmatch(r'[A-Za-z0-9_]+', item['Name']) is not None
+            and Valid_Point(item['Min']) and Valid_Point(item['Max'])
             and isinstance(item['Source'], str) and item['Source'].strip() != '')
 
 
@@ -426,6 +493,21 @@ def Load_Configuration(config_path: str = CONST_DEFAULT_CONFIG_FILE) -> Cell_Con
     cfg.Stand_Region_Max = reader.Vector('Environment.Stand_Region.Max', 3)
     if any(lo >= hi for lo, hi in zip(cfg.Stand_Region_Min, cfg.Stand_Region_Max)):
         reader.Fail('Environment.Stand_Region.Min must be below Max on every axis.')
+    assembly_overrides = reader.Raw('Environment.Assembly_Overrides')
+    if assembly_overrides is not None:
+        if not isinstance(assembly_overrides, list) or not all(Valid_Assembly_Override(a) for a in assembly_overrides):
+            reader.Fail('Environment.Assembly_Overrides must be a list of {Name: letters, digits, _, Object_Of: component '
+                        'id >= 0, Translation: [x, y, z], Source: text}, not %r.' % (assembly_overrides,))
+        else:
+            for a in assembly_overrides:
+                if math.sqrt(sum(v * v for v in a['Translation'])) > CONST_OVERRIDE_TRANSLATION_MAX:
+                    reader.Fail('Environment.Assembly_Overrides: the assembly %s moves by more than %.0f mm; a correction '
+                                'is bounded.' % (a['Name'], CONST_OVERRIDE_TRANSLATION_MAX * 1e3))
+            names = [a['Name'] for a in assembly_overrides]
+            if len(set(names)) != len(names):
+                reader.Fail('Environment.Assembly_Overrides names an assembly more than once: %r.' % (names,))
+            cfg.Assembly_Overrides = [(a['Name'], a['Object_Of'], [float(v) for v in a['Translation']], a['Source'])
+                                      for a in assembly_overrides]
     component_overrides = reader.Raw('Environment.Component_Overrides')
     if component_overrides is not None:
         if not isinstance(component_overrides, list) or not all(Valid_Component_Override(o) for o in component_overrides):
@@ -441,6 +523,21 @@ def Load_Configuration(config_path: str = CONST_DEFAULT_CONFIG_FILE) -> Cell_Con
                 reader.Fail('Environment.Component_Overrides names a component more than once: %r.' % (ids,))
             cfg.Component_Overrides = [(o['Component'], [float(v) for v in o['Translation']], o['Source'])
                                        for o in component_overrides]
+    added_boxes = reader.Raw('Environment.Added_Boxes')
+    if added_boxes is not None:
+        if not isinstance(added_boxes, list) or not all(Valid_Added_Box(b) for b in added_boxes):
+            reader.Fail('Environment.Added_Boxes must be a list of {Name: letters, digits, _, Min: [x, y, z], '
+                        'Max: [x, y, z], Source: text}, not %r.' % (added_boxes,))
+        else:
+            for b in added_boxes:
+                if any(lo >= hi for lo, hi in zip(b['Min'], b['Max'])):
+                    reader.Fail('Environment.Added_Boxes: the box %s has Min %r not below Max %r on every axis.'
+                                % (b['Name'], b['Min'], b['Max']))
+            names = [b['Name'] for b in added_boxes]
+            if len(set(names)) != len(names):
+                reader.Fail('Environment.Added_Boxes names a box more than once: %r.' % (names,))
+            cfg.Added_Boxes = [(b['Name'], [float(v) for v in b['Min']], [float(v) for v in b['Max']], b['Source'])
+                               for b in added_boxes]
     cfg.Robot_Model = reader.Path('Robot.Model')
     cfg.Base_Position = reader.Vector('Robot.Base_Position', 3)
     cfg.Base_Yaw = math.radians(reader.Number('Robot.Base_Yaw'))

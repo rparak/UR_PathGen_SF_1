@@ -27,6 +27,14 @@ Environment:
   Stand_Region:
     Min: [-0.35, -0.55, -0.01]
     Max: [0.35, 0.55, 0.716]
+  # Rigid translations of whole STL objects applied before the collision set is built, for a
+  # placement the real cell contradicts. An object is every component whose bounding box touches
+  # another of it within 1 mm (SPEC 4.1). Each entry: Name, Object_Of (an STL component of the
+  # object, as the build numbers them), Translation [x, y, z] in the world frame (at most 150 mm),
+  # Source. A component override below adds its own translation on top. The visual mesh is never
+  # changed; the manifest records the overrides and the members, and the scene refuses a set built
+  # with others. REQUIRED (may be empty). [-, -, m, text]
+  Assembly_Overrides: []
   # Rigid translations of STL components applied before the collision set is built, for geometry
   # the real cell contradicts. Each entry: Component (STL component id, as the build numbers them),
   # Translation [x, y, z] in the world frame (at most 150 mm), Source (where the value comes from).
@@ -43,6 +51,11 @@ Environment:
     - Component: 1154
       Translation: [-0.0326, -0.0116, 0.0036]
       Source: derived from sf1_plc_v4.script cases 17/18, not measured
+  # Obstacles the STL does not contain, added to the environment (body env) as boxes aligned with
+  # the world axes, collision only; a box that meets Clearance.Station_Zone is a zone piece. Each
+  # entry: Name, Min and Max (lower and upper corner, world frame), Source. The collision set is not
+  # rebuilt for them. REQUIRED (may be empty). [-, m, m, text]
+  Added_Boxes: []
 
 # The robot and its placement.
 Robot:

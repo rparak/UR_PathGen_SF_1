@@ -269,6 +269,50 @@ a correction needs a rotation.
 Pinned by `test/Scene/test_core.py::test_a_set_built_with_other_overrides_is_refused` and
 `test/Configuration/test_core.py::test_an_invalid_value_fails_and_never_falls_back`.
 
+## A whole object's placement is an assembly override, separate from a component fit
+
+**Decision.** `Environment.Assembly_Overrides` translates every component of one STL object before
+the build. An object is the set of components whose bounding boxes touch within 1 mm (SPEC §4.1),
+named by one of its components. A component override adds its own translation on top, and each
+entry is bounded at 150 mm on its own. The manifest records both kinds and the members of each
+assembly; the scene refuses a set whose record differs from the configuration. One function,
+`Component_Translations`, computes the result for the build and for the tests.
+
+**Why.** A misplaced machine is one rigid assembly: one claim with one source. A fit of a single
+component on top of it is a different claim, often from a different source. Keeping the two apart
+keeps each source visible and each bound meaningful. The object rule is reproducible from the STL;
+the objects stand more than 50 mm apart, so the 1 mm tolerance is not critical.
+
+**Alternatives.**
+
+- One component override per member with a shared source: rejected, unreadable (object (a) has 1749
+  components), and a typo would move a single part silently.
+- A selection box: rejected, it catches parts by position, not by what they belong to.
+
+**Revisit if** the STL changes (the object split is pinned at 1749 / 951 / 56 components), or an
+assembly needs a rotation.
+
+Pinned by `test/Collision/test_core.py::test_the_stl_has_three_objects_and_an_assembly_moves_exactly_one`
+and `test/Scene/test_core.py::test_a_set_built_with_other_overrides_is_refused`.
+
+## Obstacles missing from the STL are configured box primitives
+
+**Decision.** `Environment.Added_Boxes` lists world-axis-aligned boxes (name, corners, source). The
+scene adds each as a box primitive to body `env` with the environment margin; a box that meets the
+station-zone box is a zone piece.
+
+**Why.** Some obstacles are seen on the cell (photos) but not in the CAD. A primitive needs no
+collision-set rebuild for a guessed geometry, keeps its source next to its numbers, and gives exact
+distances.
+
+**Alternatives.** A box piece in the collision set: rejected, it needs a rebuild and a manifest
+change for every estimate. Editing the STL: rejected, the STL is the owner's hashed CAD.
+
+**Revisit if** an obstacle needs another shape than a box, or the STL is corrected.
+
+Pinned by `test/Scene/test_core.py::test_an_added_box_is_an_env_box_and_a_zone_piece_only_inside_the_zone`
+and `test/Configuration/test_core.py::test_an_empty_list_of_added_boxes_is_accepted`.
+
 ## The station zone is a region of the environment, applied fully to taught and near the station points to generated segments
 
 **Decision.** Environment pieces whose bounding box meets `Clearance.Station_Zone` get the zone

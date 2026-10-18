@@ -37,7 +37,7 @@ from Configuration.Core import Cell_Configuration_Str, CONST_PROJECT_ROOT
 #   ../Kinematics/Core — the DH truth and the learned-point check
 from Kinematics.Core import CONST_DH_D, Check_FK_Consistency, Orientation_Sanity_Bound, TCP_Pose
 #   ../Collision/Core — the environment collision set and the STL reader
-from Collision.Core import Read_Collision_Set, Read_Binary_STL, Component_Overrides_Record
+from Collision.Core import Read_Collision_Set, Read_Binary_STL, Component_Overrides_Record, Assembly_Overrides_Record
 #   ../URScript/Core — the robot point structure
 from URScript.Core import Robot_Point_Str
 
@@ -101,6 +101,9 @@ CONST_COLLISION_GROUP = 3
 CONST_ROBOT_COLLISION_RGBA = [0.9, 0.3, 0.3, 0.3]
 CONST_PAD_SPAN_RGBA = [1.0, 0.5, 0.0, 0.3]
 CONST_ENV_VISUAL_GROUP = 1
+# Name prefix of the geom of an Environment.Added_Boxes entry (env_box_<Name>).
+#   Unit [string]
+CONST_ADDED_BOX_PREFIX = 'env_box_'
 # Extra radius of the crop sphere beyond the reach bound and the clearance (SPEC 7.1).
 #   Unit [float] (m)
 CONST_CROP_PAD = 0.05
@@ -291,8 +294,10 @@ class Scene_Cls(object):
                                       for j in CONST_ROBOT_JOINTS])
         self.__flange = mujoco.mj_name2id(self.__model, mujoco.mjtObj.mjOBJ_SITE, CONST_FLANGE_SITE)
         self.__overrides = {frozenset((a, b)): margin for a, b, margin in self.__cfg.Self_Pair_Overrides}
-        self.__zone_geoms = {mujoco.mj_name2id(self.__model, mujoco.mjtObj.mjOBJ_GEOM, 'env_piece_%d' % i)
-                             for i in self.__zone_pieces}
+        self.__zone_geoms = ({mujoco.mj_name2id(self.__model, mujoco.mjtObj.mjOBJ_GEOM, 'env_piece_%d' % i)
+                              for i in self.__zone_pieces}
+                             | {mujoco.mj_name2id(self.__model, mujoco.mjtObj.mjOBJ_GEOM, CONST_ADDED_BOX_PREFIX + name)
+                                for name in self.__zone_boxes})
         # Robot collision geoms (the static base included) for the workspace check of generated segments.
         m = self.__model
         self.__robot_geoms = np.array([g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0
@@ -405,6 +410,11 @@ class Scene_Cls(object):
         if with_environment:
             collision_set = Read_Collision_Set(cfg.Collision_Set, CONST_PROJECT_ROOT)
             # A set built before overrides existed records none.
+            recorded = collision_set.Manifest.get('assembly_overrides', [])
+            if recorded != Assembly_Overrides_Record(cfg.Assembly_Overrides):
+                raise Scene_Error_Cls('The collision set %s was built with the assembly overrides %s, but the '
+                                      'configuration has %s. Rebuild it with: .venv/bin/python Example/build_collision.py'
+                                      % (cfg.Collision_Set, recorded, Assembly_Overrides_Record(cfg.Assembly_Overrides)))
             recorded = collision_set.Manifest.get('component_overrides', [])
             if recorded != Component_Overrides_Record(cfg.Component_Overrides):
                 raise Scene_Error_Cls('The collision set %s was built with the component overrides %s, but the '
@@ -422,11 +432,22 @@ class Scene_Cls(object):
                                           meshname='env_piece_%d' % i, contype=1, conaffinity=1,
                                           group=CONST_COLLISION_GROUP, margin=cfg.Clearance_Environment, gap=0.0,
                                           rgba=[0.3, 0.6, 0.9, 0.3])
+            # Obstacles missing from the STL (Environment.Added_Boxes): box primitives in env, zone
+            # pieces by the same rule as the set's pieces.
+            self.__zone_boxes = []
+            for name, lo, hi, _ in cfg.Added_Boxes:
+                lo_v, hi_v = np.asarray(lo), np.asarray(hi)
+                env_bodies['env'].add_geom(name=CONST_ADDED_BOX_PREFIX + name, type=mujoco.mjtGeom.mjGEOM_BOX,
+                                           size=list((hi_v - lo_v) / 2.0), pos=list((hi_v + lo_v) / 2.0), contype=1,
+                                           conaffinity=1, group=CONST_COLLISION_GROUP, margin=cfg.Clearance_Environment,
+                                           gap=0.0, rgba=[0.3, 0.6, 0.9, 0.3])
+                if np.all(hi_v >= zone_lo) and np.all(lo_v <= zone_hi):
+                    self.__zone_boxes.append(name)
             spec.add_exclude(bodyname1='base', bodyname2='env_stand')
             self.__collision_manifest = collision_set.Manifest
         else:
             self.__collision_manifest = {}
-            self.__zone_pieces = []
+            self.__zone_pieces, self.__zone_boxes = [], []
         if with_visual:
             vertices, faces = Read_Binary_STL(cfg.Visual_Mesh)
             spec.add_mesh(name='env_visual', uservert=vertices.flatten().tolist(), userface=faces.flatten().tolist(),
@@ -808,6 +829,18 @@ class Scene_Cls(object):
         """
 
         return list(self.__zone_pieces)
+
+    @property
+    def Zone_Boxes(self) -> tp.List[str]:
+        """
+        Description:
+            The names of the Environment.Added_Boxes entries that meet the station-zone box.
+
+        Returns:
+            (1) parameter [List<string>]: The names.
+        """
+
+        return list(self.__zone_boxes)
 
     def Station_TCPs(self, station_q: tp.Sequence[tp.Sequence[float]]) -> np.ndarray:
         """

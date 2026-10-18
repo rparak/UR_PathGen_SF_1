@@ -80,6 +80,11 @@ CONST_DISTANCE_CHUNK = 2000000
 # Number of largest-excess pieces listed in the manifest.
 #   Unit [int]
 CONST_TOP_EXCESS = 20
+# Contact tolerance of the component bounding boxes that group STL components into objects (SPEC
+# 4.1). At 1 mm the STL splits into exactly three objects: (a) the machine, 1749 components; (b) the
+# robot stand and side tables, 951; (c) the side cabinet, 56 (measured 2026-10-18).
+#   Unit [float] (m)
+CONST_OBJECT_TOLERANCE = 0.001
 
 
 class Collision_Error_Cls(ValueError):
@@ -478,9 +483,97 @@ def Component_Overrides_Record(overrides: tp.Sequence[tp.Tuple[int, tp.Sequence[
             for c, t, src in sorted(overrides, key=lambda o: o[0])]
 
 
+def Assembly_Overrides_Record(assemblies: tp.Sequence[tp.Tuple[str, int, tp.Sequence[float], str]]) -> tp.List[tp.Dict]:
+    """
+    Description:
+        The manifest form of the assembly overrides, sorted by name, so that the build and the check
+        against the configuration compare the same thing.
+
+    Args:
+        (1) assemblies [List<Tuple<string, int, Vector<float> 1x3, string>>]: (name, a component of the
+                                                                              object, translation (m), source).
+
+    Returns:
+        (1) parameter [List<Dict>]: One record per assembly override.
+    """
+
+    return [{'name': str(n), 'object_of': int(c), 'translation_m': [float(v) for v in t], 'source': str(src)}
+            for n, c, t, src in sorted(assemblies, key=lambda a: a[0])]
+
+
+def Component_Objects(vertices: np.ndarray, faces: np.ndarray, face_label: np.ndarray) -> np.ndarray:
+    """
+    Description:
+        Group STL components into objects: two components belong to one object when their bounding
+        boxes touch within CONST_OBJECT_TOLERANCE, transitively (SPEC 4.1).
+
+    Args:
+        (1 - 2) vertices, faces [Matrix<float> Nx3, Matrix<int> Mx3]: The environment STL (world frame).
+        (3) face_label [Vector<int> 1xM]: The component of each face (Connected_Components).
+
+    Returns:
+        (1) parameter [Vector<int> 1xC]: The object of each component.
+    """
+
+    n_components = int(face_label.max()) + 1
+    corners = vertices[faces]
+    lo = np.full((n_components, 3), np.inf)
+    hi = np.full((n_components, 3), -np.inf)
+    np.minimum.at(lo, face_label, corners.min(axis=1))
+    np.maximum.at(hi, face_label, corners.max(axis=1))
+    touch = np.ones((n_components, n_components), dtype=bool)
+    for k in range(3):
+        touch &= (lo[:, None, k] <= hi[None, :, k] + CONST_OBJECT_TOLERANCE) & (hi[:, None, k] >= lo[None, :, k] - CONST_OBJECT_TOLERANCE)
+    _, objects = connected_components(coo_matrix(touch), directed=False)
+    return objects
+
+
+def Component_Translations(vertices: np.ndarray, faces: np.ndarray, face_label: np.ndarray,
+                           assemblies: tp.Sequence[tp.Tuple[str, int, tp.Sequence[float], str]],
+                           overrides: tp.Sequence[tp.Tuple[int, tp.Sequence[float], str]]
+                           ) -> tp.Tuple[tp.Dict[int, np.ndarray], tp.Dict[str, tp.List[int]]]:
+    """
+    Description:
+        The rigid translation of every moved STL component: an assembly override moves every
+        component of the object that contains its component; a component override adds its own
+        translation on top.
+
+    Args:
+        (1 - 2) vertices, faces [Matrix<float> Nx3, Matrix<int> Mx3]: The environment STL (world frame).
+        (3) face_label [Vector<int> 1xM]: The component of each face (Connected_Components).
+        (4) assemblies [List<Tuple<string, int, Vector<float> 1x3, string>>]: (name, component, translation (m), source).
+        (5) overrides [List<Tuple<int, Vector<float> 1x3, string>>]: (component, translation (m), source).
+
+    Returns:
+        (1) parameter [Tuple<Dict<int, Vector<float> 1x3>, Dict<string, List<int>>>]: The translation of
+                                                                                    each moved component (m),
+                                                                                    and the components of
+                                                                                    each assembly.
+    """
+
+    n_components = int(face_label.max()) + 1
+    named = sorted({int(c) for _, c, _, _ in assemblies} | {int(c) for c, _, _ in overrides})
+    unknown = [c for c in named if not 0 <= c < n_components]
+    if unknown:
+        raise Collision_Error_Cls('Environment.Assembly_Overrides or Component_Overrides names component(s) %s, but the '
+                                  'STL has components 0 - %d. Fix the configuration.' % (unknown, n_components - 1))
+    shift: tp.Dict[int, np.ndarray] = {}
+    members: tp.Dict[str, tp.List[int]] = {}
+    if assemblies:
+        objects = Component_Objects(vertices, faces, face_label)
+        for name, component, translation, _ in assemblies:
+            members[name] = [int(c) for c in np.flatnonzero(objects == objects[component])]
+            for c in members[name]:
+                shift[c] = shift.get(c, np.zeros(3)) + np.asarray(translation, dtype=float)
+    for component, translation, _ in overrides:
+        shift[int(component)] = shift.get(int(component), np.zeros(3)) + np.asarray(translation, dtype=float)
+    return shift, members
+
+
 def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequence[float], radius: float,
                         stand_min: tp.Sequence[float], stand_max: tp.Sequence[float], hull_excess_max: float,
                         eps: float, seed: int,
+                        assemblies: tp.Sequence[tp.Tuple[str, int, tp.Sequence[float], str]],
                         overrides: tp.Sequence[tp.Tuple[int, tp.Sequence[float], str]],
                         progress_cb: tp.Optional[tp.Callable[[str], None]] = None) -> Collision_Set_Str:
     """
@@ -488,8 +581,9 @@ def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequ
         Build the collision set (SPEC 7): crop the components to the reach sphere, hull each one
         (thickening degenerate ones), and decompose with CoACD only a component whose hull excess
         exceeds hull_excess_max; CoACD parts that fail the conservativeness check fall back to
-        the hull. An overridden component is translated rigidly before all of it, and checked
-        against its translated surface. Every measurement is recorded in the manifest.
+        the hull. A moved component (assembly or component override, Component_Translations) is
+        translated rigidly before all of it, and checked against its translated surface. Every
+        measurement is recorded in the manifest.
 
     Args:
         (1 - 2) vertices, faces [Matrix<float> Nx3, Matrix<int> Mx3]: The environment STL (world frame).
@@ -498,8 +592,11 @@ def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequ
         (7) hull_excess_max [float]: Excess above which a hull is decomposed (m).
         (8) eps [float]: Conservativeness tolerance (m).
         (9) seed [int]: Seed of every random sample and of CoACD.
-        (10) overrides [List<Tuple<int, Vector<float> 1x3, string>>]: (component, translation (m), source).
-        (11) progress_cb [function]: Optional sink for progress lines.
+        (10) assemblies [List<Tuple<string, int, Vector<float> 1x3, string>>]: (name, a component of the
+                                                                                object, translation (m), source).
+        (11) overrides [List<Tuple<int, Vector<float> 1x3, string>>]: (component, translation (m), source),
+                                                                      added to any assembly translation.
+        (12) progress_cb [function]: Optional sink for progress lines.
 
     Returns:
         (1) parameter [Collision_Set_Str(object)]: The set (Manifest without the source fields,
@@ -518,18 +615,16 @@ def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequ
     order = np.argsort(face_label, kind='stable')
     bounds = np.searchsorted(face_label[order], np.arange(n_components + 1))
     centre_v = np.asarray(centre, dtype=float)
-    shift = {int(c): np.asarray(t, dtype=float) for c, t, _ in overrides}
-    unknown = sorted(c for c in shift if not 0 <= c < n_components)
-    if unknown:
-        raise Collision_Error_Cls('Environment.Component_Overrides names component(s) %s, but the STL has components '
-                                  '0 - %d. Fix the configuration.' % (unknown, n_components - 1))
+    shift, members = Component_Translations(vertices, faces, face_label, assemblies, overrides)
+    for name, components in members.items():
+        report('Assembly %s: %d components translated.' % (name, len(components)))
     kept = []
     for c in range(n_components):
         f = faces[order[bounds[c]:bounds[c + 1]]]
         used = np.unique(f)
         if np.min(np.linalg.norm(vertices[used] + shift.get(c, 0.0) - centre_v, axis=1)) <= radius:
             kept.append((c, used, f))
-    missing = sorted(c for c in shift if c not in {k[0] for k in kept})
+    missing = sorted(int(c) for c, _, _ in overrides if int(c) not in {k[0] for k in kept})
     if missing:
         raise Collision_Error_Cls('Overridden component(s) %s lie outside the crop sphere; an override there has no '
                                   'effect. Remove it from Environment.Component_Overrides.' % missing)
@@ -634,6 +729,8 @@ def Build_Collision_Set(vertices: np.ndarray, faces: np.ndarray, centre: tp.Sequ
         'flagged_open_shells': {'note': 'pieces whose excess exceeds hull_excess_max after fallback: their hull may '
                                         'fill space the robot could need (SPEC 7.4)',
                                 'pieces': flagged},
+        'assembly_overrides': Assembly_Overrides_Record(assemblies),
+        'assembly_components': members,
         'component_overrides': Component_Overrides_Record(overrides),
         'runtime_s': {k: round(v, 2) for k, v in timing.items()},
     }
