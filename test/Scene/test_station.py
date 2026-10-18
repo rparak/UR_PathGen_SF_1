@@ -86,11 +86,12 @@ CONST_OVERRIDES = []
 CONST_POST, CONST_TOP_PROFILE, CONST_SIDE_TABLE, CONST_PALLET_TABLE = 2710, 2699, 1061, 1060
 CONST_MACHINE_INTERIOR, CONST_RIGHT_PROFILE, CONST_MACHINE_BODY = 1638, 2709, 1154
 CONST_SILL_FRAME = (181, 1062, 2701, 2702, 2704)
-# The station boxes (Environment.Added_Boxes, owner photo: the holder under the part), and the cap
+# The station boxes (Environment.Added_Boxes, owner photo: the holder under the part and the stub
+# above it on the post), and the cap
 # of their distance search: above the global margin (20 mm), so that every distance inside a
 # margin is exact.
 #   Unit [Tuple<string>], [float] (m)
-CONST_STATION_BOXES, CONST_BOX_DISTMAX = ('station_bracket',), 0.030
+CONST_STATION_BOXES, CONST_BOX_DISTMAX = ('station_bracket', 'station_stub'), 0.030
 # Near-margin segments for the early-exit equivalence: from each taught point of the sequence to a
 # seeded perturbation of it (normal, sigma per joint), at the segment's opening.
 #   Unit [int], [float] (rad), [int]
@@ -238,7 +239,8 @@ def test_a_generated_sample_closer_to_a_station_box_than_its_floor_violates(scen
     Description:
         The station-box rule: pick_rotate_1 (open) passes the holder at 5.5 mm, within the zone
         margin near the station, so it keeps the generated rule without floors; with S2's floors
-        (15.1 mm, its closer taught end) it violates, naming the holder and the floor as the margin;
+        (15.1 mm, its closer taught end) it violates, naming the holder and the floor as the margin
+        (and every other station box it is closer to than its floor);
         a floor at or below its distance does not. The taught rule ignores the floors.
     """
 
@@ -246,9 +248,13 @@ def test_a_generated_sample_closer_to_a_station_box_than_its_floor_violates(scen
     tcps = scene.Station_TCPs(_Station_Q(points))
     floors = scene.Station_Box_Floors(points['Waypoint_5'].Q, points['Waypoint_18'].Q)
     assert scene.Check_Configuration(q, 'generated', tcps) == []
-    violations = scene.Check_Configuration(q, 'generated', tcps, floors)
-    assert [(v.Body_2, v.Margin) for v in violations] == [('env_box_station_bracket', floors['station_bracket'])]
-    assert violations[0].Distance == pytest.approx(0.0055, abs=0.0001)
+    violations = {v.Body_2: v for v in scene.Check_Configuration(q, 'generated', tcps, floors)}
+    assert 'env_box_station_bracket' in violations
+    assert violations['env_box_station_bracket'].Margin == floors['station_bracket']
+    assert violations['env_box_station_bracket'].Distance == pytest.approx(0.0055, abs=0.0001)
+    # Any other violation is a station box below its own floor (the stub: 10.0 mm at the pick, 10.1 mm at Waypoint_18).
+    assert all(name[len('env_box_'):] in floors and v.Distance < v.Margin == floors[name[len('env_box_'):]]
+               for name, v in violations.items())
     assert scene.Check_Configuration(q, 'generated', tcps, {name: 0.005 for name in floors}) == []
     assert scene.Check_Configuration(q, 'taught', None) == []
 
@@ -318,8 +324,8 @@ def test_the_corrections_are_recorded_and_configured(scenes, cfg):
 def test_the_zone_holds_the_holders_neighbourhood_only(scenes, cfg, root):
     """
     Description:
-        The station zone is the holder and the sill frame it sits on (owner, 2026-10-18, SPEC 4.12):
-        the holder box and exactly the sill-frame components are zone pieces; the post, the window's
+        The station zone is the holder, the stub and the sill frame (owner, 2026-10-18, SPEC 4.12,
+        4.13): the two station boxes and exactly the sill-frame components are zone pieces; the post, the window's
         top profile, the machine body, the right window profile, the tables and the machine-interior
         hull are not, so they keep the global margin.
     """
@@ -336,7 +342,7 @@ def test_the_zone_holds_the_holders_neighbourhood_only(scenes, cfg, root):
 def test_without_the_holder_the_taught_sequence_keeps_the_global_margin(cfg, points, case):
     """
     Description:
-        The zone margin is needed for the holder only: with the holder box removed, every taught
+        The zone margin is needed for the station boxes only: with them removed, every taught
         segment keeps the global margins everywhere (the generated rule without station points),
         the post included (>= 39.1 mm, SPEC 4.11).
     """
@@ -377,19 +383,19 @@ def test_the_environment_distance_equals_the_exact_distance(scenes, points):
     Description:
         Environment_Distance (raised margins, one collision pass) equals the smallest
         mj_geomDistance between every robot geom (the static base excluded, as in the scene) and
-        every environment geom, capped at 30 mm, on the first samples of pick_rotate_1 -> Waypoint_6
-        (holding, the lift from the holder), which include distances in the 20 - 30 mm band that
+        every environment geom, capped at 30 mm, on samples 12 - 27 of Waypoint_3 -> Waypoint_18 (open,
+        the approach to the station boxes), which include distances in the 20 - 30 mm band that
         contacts at the normal margins never show.
     """
 
-    scene = scenes[17, 'holding']
+    scene = scenes[17, 'open']
     m, d = scene.Model, scene.Data
     env = [g for g in range(m.ngeom) if m.geom_contype[g] and m.body(m.geom_bodyid[g]).name.startswith('env')]
     robot = [g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0
              and not m.body(m.geom_bodyid[g]).name.startswith('env') and m.body(m.geom_bodyid[g]).name != 'base']
-    samples = scene.Segment_Samples(points['pick_rotate_1'].Q, points['Waypoint_6'].Q)
+    samples = scene.Segment_Samples(points['Waypoint_3'].Q, points['Waypoint_18'].Q)
     band = 0
-    for q in samples[:16]:
+    for q in samples[12:28]:
         measured = scene.Environment_Distance(q, 0.030)[0]
         scene.Set_Joints(q)
         exact = 0.030

@@ -78,11 +78,12 @@ CONST_TAUGHT_VIAS = {'S1': 1, 'S2': 3, 'S3': 1}
 CONST_REDUCED = Planner_Budget_Str(Restarts=2, RRT_Iterations=600, Shortcut_Iterations=40, Refine_Candidates=1,
                                    Refine_Iterations=20)
 CONST_REDUCED_SEED = 7
-# The station boxes (Environment.Added_Boxes, owner photo: the holder under the part), and the cap
+# The station boxes (Environment.Added_Boxes, owner photo: the holder under the part and the stub
+# above it on the post), and the cap
 # of their distance search: far beyond every margin, so that a generated sample is compared with
 # its taught end exactly unless both are farther than the cap.
 #   Unit [Tuple<string>], [float] (m)
-CONST_STATION_BOXES, CONST_BOX_DISTMAX = ('station_bracket',), 0.200
+CONST_STATION_BOXES, CONST_BOX_DISTMAX = ('station_bracket', 'station_stub'), 0.200
 
 
 def _Segments():

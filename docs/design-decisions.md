@@ -366,7 +366,8 @@ margin.
 no longer constrains where the post is: its extra 34 mm beyond the earlier fit (−115.7 mm) rests
 only on the owner's estimate, and a generated path must keep 20 mm from it. The holder is the only
 geometry the program still comes closer to than 20 mm (5.5 mm, its top fitted to that); without it
-every taught segment keeps the global margins everywhere (SPEC §4.12).
+every taught segment keeps the global margins everywhere (SPEC §4.12). *Updated 2026-10-18: the stub
+box, modelled later at its largest size (SPEC §4.13), meets the zone box and is a zone piece too.*
 
 **Alternatives.** Keeping the zone (K): a generated path could then pass the post at 5 mm near a
 station point while the program keeps 39 mm, using space only the estimate provides. Removing the
@@ -444,8 +445,9 @@ included. The largest box that bound allows is the conservative end. The stub ca
 the photo puts it: the post fit leaves the taught drop 5 mm from the post face there, so a box could
 be at most 0.3 mm proud. Such a plate would claim a geometry nothing supports and would still steer
 the planner. *Corrected 2026-10-18: that held for the fitted post at −100 mm. With the machine at
-−150 mm a stub on the post face could stand up to 34.6 mm proud (SPEC §4.11); whether to model it is
-open.*
+−150 mm a stub on the post face could stand up to 34.6 mm proud (SPEC §4.11), and the owner had it
+modelled at that largest size (`station_stub`, SPEC §4.13): the conservative end, as for the
+holder's top.*
 
 **Alternatives.**
 

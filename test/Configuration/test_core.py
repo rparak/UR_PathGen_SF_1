@@ -104,7 +104,9 @@ def test_the_shipped_configuration_loads_in_si_units():
         ('side_cabinet', 2643, [-0.050, 0.0, 0.0], 'owner estimate, 2026-10-18, not measured')]
     assert cfg.Component_Overrides == []
     assert cfg.Added_Boxes == [('station_bracket', [-0.770, -0.340, 0.955], [-0.645, -0.260, 1.112],
-                                'owner photo + taught points, back to the shifted post (owner, 2026-10-18), not measured')]
+                                'owner photo + taught points, back to the shifted post (owner, 2026-10-18), not measured'),
+                               ('station_stub', [-0.770, -0.330, 1.093], [-0.7274, -0.270, 1.264],
+                                'owner photo + taught points, not measured')]
 
 
 @pytest.mark.parametrize('field', CONST_REQUIRED)

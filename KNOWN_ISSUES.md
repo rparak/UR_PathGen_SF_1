@@ -61,11 +61,11 @@ the full 20 mm.
   from the photo, its front (90 mm in front of the earlier post face) is assumed, its back reaches
   into the shifted post (it is mounted on it), and its top (1.112 m) is the highest the taught
   sequence allows. The holder's arms beside the part are not modelled.
-- **The stub is not modelled.** With the post fitted (−100 mm) the photo's stub contradicted the
-  taught drop at its estimated position. With the post at −150 mm it no longer does: a stub on the
-  post face could stand up to 34.6 mm proud and every taught sample would keep 5 mm (SPEC §4.11).
-  It is still not modelled (not decided); a generated path may therefore pass where the real stub
-  stands. Run the robot near the drop at reduced speed first.
+- **The stub is an estimate** (`station_stub`, source "owner photo + taught points, not measured",
+  SPEC §4.13): one box on the post face above the holder, its y and z from the photo, its depth the
+  largest the taught program allows (34.6 mm proud of the post; the taught program keeps 5.03 mm
+  to it). The real stub may be smaller; it cannot be larger without contradicting the taught
+  program. Run the robot near the drop at reduced speed first.
 - **Evidence:** SPEC §4.7 (first fit), §4.9 (−100 mm and the post fit), §4.10 (holder, stub), §4.11
   (−150 mm, the fit removed, the per-segment table), §4.12 (the zone shrunk to the holder).
 - **Pinned by:** `test/Scene/test_station.py` (the replay of both cases as taught and as generated,

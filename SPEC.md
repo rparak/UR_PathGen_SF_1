@@ -544,7 +544,7 @@ would be 1.0962 m; the photo's 1.095 m gives 21.1 mm (owner's choice: the fitted
 1.1125 m and the 20 mm top 1.0961 m - unchanged within the bisection step; the exact distances were
 right, only MuJoCo's box-box contacts were missing.*
 
-**Stub** (§4.10, not modelled). At its estimated position (y −0.330 … −0.270, z 1.093 … 1.264 m) on
+**Stub** (§4.10; modelled since §4.13). At its estimated position (y −0.330 … −0.270, z 1.093 … 1.264 m) on
 the shifted post face, a box could stand up to 34.6 mm proud of it and every taught sample would
 keep 5 mm (closest: case 17 pick_rotate_1 → Waypoint_6, the holding pad). The argument of §4.10 that
 the stub contradicts the taught drop held only for the fitted post.
@@ -573,7 +573,7 @@ the owner's estimate; a generated path must keep the full 20 mm from it. The zon
 holds only the holder, the one geometry the taught program comes closer to than 20 mm (5.5 mm).
 
 **Box** `[-0.755, -0.36, 0.94]` – `[-0.62, -0.24, 1.13]` m (was `[-0.80, -0.40, 1.00]` –
-`[-0.55, -0.20, 1.85]`): the holder box and the sill-frame pieces it sits on, components 181, 1062,
+`[-0.55, -0.20, 1.85]`): the holder box (and, since §4.13, the stub box) and the sill-frame pieces they sit on, components 181, 1062,
 2701, 2702, 2704 (5 pieces; 8 before, with the post 2710, the top profile 2699 / 1065 and the
 machine front 180). No taught sample comes within 20 mm of a sill-frame piece; the post's face
 (x −0.762) lies outside the box.
@@ -583,6 +583,24 @@ margins everywhere (the generated rule without station points): the zone is need
 only. With the shrunk zone the taught sequence keeps its margins as taught and as generated. Every
 taught sample under 20 mm has its TCP within 13.5 mm of a station point (44 mm before the shift), so
 `Endpoint_Radius` (50 mm) stays. The committed S1 – S3 still pass `Verify_Path`.
+
+### 4.13 Station stub box (*measured*, 2026-10-18)
+
+**Owner decision (2026-10-18).** The stub of §4.8 is modelled as an `Environment.Added_Boxes` entry,
+`station_stub`, source "owner photo + taught points, not measured", as large as the taught program
+allows: y −0.330 … −0.270 m and z 1.093 … 1.264 m from the photo; x from 8 mm inside the shifted post
+face (−0.770 m) to the farthest front at which every taught sample of cases 17 and 18 keeps 5 mm:
+**−0.7274 m, 34.6 mm proud** of the face (bisection, 0.06 mm; exact distances, convex mesh boxes:
+the limit −0.72737 m). Closest taught sample: 5.03 mm (case 17 pick_rotate_1 → Waypoint_6, the
+holding pad). It meets the zone box, so it is a zone piece like the holder (§4.12).
+
+Taught clearance to the stub (mm, ≥ 60 not listed): case 17 / 18 Waypoint_1 → drop 13.6 / 11.6,
+drop → Waypoint_4 / 7 10.1 / 8.8, → Waypoint_5 (85 mm) 11.4 / 11.2, Waypoint_3 → Waypoint_18 / 11 8.3 /
+12.6, approach → pick 10.0 / 13.2, pick → Waypoint_6 / 8 5.03 / 7.1, Waypoint_5 → Waypoint_1 42.6.
+
+The S1 – S3 written before the stub (§17) keep the full check with it, at 13.6 / 9.5 / 63.3 mm; S2
+comes 0.6 mm closer than its taught end (10.1 mm at Waypoint_18), which the station-box rule (§9.7)
+refuses.
 
 ## 5. Platform
 
