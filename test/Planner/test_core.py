@@ -24,12 +24,15 @@
 # System (Default)
 import os
 import re
+import types
 # Difflib (Sequence comparison)
 import difflib
 # Dataclasses (Data Classes)
 import dataclasses
 # Numpy (Array computing) [pip3 install numpy]
 import numpy as np
+# Typing (Support for type hints)
+import typing as tp
 # Pytest (Testing framework) [pip3 install pytest]
 import pytest
 # MuJoCo (Physics simulator) [pip3 install mujoco]
@@ -362,19 +365,48 @@ def test_the_penalty_counts_only_far_from_the_station(planners, program):
     assert near == 0.0
 
 
-def test_rrt_connect_is_reproducible_with_both_sample_sources(planners, program):
+def _Counting_Generator(seed: tp.List[int], range_lo: np.ndarray) -> tp.Tuple[types.SimpleNamespace, tp.Dict[str, int]]:
     """
     Description:
-        RRT-Connect alone, on S2 of case 17 with generator [8, 0]: that run draws 23 samples from the
-        box around both ends and 25 from the whole joint range (measured 2026-10-17), so both sample
-        sources take part. Two runs with the same seed give the same tree path, byte for byte. (The
-        reduced planning run of the test above connects after one sample from the whole range, so it
-        cannot see the box sampler.)
+        A stand-in for the generator RRT-Connect draws from: the same numbers as
+        np.random.default_rng(seed) through its random() and uniform(), counting the samples drawn
+        from the whole joint range (lower bound = the configured limits) and from the box around the
+        ends (any other bound).
+
+    Args:
+        (1) seed [List<int>]: The generator's seed.
+        (2) range_lo [Vector<float> 1x6]: The lower joint limits (rad).
+
+    Returns:
+        (1) parameter [Tuple<SimpleNamespace, Dict<string, int>>]: The stand-in and its counts.
+    """
+
+    generator, counts = np.random.default_rng(seed), {'box': 0, 'range': 0}
+    range_lo = np.asarray(range_lo, dtype=float)
+    def Draw_Uniform(lo: np.ndarray, hi: np.ndarray) -> np.ndarray:
+        counts['range' if np.array_equal(np.asarray(lo, dtype=float), range_lo) else 'box'] += 1
+        return generator.uniform(lo, hi)
+    return types.SimpleNamespace(random=generator.random, uniform=Draw_Uniform), counts
+
+
+def test_rrt_connect_is_reproducible_with_both_sample_sources(cfg, planners, program):
+    """
+    Description:
+        RRT-Connect alone, on S2 with generator [3, 0], counted by a stand-in generator: the run
+        draws samples both from the box around the ends and from the whole joint range (8 and 9,
+        measured 2026-10-18 on the scene of SPEC 4.12), so both sample sources take part. Two runs with
+        the same seed give the same tree path, byte for byte. (The reduced planning run of the test
+        above cannot show that the box sampler is reproducible on its own.) *Corrected 2026-10-18:
+        generator [8, 0] drew from both on the 2026-10-17 scene; since the machine shift it connects
+        after one box sample, which the test, counting nothing, did not notice.*
     """
 
     points, _ = program
     start, goal = np.array(points['Waypoint_5'].Q), np.array(points['Waypoint_18'].Q)
-    paths = [planners['S2'].RRT_Connect(start, goal, np.random.default_rng([8, 0])) for _ in range(2)]
+    runs = [_Counting_Generator([3, 0], cfg.Joint_Limits_Min) for _ in range(2)]
+    paths = [planners['S2'].RRT_Connect(start, goal, generator) for generator, _ in runs]
+    counts = runs[0][1]
+    assert counts['box'] > 0 and counts['range'] > 0, counts
     assert paths[0] is not None and len(paths[0]) > 2
     assert np.array(paths[0]).tobytes() == np.array(paths[1]).tobytes()
 
