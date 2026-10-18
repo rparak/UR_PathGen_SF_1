@@ -96,10 +96,12 @@ def test_the_shipped_configuration_loads_in_si_units():
     assert cfg.Self_Pair_Overrides == [('base', 'upper_arm_link', 0.0)]
     assert cfg.Mount_Yaw == 0.0
     assert cfg.Holding_Openings == {17: (0.050, 'owner, 2026-10-18: the 50 x 50 mm part')}
-    assert cfg.Assembly_Overrides == [('machine_a', 1154, [-0.100, 0.0, 0.0], 'owner estimate, 2026-10-18, not measured')]
-    assert cfg.Component_Overrides == [(2710, [-0.0157, 0.0, 0.0], 'derived from sf1_plc_v4.script cases 17/18, not measured')]
-    assert cfg.Added_Boxes == [('station_bracket', [-0.735, -0.340, 0.955], [-0.645, -0.260, 1.112],
-                                'owner photo + taught points, not measured')]
+    assert cfg.Assembly_Overrides == [
+        ('machine_a', 1154, [-0.150, 0.0, 0.0], 'owner estimate, 2026-10-18 (100 mm, then a further 50 mm), not measured'),
+        ('side_cabinet', 2643, [-0.050, 0.0, 0.0], 'owner estimate, 2026-10-18, not measured')]
+    assert cfg.Component_Overrides == []
+    assert cfg.Added_Boxes == [('station_bracket', [-0.770, -0.340, 0.955], [-0.645, -0.260, 1.112],
+                                'owner photo + taught points, back to the shifted post (owner, 2026-10-18), not measured')]
 
 
 @pytest.mark.parametrize('field', CONST_REQUIRED)

@@ -62,6 +62,12 @@ CONST_STL_COMPONENTS = 2756
 #   Unit [int], [Tuple<int>]
 CONST_MACHINE_BODY, CONST_STATION_POST, CONST_CABINET_PANEL = 1154, 2710, 180
 CONST_NOT_MACHINE = (2681, 1060, 1061, 2643)
+# The side cabinet's body (object (c)), and the configured translations of objects (a) and (c),
+# typed from the owner's estimates (2026-10-18, SPEC 4.11): the machine 150 mm along -x, the side
+# cabinet 50 mm along -x; nothing else moves.
+#   Unit [int], [List<float> 1x3] (m)
+CONST_SIDE_CABINET = 2643
+CONST_MACHINE_SHIFT, CONST_CABINET_SHIFT = [-0.150, 0.0, 0.0], [-0.050, 0.0, 0.0]
 
 
 @pytest.fixture(scope='module')
@@ -134,6 +140,26 @@ def test_the_stl_has_three_objects_and_an_assembly_moves_exactly_one(stl, collis
     assert np.allclose(shift[CONST_MACHINE_BODY], [-0.1, 0.0, 0.0]) and np.allclose(shift[CONST_STATION_POST], [-0.11, 0.0, 0.0])
     _, configured = Component_Translations(vertices, faces, labels, cfg.Assembly_Overrides, cfg.Component_Overrides)
     assert collision.Manifest.get('assembly_components', {}) == {name: sorted(c) for name, c in configured.items()}
+
+
+def test_the_configured_shift_moves_the_machine_and_the_side_cabinet_only(stl, cfg):
+    """
+    Description:
+        The configured overrides move every component of the machine (a) by the owner's 150 mm and
+        every component of the side cabinet (c, named by its body) by 50 mm, both along -x, and no
+        component of the robot side (b): the stand, the pallet and side tables stay.
+    """
+
+    vertices, faces = stl
+    _, labels = Connected_Components(faces)
+    objects = Component_Objects(vertices, faces, labels)
+    machine = set(np.flatnonzero(objects == objects[CONST_MACHINE_BODY]).tolist())
+    cabinet = set(np.flatnonzero(objects == objects[CONST_SIDE_CABINET]).tolist())
+    assert len(cabinet) == 56 and not cabinet & machine
+    shift, _ = Component_Translations(vertices, faces, labels, cfg.Assembly_Overrides, cfg.Component_Overrides)
+    assert set(shift) == machine | cabinet
+    assert all(np.allclose(shift[c], CONST_MACHINE_SHIFT, atol=1e-12) for c in machine)
+    assert all(np.allclose(shift[c], CONST_CABINET_SHIFT, atol=1e-12) for c in cabinet)
 
 
 def test_the_manifest_names_the_stl_it_was_built_from(root, cfg, collision):

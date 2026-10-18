@@ -34,39 +34,43 @@ Environment:
   # Source. The visual mesh is never changed; the manifest records the overrides and the members,
   # and the scene refuses a set built with others. REQUIRED (may be empty). [-, -, m, text]
   # machine_a: object (a), the machine with its front column, window frame and closed lower
-  # cabinet (1749 components), about 100 mm further from the robot than the STL, normal to its
-  # front (owner, 2026-10-18; selection confirmed on renders).
+  # cabinet (1749 components), about 150 mm further from the robot than the STL, normal to its
+  # front: 100 mm, then a further 50 mm (owner, 2026-10-18; selection confirmed on renders). At the
+  # 150 mm bound. side_cabinet: object (c), the side cabinet (56 components, y >= 0.555 m), about
+  # 50 mm further along -x (owner, 2026-10-18). The robot stand and the tables (b) stay.
   Assembly_Overrides:
     - Name: machine_a
       Object_Of: 1154
-      Translation: [-0.100, 0.0, 0.0]
+      Translation: [-0.150, 0.0, 0.0]
+      Source: owner estimate, 2026-10-18 (100 mm, then a further 50 mm), not measured
+    - Name: side_cabinet
+      Object_Of: 2643
+      Translation: [-0.050, 0.0, 0.0]
       Source: owner estimate, 2026-10-18, not measured
   # Rigid translations of single STL components, added to any assembly translation, for geometry
   # the real cell contradicts. Each entry: Component (STL component id), Translation [x, y, z] in
   # the world frame (at most 150 mm), Source. REQUIRED (may be empty). [-, m, text]
-  # 2710: the left window profile at the rotation station. The smallest translation along -x (the
-  # machine front's normal; bisection, 0.15 mm) that keeps every joint-linear segment of cases 17
-  # and 18 at least 5 mm clear on top of the assembly shift: 15.7 mm (free direction, 400
-  # directions: 15.5 mm). No segment of the other 19 cases gets new or deeper penetration (SPEC 4.9).
-  Component_Overrides:
-    - Component: 2710
-      Translation: [-0.0157, 0.0, 0.0]
-      Source: derived from sf1_plc_v4.script cases 17/18, not measured
+  # None: with machine (a) at -150 mm the taught program keeps 39.1 mm or more to the left window
+  # profile 2710 without a fit; its earlier fit (-15.7 mm on top of -100 mm) is removed (SPEC 4.11).
+  Component_Overrides: []
   # Obstacles the STL does not contain, added to the environment (body env) as boxes aligned with
   # the world axes, collision only; a box that meets Clearance.Station_Zone is a zone piece. Each
   # entry: Name, Min and Max (lower and upper corner, world frame), Source. The collision set is not
   # rebuilt for them. REQUIRED (may be empty). [-, m, m, text]
   # station_bracket: the black U-shaped holder on the left window profile, under the part (owner
-  # photo, 2026-10-18). x from the post face (8 mm into the post) to 90 mm in front of it, y and
-  # the bottom from the photo (about 80 mm wide); the top is the highest at which every taught
-  # sample of cases 17 and 18, the release included, keeps 5 mm: 1.1126 m (the open finger),
-  # 17 mm above the photo's estimate of 1.095 m (SPEC 4.10). The stub seen above the holder is not
-  # modelled: at its estimated position it contradicts the taught drop (KNOWN_ISSUES.md).
+  # photo, 2026-10-18). It stays where the robot places the part (world-fixed): its front at
+  # x -0.645 m, 90 mm in front of the post face fitted earlier; it is mounted on the post, so its
+  # back reaches 8 mm into the post at its shifted face (x -0.762): -0.770 m (owner, 2026-10-18;
+  # the extension costs no taught clearance, SPEC 4.11). y and the bottom from the photo (about
+  # 80 mm wide); the top is the highest at which every taught sample of cases 17 and 18, the
+  # release included, keeps 5 mm: 1.1126 m (the open finger), 17 mm above the photo's estimate of
+  # 1.095 m (SPEC 4.10). The stub seen above the holder is not modelled: at its estimated position
+  # it contradicts the taught drop (KNOWN_ISSUES.md).
   Added_Boxes:
     - Name: station_bracket
-      Min: [-0.735, -0.340, 0.955]
+      Min: [-0.770, -0.340, 0.955]
       Max: [-0.645, -0.260, 1.112]
-      Source: owner photo + taught points, not measured
+      Source: owner photo + taught points, back to the shifted post (owner, 2026-10-18), not measured
 
 # The robot and its placement.
 Robot:

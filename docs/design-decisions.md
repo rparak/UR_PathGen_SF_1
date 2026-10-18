@@ -304,7 +304,8 @@ the objects stand more than 50 mm apart, so the 1 mm tolerance is not critical.
 **Revisit if** the STL changes (the object split is pinned at 1749 / 951 / 56 components), or an
 assembly needs a rotation.
 
-Pinned by `test/Collision/test_core.py::test_the_stl_has_three_objects_and_an_assembly_moves_exactly_one`
+Pinned by `test/Collision/test_core.py::test_the_stl_has_three_objects_and_an_assembly_moves_exactly_one`,
+`test/Collision/test_core.py::test_the_configured_shift_moves_the_machine_and_the_side_cabinet_only`
 and `test/Scene/test_core.py::test_a_set_built_with_other_overrides_is_refused`.
 
 ## Obstacles missing from the STL are configured box primitives
@@ -345,13 +346,18 @@ consume the budget everywhere.
 
 Pinned by `test/Scene/test_core.py::test_the_station_zone_applies_within_the_endpoint_radius`.
 
-## The rotation-station geometry is fitted to the taught program
+## The rotation-station geometry is fitted to the taught program only where the program constrains it
 
-**Decision.** Machine (a) is shifted −100 mm along x as one assembly (`machine_a`, the owner's
-estimate). On top of it, component 2710 (the left window profile) is translated a further −15.7 mm
-along x: the smallest translation along the machine front's normal that keeps every segment of the
-taught rotation sequence (cases 17 and 18) at least 5 mm clear (the free-direction optimum is
-15.5 mm). The machine body 1154 needs nothing beyond the shift. The station zone's box starts at
+**Decision.** Machine (a) is shifted −150 mm along x as one assembly and the side cabinet (c) −50 mm
+as another (`machine_a`, `side_cabinet`, the owner's estimates). No component is fitted on top: the
+taught rotation sequence keeps ≥ 39.1 mm to the post 2710 without one (SPEC §4.11). A component is
+fitted only where the taught program contradicts the estimated placement, by the smallest
+translation that keeps every taught segment 5 mm clear. The holder box is fitted that way (its top,
+§4.10). *Corrected 2026-10-18: with the machine at −100 mm, component 2710 (the left window profile)
+was translated a further −15.7 mm along x: the smallest translation along the machine front's normal
+that keeps every segment of the taught rotation sequence (cases 17 and 18) at least 5 mm clear (the
+free-direction optimum was 15.5 mm). The owner's further 50 mm made it unnecessary, and it was
+removed rather than kept on top (−165.7 mm).* The station zone's box starts at
 world x = −0.80 m, so the machine-interior fallback hull (component 1638) stays outside it.
 *Corrected 2026-10-18: before the owner's assembly estimate, the fit was 2710 by (−114.8, −6.2,
 −0.6) mm and 1154 by (−32.6, −11.6, +3.6) mm (SPEC §4.7); the post now totals −115.7 mm along x,
@@ -372,7 +378,11 @@ works. Translating only the touched 1154 pieces: rejected, piece ids change with
 a moved piece leaves its surface. A lower global margin: rejected, it hides every contradiction at
 once.
 
-**Revisit if** the station is measured, or a taught segment changes.
+Removing the post fit at −150 mm: a fit that the program no longer requires would move the post on
+no evidence. Kept on top it would put the post 165.7 mm behind the STL, beyond what either the
+program or the owner states.
+
+**Revisit if** the station is measured, the machine is placed closer again, or a taught segment changes.
 
 Pinned by `test/Scene/test_station.py::test_the_taught_rotation_sequence_keeps_its_margins`,
 `test/Scene/test_station.py::test_the_corrections_are_recorded_and_configured` and
@@ -382,7 +392,12 @@ Pinned by `test/Scene/test_station.py::test_the_taught_rotation_sequence_keeps_i
 
 **Decision.** The U-shaped holder under the part, missing from the STL, is one box in
 `Environment.Added_Boxes` (`station_bracket`). Its footprint and bottom come from an owner photo,
-and its x range runs from the post face to an assumed 90 mm in front. Its top is the highest at
+and its x range runs from the post face to an assumed 90 mm in front. *Updated 2026-10-18 (SPEC
+§4.11): the box stays where the robot places the part (front at x −0.645 m); with the machine at
+−150 mm and the post fit removed, its back is extended to 8 mm inside the shifted post face
+(x −0.770 m), because the holder is mounted on the post (owner). The extension costs no taught
+clearance (5.5 mm either way); without it the model would show a 27 mm gap between post and holder.*
+Its top is the highest at
 which every taught sample of cases 17 and 18 keeps 5 mm: 1.112 m, 17 mm above the photo's estimate
 (SPEC §4.10). The stub seen above the holder is not modelled (owner, 2026-10-18).
 
@@ -392,7 +407,9 @@ about ±30 mm; the taught program bounds it from above, because the real robot r
 included. The largest box that bound allows is the conservative end. The stub cannot stand where
 the photo puts it: the post fit leaves the taught drop 5 mm from the post face there, so a box could
 be at most 0.3 mm proud. Such a plate would claim a geometry nothing supports and would still steer
-the planner.
+the planner. *Corrected 2026-10-18: that held for the fitted post at −100 mm. With the machine at
+−150 mm a stub on the post face could stand up to 34.6 mm proud (SPEC §4.11); whether to model it is
+open.*
 
 **Alternatives.**
 
@@ -401,7 +418,8 @@ the planner.
   and a plate there would only move case 17 S2.
 - A U with arms: rejected, the arms' position relative to the fingers is not visible.
 
-**Revisit if** the holder or the stub is measured, or the drop or the pick is re-taught.
+**Revisit if** the holder or the stub is measured, the drop or the pick is re-taught, or the owner
+decides on the stub at the shifted post.
 
 Pinned by `test/Scene/test_station.py::test_the_taught_station_clears_the_station_boxes_by_the_zone_margin`
 and `test/Planner/test_core.py::test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end`.

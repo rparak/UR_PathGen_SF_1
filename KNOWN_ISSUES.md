@@ -27,73 +27,81 @@ program, not measured.
 - **Impact:** any new path through the station region must first run on the robot at reduced
   speed, with someone at the stop button, before it is used.
 
-## The rotation-station geometry is approximate: fitted to the taught program, not measured
+## The rotation-station geometry is approximate: the holder fitted to the taught program, the post placed by an estimate
 
 At `Base_Yaw` = 180° the taught rotation sequence (cases 17 and 18, home → … → home) collides with
-the original STL although the real robot runs it. Machine (a) is shifted −100 mm along x as an
-assembly (the owner's estimate, below); with that alone the sequence still penetrates the left
-window profile 2710 by 10.4 mm. The post is therefore translated a further −15.7 mm along x
-(`Environment.Component_Overrides`, source "derived from sf1_plc_v4.script cases 17/18, not
-measured"): the smallest translation along −x that keeps every segment of the sequence 5 mm clear.
-No segment of the other cases gets new or deeper penetration (SPEC §4.9). The visual mesh is
-unchanged, so the viewer shows the original post and machine front, not the collision geometry.
+the original STL although the real robot runs it. Machine (a) is shifted −150 mm along x as an
+assembly (the owner's estimate, below). With that the left window profile 2710 needs no fit: the
+taught sequence keeps ≥ 39.1 mm to it (SPEC §4.11). *Until 2026-10-18 (machine at −100 mm) the
+post was translated a further −15.7 mm, fitted so that the sequence kept 5 mm (SPEC §4.9).* The post
+now stands 34.3 mm behind that fit: **nothing in the program constrains where it is; its position is
+only the owner's estimate.** The visual mesh is unchanged, so the viewer shows the original post and
+machine front, not the collision geometry.
 
 Inside the station zone (`Clearance.Station_Zone`: the post, the machine-front pieces, the window's
-top profile) the environment margin is 5 mm instead of 20 mm: for taught segments everywhere, for a
-generated path only while its TCP lies within 50 mm of a station point.
+top profile, the holder) the environment margin is 5 mm instead of 20 mm: for taught segments
+everywhere, for a generated path only while its TCP lies within 50 mm of a station point.
 
 - **Impact:**
   - **0 mm is left for cables inside the zone** (5 mm = 1 mm eps + 4.0 mm measured kinematic error);
   - **case B (10 mm sanity bound) is not covered** there;
-  - **the fitted geometry pins consistency with the taught program, not real clearance:** the
-    taught segments keep ≥ 5.1 mm, and the drop and release points 5.5 – 7.4 mm, by construction;
-  - what the post fit hides: the STL draws the post 90 mm proud of the machine body, the fit 74 mm,
-    at every height.
-- **Also assumed in the fit:** movel segments checked joint-linear (the robot moves the TCP on a
-  line); blended corners (r > 0) checked through the corner, not along the blend; nominal DH (4.0 mm
-  error at the drop); the open gripper at 85 mm — assumption: full 85 mm stroke for
-  `rq_set_pos_spd_for(0, ...)`; conservative; owner did not confirm (the URCap sets
-  `set_open_mm(50.0, 1)`).
+  - **the holder pins consistency with the taught program, not real clearance:** its top is the
+    highest at which the taught pick keeps 5 mm (5.5 mm, the open finger), by construction;
+  - **if the machine stands closer than estimated**, the post is closer than modelled; the taught
+    program keeps ≥ 39.1 mm to the model, so a real post up to about 34 mm closer is still consistent
+    with it.
+- **Also assumed:** movel segments checked joint-linear (the robot moves the TCP on a line); blended
+  corners (r > 0) checked through the corner, not along the blend; nominal DH (4.0 mm error at the
+  drop); the open gripper at 85 mm — the release opening is real (owner, 2026-10-18).
 - **The station holder is an estimate** (`Environment.Added_Boxes`, `station_bracket`, source "owner
-  photo + taught points, not measured", SPEC §4.10): one box under the part. Its footprint comes
-  from the photo, its depth (90 mm) is assumed, and its top (1.112 m) is the highest the taught
+  photo + taught points, back to the shifted post (owner, 2026-10-18), not measured", SPEC §4.10,
+  §4.11): one box under the part, world-fixed where the robot places the part. Its footprint comes
+  from the photo, its front (90 mm in front of the earlier post face) is assumed, its back reaches
+  into the shifted post (it is mounted on it), and its top (1.112 m) is the highest the taught
   sequence allows. The holder's arms beside the part are not modelled.
-- **The stub is not modelled.** The photo's stub contradicts the taught drop at its estimated
-  position; its real position is unknown and it is not modelled. Run the robot near the drop at
-  reduced speed first.
-- **Evidence:** SPEC §4.7 (first fit), §4.9 (current fit, all-cases check, per-segment table),
-  §4.10 (holder, stub).
+- **The stub is not modelled.** With the post fitted (−100 mm) the photo's stub contradicted the
+  taught drop at its estimated position. With the post at −150 mm it no longer does: a stub on the
+  post face could stand up to 34.6 mm proud and every taught sample would keep 5 mm (SPEC §4.11).
+  It is still not modelled (not decided); a generated path may therefore pass where the real stub
+  stands. Run the robot near the drop at reduced speed first.
+- **Evidence:** SPEC §4.7 (first fit), §4.9 (−100 mm and the post fit), §4.10 (holder, stub), §4.11
+  (−150 mm, the fit removed, the per-segment table).
 - **Pinned by:** `test/Scene/test_station.py` (the replay of both cases as taught and as generated,
   the recorded overrides, the zone pieces, the holder) and
   `test/Planner/test_core.py::test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end`.
 - **What would close it:** measuring the machine's position, the post, the holder and the stub on
   the real cell, then correcting the STL and removing the overrides and the box.
 
-## The position of machine (a) is the owner's estimate, not a measurement
+## The positions of machine (a) and the side cabinet are the owner's estimates, not measurements
 
-Machine (a), all 1749 components, is shifted −100 mm along x as one rigid assembly
-(`Environment.Assembly_Overrides`): an estimate of the owner (2026-10-18), normal to the machine
-front. The owner's tape readings were rough, and nothing is fitted to them (SPEC §4.8). After the
-shift, the robot-table edge → lower cabinet front is 226 mm (tape about 300 mm) and the base axis →
-right window profile 712 mm (tape about 700 mm).
+Machine (a), all 1749 components, is shifted −150 mm along x as one rigid assembly, and the side
+cabinet (c), 56 components, −50 mm along x as another (`Environment.Assembly_Overrides`): estimates
+of the owner (2026-10-18; the machine first 100 mm, then a further 50 mm), normal to the machine
+front. The robot stand and the tables stay. The owner's tape readings were rough, and nothing is
+fitted to them (SPEC §4.8). After the shift, the robot-table edge → lower cabinet front is 276 mm
+(tape about 300 mm) and the base axis → right window profile 762 mm (tape about 700 mm).
 
-- **Impact:** if the machine stands closer than estimated, every clearance to it is smaller than
-  reported. Only the post at the station is fitted to the taught program, on top of the shift.
+- **Impact:**
+  - if either stands closer than estimated, every clearance to it is smaller than reported;
+  - **the space the shift frees exists only in the estimate:** the taught program does not reach it
+    (it keeps ≥ 39.1 mm to the post, and no segment comes within 50 mm of the side cabinet, SPEC
+    §4.11). **A generated path that uses it must first run on the robot at reduced speed**, with
+    someone at the stop button.
 - **Pinned by:** `test/Scene/test_station.py::test_the_corrections_are_recorded_and_configured`,
-  `test/Collision/test_core.py::test_the_stl_has_three_objects_and_an_assembly_moves_exactly_one`.
-- **What would close it:** measuring the machine front (cabinet and window profiles) relative to the
-  robot base, then correcting the STL.
+  `test/Collision/test_core.py::test_the_configured_shift_moves_the_machine_and_the_side_cabinet_only`.
+- **What would close it:** measuring the machine front (cabinet and window profiles) and the side
+  cabinet relative to the robot base, then correcting the STL.
 
 ## Machine (a) interior is filled by open-shell hulls; real loading paths penetrate it; the model is not usable inside the machine
 
 The grinder-loading segments of `sf1_plc_v4.script` reach into machine (a), and the model there is a
 single convex hull: component 1638, the set's only fallback piece (CoACD missed eps by 1.12 mm, so
 its hull was kept), flagged as an open shell, 234.8 mm excess. Real segments penetrate it by up to
-145 mm: load2 ↔ load3 (−99.5 mm, in every case 1 – 21), load_hower / rect_pick_hower → load3,
+140 mm: load2 ↔ load3 (−74.2 mm, in every case 1 – 21), load_hower / rect_pick_hower → load3,
 and the bench segments through Waypoint_9/10/12/13/14/15/16/17/19 to bench_drop_* / bench_sqr_pick
-(down to −145.0 mm; cases 1 – 8, 17, 18, 20, 21). Not corrected (out of scope, owner 2026-10-17).
-*Updated 2026-10-18: with the machine shifted 100 mm the penetrations shrink by about 9 mm; before,
-−108.6 and −154.1 mm.*
+(down to −140.4 mm; cases 1 – 8, 17, 18, 20, 21). Not corrected (out of scope, owner 2026-10-17).
+*Updated 2026-10-18: with the machine shifted 150 mm (100 mm: −99.5 and −145.0 mm; unshifted: −108.6
+and −154.1 mm).*
 
 Two other kinds of penetration in the program are expected and not errors of the machine model:
 the grasp and unload points reach into the modelled parts on the pallet and side tables
@@ -104,9 +112,8 @@ the grasp and unload points reach into the modelled parts on the pallet and side
   The rotation-sequence segments S1 – S3 (home ↔ station) keep at least 181.2 mm to every one of
   these pieces (closest: case 17 S2 to component 1638), and component 1638 is outside the station
   zone.
-- **Evidence:** scratch replay of all 121 unique segments of the 21 cases (2026-10-18: plus the 4
-  home → first target entries), joint-linear, 50 and 85 mm openings, on the set of each date
-  (SPEC §4.9).
+- **Evidence:** replay of all 125 unique segments of the 21 cases (the 4 home → first target entries
+  included), joint-linear, 50 and 85 mm openings, on the set of each date (SPEC §4.9, §4.11).
 - **Pinned by:** `test/Scene/test_program.py::test_no_program_segment_penetrates_more_than_recorded`
   (the 63 penetrating segments and their depths are its reference: none may be added or deepen).
 - **What would close it:** a decomposition of component 1638 that passes the conservativeness check

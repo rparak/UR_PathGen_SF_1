@@ -69,7 +69,8 @@ CONST_STATION_POINTS = ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5', 'Waypoint_1
 # Via points the taught program uses per segment.
 #   Unit [Dict<string, int>]
 CONST_TAUGHT_VIAS = {'S1': 1, 'S2': 3, 'S3': 1}
-# The reduced planning run repeated for determinism: S3 of case 17 (the direct segment fails).
+# The reduced planning run repeated for determinism: S1 of case 17 (its direct segment fails; S3's
+# no longer does since the machine shift, SPEC 4.11).
 #   Unit [Planner_Budget_Str], [int]
 CONST_REDUCED = Planner_Budget_Str(Restarts=2, RRT_Iterations=600, Shortcut_Iterations=40, Refine_Candidates=1,
                                    Refine_Iterations=20)
@@ -305,10 +306,10 @@ def test_a_reduced_planning_run_is_byte_identical_twice(cfg, program):
 
     points, _ = program
     station_q = [points[name].Q for name in CONST_STATION_POINTS]
-    scene = Scene_Cls(dataclasses.replace(cfg, Opening=CONST_OPENING['S3']))
+    scene = Scene_Cls(dataclasses.replace(cfg, Opening=CONST_OPENING['S1']))
     texts = []
     for _ in range(2):
-        result = Planner_Cls(scene, station_q, 0.0, CONST_REDUCED).Plan(points['Waypoint_6'].Q, points['home'].Q, CONST_REDUCED_SEED)
+        result = Planner_Cls(scene, station_q, 0.0, CONST_REDUCED).Plan(points['home'].Q, points['drop_rotate_1'].Q, CONST_REDUCED_SEED)
         assert result.Origin.startswith('rrt')
         vias = [Make_Generated_Point('via_%02d' % k, Matrix_To_Pose(TCP_Pose(q, cfg.TCP_Offset)), list(q))
                 for k, q in enumerate(result.Path[1:-1], start=1)]
@@ -350,12 +351,13 @@ def test_the_penalty_counts_only_far_from_the_station(planners, program):
         The clearance penalty sums max(0, 30 mm - d) over samples outside the station
         neighbourhood. The grasp approach hover_obj_1 -> pick_obj_1 (case 1, far from the station)
         reaches 2.8 mm into a fixture at the open 85 mm (SPEC 4.9), so it is at least 32.7 mm. The
-        drop's descent comes within 20 mm of the post, but inside the neighbourhood, so it is 0.
+        open approach to the pick, Waypoint_18 -> pick_rotate_1, comes within 5.5 mm of the holder
+        (SPEC 4.11), but inside the neighbourhood, so it is 0.
     """
 
     points, _ = program
     far = planners['S2'].Segment_Penalty(np.array(points['hover_obj_1'].Q), np.array(points['pick_obj_1'].Q))
-    near = planners['S1'].Segment_Penalty(np.array(points['drop_rotate_1'].Q), np.array(points['Waypoint_4'].Q))
+    near = planners['S2'].Segment_Penalty(np.array(points['Waypoint_18'].Q), np.array(points['pick_rotate_1'].Q))
     assert far >= 0.030 + 0.0027
     assert near == 0.0
 
