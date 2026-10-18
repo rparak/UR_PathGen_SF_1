@@ -1007,10 +1007,17 @@ via points.
 that fails is never written.
 
 **Output** (`Example/plan_rotation.py`, `Data/Generated/`):
-- `SF1_Rotation_<case>.urscript`: home and the station points with the program's tokens, then the
-  via points `via_<from>_<to>_<nn>` (§10.1 format, `_p` informational).
-- `SF1_Rotation_<case>_Sequence.script`: home → … → home in program order: generated movej (§10.4)
-  for S1 – S3 and their ends, the station lines copied verbatim, the gripper nodes as comments.
+- `SF1_Rotation_<case>.urscript`: the learned points the optimised case moves to, with the
+  program's tokens, in the order of first use, then the via points `via_<from>_<to>_<nn>` (§10.1
+  format, `_p` informational).
+- `SF1_Rotation_<case>_Sequence.script`: **the whole case** in program order, in the form of the
+  simplified taught program (§10.4), so the two compare line by line: the program's moves before
+  and after the rotation sequence (out of and back into machine (a)) and the station lines copied
+  verbatim, the gripper nodes as comments, S1 – S3 as generated movej (§10.4) to their via points
+  and ends. The arrival at home that opens the rotation sequence is the program's line, except
+  where it blends into S1 (case 17, `r=0.01`): a blend into a generated segment is not checked
+  (§8.5), so it is written as the generated `movej(home_q, a=…, v=…, r=0)` with a comment (owner,
+  2026-10-18). *Corrected 2026-10-18: the file held home → … → home only.*
 - The script prints, per segment, taught vs optimised: via points, estimated duration, Σ|Δq|,
   max-joint length, the smallest robot – environment distance and its robot body, the generated-rule
   violations, and the home → home totals (station operations estimated with the same model, movel
@@ -1025,7 +1032,7 @@ that fails is never written.
 | `test/Kinematics/test_core.py` | `FK_DH(q) · TCP_config` vs `_p`: regression pin (§9.4) of 1.72 mm / 0.261° and 4.02 mm / 0.376° (±0.01 mm / ±0.001°); diagnostic derived TCP pinned the same way and never read by any check; both points within the sanity bound; `Check_Learned_Point` rejects a point beyond it (perturbed `_q`) with the numbers in the message; configured TCP == (0, 0, 0.174, 0, 0, 0); geodesic angle 0 between r and its π-equivalent; `Normalize_Rotvec` rule incl. near-π |
 | `test/Scene/test_core.py` | scene compiles; base body world position == `Base_Position` exactly and yaw == `Base_Yaw`; **at `Base_Yaw` = 90° (a temporary copy of the configuration) `home`'s TCP lands at `Base_Position` + (−y, x, z) of its `_p` within 3 mm, in MuJoCo and through the base frame (the file is in degrees; read as radians the test fails)**; **MuJoCo flange FK (after the MjSpec offset override) == DH flange FK within 1e-9 m / 1e-9 rad (atan2 geodesic, §9.5) for 1000 seeded random joint vectors within the limits**, plus A and B; pad-span hull present in the gripper rigid group; fingers open along the configured `Mount_Yaw` (flange ±x at 0); visual mesh has no hull (`mesh_graphadr = −1`); base↔env build check runs; loader rejects an elbow limit beyond ±180°; gripper opening == `Tool.Opening` ± 0.5 mm, equality residual < 0.1 mm; coupling cylinder present (visual + collision), Menagerie `base_mount` mesh geoms absent, vendored files byte-identical to `models/MANIFEST.json`; pad end from the flange face 163.3 mm open and 176.8 mm closed (± 0.5 mm, manual chain) and the 50 mm values 154.39 / 173.23 mm (± 0.05 mm, regression); exclusion set == configuration expansion + `base–env_stand`, filterparent disabled; joint ranges == `Joint_Position_Limits`; **placement (§4.6): `pick_obj_1..8` on the pallet table, `unload_obj_1..8` on the side table (between the plate top and the highest part), `bench_drop_1..8` inside object (a); the same check at `Base_Yaw` = 0 refuses all 24**; A and B pass `Check_Clearance`, and **any violation fails the test, listing every pair with its distance and margin** (no report-only path); `hover_unload_2` (clear) pushed into the side table is reported as a collision; a collision set whose recorded assembly or component overrides differ from the configuration is refused; an added box is a box primitive of `env` spanning its configured corners with the environment margin, a zone piece only when it meets the zone box; the station zone applies to a generated configuration only within `Endpoint_Radius` of a station point (DH distances); a segment kind other than taught/generated is refused; a generated configuration with the tool pointing up above 2.35 m violates the workspace (excursion = the pad end's, from DH), the taught rule does not apply the box; the van der Corput order is a permutation of the samples |
 | `test/Scene/test_station.py` | the taught rotation sequence of cases 17 and 18 (home → … → home, typed from the program, 50 mm holding / 85 mm open) checked as taught has no violation: no penetration, the zone margin at the zone pieces, the global margins elsewhere; every taught segment also keeps the generated rule (it comes within 20 mm of the station only within 50 mm of a station point), and drop_rotate_1 → Waypoint_4 is clear as generated only with the station points; the holder box is a zone piece in both scenes, every taught sample keeps the zone margin to it and comes within the global margin, and MuJoCo's contact at the closest sample has the exact distance; the manifest records exactly the assembly shift and the fitted post override, which are the configured ones; `Environment_Distance` equals the exact distance in the 20 – 30 mm band (start of Waypoint_5 → Waypoint_1); the zone holds every piece of the post and the top profile, no piece of the side table, pallet table, machine-interior hull or right window profile; the early-exit check agrees with the full check on 72 seeded segments from the taught points (both verdicts occur) |
-| `test/Planner/test_core.py` | duration estimates against hand-computed values (triangle, trapezoid, leading joint, path sum, movel); the committed paths of both cases pass `Verify_Path`, S2 with fewer via points than taught, S1 and S3 no more; the station points keep their tokens; the sequence file's motion lines are in program order (generated movej with the program's a, v and r=0; station lines verbatim; gripper comments; the safety sentence); within the global margin no generated sample comes closer to a station box than the segment's closer taught end, and every sample keeps the generated rule's margin to it; one reduced planning run is byte-identical twice; RRT-Connect alone is byte-identical twice on a seed that draws from both sample sources (box around the ends, whole range); an impossible plan raises (inflated margin, no iterations, six via points); the penalty counts only far from the station (a grasp approach of case 1 counts, the drop's descent does not) |
+| `test/Planner/test_core.py` | duration estimates against hand-computed values (triangle, trapezoid, leading joint, path sum, movel); the committed paths of both cases pass `Verify_Path`, S2 with fewer via points than taught, S1 and S3 no more; the station and loading points keep their tokens; the sequence file is the whole case, its motion lines in program order (the moves before and after the rotation sequence verbatim; case 17's blended arrival at home generated with r=0, case 18's verbatim; generated movej with the program's a, v and r=0; station lines verbatim; gripper comments; the safety sentence); aligned with the simplified taught program, it differs only in S1 – S3 (and case 17's arrival at home), every added line a generated movej, the gripper comments identical; within the global margin no generated sample comes closer to a station box than the segment's closer taught end, and every sample keeps the generated rule's margin to it; one reduced planning run is byte-identical twice; RRT-Connect alone is byte-identical twice on a seed that draws from both sample sources (box around the ends, whole range); an impossible plan raises (inflated margin, no iterations, six via points); the penalty counts only far from the station (a grasp approach of case 1 counts, the drop's descent does not) |
 | `test/Scene/test_margin.py` | margin accuracy on **mesh hull vs mesh hull** (robot geom on a joint, so not static): a robot link hull at 3 orientations vs a box-hull face, and box-hull edge vs edge; at 10 mm a violation is reported, at 30 mm none; reported distance error < 0.5 mm (prototype: 0.000 mm, §4.5) |
 | `test/Collision/test_core.py` | manifest STL hash == sha256 of the file; the STL splits into three objects of 1749 / 951 / 56 components, an assembly named by the machine body moves exactly object (a) with a component override added on top, and the manifest records the configured assemblies' members; `R_crop` ≥ the bound recomputed from the current scene, and no robot collision vertex leaves the sphere over 1000 seeded random `q`; conservativeness violations == 0 at `eps` (vertices + 1 sample/cm² for CoACD components, hull-only exempt); degenerate components thickened and containing the original; excess metrics present and equal to a recomputation on a fixed sample; no robot body at A/B inside a flagged open-shell piece; mismatched hash → `Collision_Error_Cls` |
 | `test/Example/test_demo.py` | headless demo runs N steps without exception; only the chosen joint changes, monotonically between turning points; it stays within `Joint_Position_Limits`; the pre-check runs on the dense segment samples of §9.7; the label equals the check result ("clearance checked" iff no violation, otherwise "VISUAL ONLY — UNCHECKED"); the shipped motion's label is pinned |
@@ -1222,6 +1229,26 @@ Measured on the development Mac (M2 Pro), Python 3.11, mujoco 3.16.0.
 
   Estimates (§10.6). The optimised paths reach no deeper into the machine window than the taught
   ones (deepest gripper point x = −0.756 m in both, at the shared station ends).
+- **Re-plan on the current scene (2026-10-18).** The committed S1 – S3 had been planned on the
+  2026-10-17 scene and were not re-planned after the machine shift, the post refit and the station
+  holder box (§4.9, §4.10). Re-planned with the same seed, budget and w = 0.5 s/m when the output
+  became the whole case (31 min, M2 Pro): every S still needs one via point; the via points differ
+  (the scene differs). Estimated duration and smallest clearance outside the station neighbourhood:
+
+  | Case, S | Taught | Optimised (written) |
+  |---|---|---|
+  | 17 S1 | 5.95 s, 26.0 mm | 4.81 s, 35.9 mm |
+  | 17 S2 | 8.30 s, 42.5 mm | 4.45 s, 30.0 mm |
+  | 17 S3 | 6.81 s, 30.1 mm | 5.67 s, 32.0 mm |
+  | 18 S1 | 5.96 s, 26.5 mm | 4.79 s, 46.4 mm |
+  | 18 S2 | 8.29 s, 42.5 mm | 4.46 s, 29.7 mm |
+  | 18 S3 | 6.84 s, 31.1 mm | 5.64 s, 30.3 mm |
+  | home → home 17 / 18 | 23.37 / 23.49 s | 17.24 / 17.29 s |
+
+  **The taught S2 now keeps the generated rule** (0 violations in both cases; on 2026-10-17 it
+  came to 15.4 mm and failed): the machine shift moved the reason it was optimised. The optimised S2
+  is shorter (one via point instead of three, 3.8 s less, estimate) but passes closer to the
+  environment than the taught S2 outside the station neighbourhood (30.0 / 29.7 mm against 42.5 mm).
 - **Machine assembly and post refit (2026-10-18, §4.9).** `machine_a` −100 mm, post 2710 a further
   −15.7 mm; the 2026-10-17 overrides replaced. The collision set was rebuilt: 1109 s, the same 6716
   pieces, conservativeness 0.769 mm, 398 flagged (was 396). The committed S1 – S3 keep the generated

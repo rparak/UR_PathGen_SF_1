@@ -30,6 +30,8 @@ if CONST_SRC not in sys.path:
     sys.path.append(CONST_SRC)
 # Argparse (Command-line parsing)
 import argparse
+# Re (Regular expressions)
+import re
 # Dataclasses (Data Classes)
 import dataclasses
 # Time (Time access)
@@ -44,7 +46,7 @@ from Configuration.Core import (Load_Configuration, Cell_Configuration_Str, Conf
                                 CONST_PROJECT_ROOT)
 #   ../URScript/Core — the program extracts and the output files
 from URScript.Core import (Read_URScript, Read_Program_Excerpt, Make_Generated_Point, Make_Document, Write_URScript,
-                           Write_Motion_Sequence)
+                           Write_Motion_Sequence, Program_Entries, Gripper_Comment, Program_Line_Str)
 #   ../Kinematics/Core — the informational _p of a via point
 from Kinematics.Core import TCP_Pose, Matrix_To_Pose
 #   ../Scene/Core — the scene at each gripper opening
@@ -98,6 +100,9 @@ CONST_PENALTY_WEIGHT = 0.5
 # duration estimate only; their lines are copied verbatim.
 #   Unit [float] (m/s^2, m/s)
 CONST_MOVEL_A, CONST_MOVEL_V = 1.2, 0.25
+# The blend radius token of a program movej (absent = no blend).
+#   Unit [Pattern]
+CONST_BLEND = re.compile(r', r=([^,()]+)\)\s*$')
 # Cap of the reported robot - environment distance.
 #   Unit [float] (m)
 CONST_REPORT_DISTMAX = 0.200
@@ -198,7 +203,26 @@ def Station_Duration(points: tp.Dict, c: tp.Dict[str, str]) -> float:
             + Linear_Duration(points[c['pick']].P, points[c['above']].P, CONST_MOVEL_A, CONST_MOVEL_V))
 
 
-def Program_Line(lines: tp.List, kind: str, target: str) -> str:
+def Program_Item(lines: tp.Sequence[Program_Line_Str], kind: str, target: str) -> Program_Line_Str:
+    """
+    Description:
+        The one program line of a case with the given kind and target; refuses none or several.
+
+    Args:
+        (1) lines [List<Program_Line_Str>]: The case's program lines.
+        (2 - 3) kind, target [string]: 'movej' / 'movel' / 'gripper' and the target.
+
+    Returns:
+        (1) parameter [Program_Line_Str(object)]: The line.
+    """
+
+    found = [line for line in lines if line.Kind == kind and line.Target == target]
+    if len(found) != 1:
+        raise Planner_Error_Cls('The program excerpt has %d %s lines to %s; exactly one is expected.' % (len(found), kind, target))
+    return found[0]
+
+
+def Program_Line(lines: tp.Sequence[Program_Line_Str], kind: str, target: str) -> str:
     """
     Description:
         The one program line of a case with the given kind and target; refuses none or several.
@@ -211,10 +235,95 @@ def Program_Line(lines: tp.List, kind: str, target: str) -> str:
         (1) parameter [string]: The line as in the program.
     """
 
-    found = [line.Raw for line in lines if line.Kind == kind and line.Target == target]
-    if len(found) != 1:
-        raise Planner_Error_Cls('The program excerpt has %d %s lines to %s; exactly one is expected.' % (len(found), kind, target))
-    return found[0]
+    return Program_Item(lines, kind, target).Raw
+
+
+def Rotation_Bounds(lines: tp.Sequence[Program_Line_Str], home: str) -> tp.Tuple[int, int]:
+    """
+    Description:
+        The rotation sequence inside a whole case: the indices of its first and its last movej to
+        home (home -> ... -> home); refuses a case that does not move to home exactly twice.
+
+    Args:
+        (1) lines [List<Program_Line_Str>]: The case's program lines.
+        (2) home [string]: The home point's name.
+
+    Returns:
+        (1) parameter [Tuple<int, int>]: The indices of the two movej to home.
+    """
+
+    homes = [k for k, line in enumerate(lines) if line.Kind == 'movej' and line.Target == home]
+    if len(homes) != 2:
+        raise Planner_Error_Cls('The case moves to %s %d times; the rotation sequence needs exactly two (home -> ... -> home).'
+                                % (home, len(homes)))
+    return homes[0], homes[1]
+
+
+def Whole_Case_Entries(lines: tp.Sequence[Program_Line_Str], c: tp.Dict[str, str],
+                       vias: tp.Dict[str, tp.List[str]]) -> tp.List[tp.Tuple[str, str]]:
+    """
+    Description:
+        The optimised whole case as motion-sequence entries: the program's lines before and after
+        the rotation sequence verbatim (Program_Entries), the station operations verbatim, S1 - S3
+        as generated movej to their via points and ends. The arrival at home that opens the
+        rotation sequence stays the program's line unless that line blends (r > 0): a blend into a
+        generated segment is not checked (SPEC 8.5), so the arrival is then a generated movej with
+        r=0 (owner, 2026-10-18).
+
+    Args:
+        (1) lines [List<Program_Line_Str>]: The case's program lines.
+        (2) c [Dict<string, string>]: The case's point names (CONST_CASES).
+        (3) vias [Dict<string, List<string>>]: The via point names of S1, S2 and S3.
+
+    Returns:
+        (1) parameter [List<Tuple<string, string>>]: The entries in order.
+    """
+
+    first, last = Rotation_Bounds(lines, c['home'])
+    blend = CONST_BLEND.search(lines[first].Raw)
+    if blend is not None and float(blend.group(1)) > 0.0:
+        arrival = [('comment', 'Arrival at %s (generated, r=0): the program\'s line blends (r=%s) into S1, and a blend into a '
+                               'generated segment is not checked' % (c['home'], blend.group(1))), ('movej', c['home'])]
+    else:
+        arrival = [('comment', 'Arrival at %s (verbatim from the program)' % c['home']), ('program', lines[first].Raw)]
+    return ([('comment', 'Before the rotation sequence (verbatim from the program)')] + Program_Entries(lines[:first]) + arrival
+            + [('comment', 'S1 (generated): %s -> %s' % (c['home'], c['drop']))]
+            + [('movej', name) for name in vias['S1']] + [('movej', c['drop'])]
+            + [('comment', 'Station: drop (verbatim from the program)'),
+               ('program', Program_Line(lines, 'movel', c['below'])),
+               ('comment', Gripper_Comment(Program_Item(lines, 'gripper', 'open'))),
+               ('program', Program_Line(lines, 'movej', c['retreat'])),
+               ('comment', 'S2 (generated): %s -> %s' % (c['retreat'], c['approach']))]
+            + [('movej', name) for name in vias['S2']] + [('movej', c['approach'])]
+            + [('comment', 'Station: pick (verbatim from the program)'), ('program', Program_Line(lines, 'movej', c['pick'])),
+               ('comment', Gripper_Comment(Program_Item(lines, 'gripper', 'close'))),
+               ('program', Program_Line(lines, 'movel', c['above'])),
+               ('comment', 'S3 (generated): %s -> %s' % (c['above'], c['home']))]
+            + [('movej', name) for name in vias['S3']] + [('movej', c['home'])]
+            + [('comment', 'After the rotation sequence (verbatim from the program)')] + Program_Entries(lines[last + 1:]))
+
+
+def Learned_Order(entries: tp.Sequence[tp.Tuple[str, str]], lines: tp.Sequence[Program_Line_Str]) -> tp.List[str]:
+    """
+    Description:
+        The learned points a motion sequence moves to, in the order of first use: the targets of its
+        program lines and of its generated movej, the generated via points (via_*) excluded.
+
+    Args:
+        (1) entries [List<Tuple<string, string>>]: The motion-sequence entries.
+        (2) lines [List<Program_Line_Str>]: The case's program lines (the targets of the program entries).
+
+    Returns:
+        (1) parameter [List<string>]: The point names.
+    """
+
+    target = {line.Raw: line.Target for line in lines if line.Kind in ('movej', 'movel')}
+    names: tp.List[str] = []
+    for kind, value in entries:
+        name = target[value] if kind == 'program' else value if kind == 'movej' and not value.startswith('via_') else None
+        if name is not None and name not in names:
+            names.append(name)
+    return names
 
 
 def main():
@@ -273,31 +382,22 @@ def main():
                           for k in range(len(path) - 2)] for segment, path in generated.items()}
         via_points = [Make_Generated_Point(name, Matrix_To_Pose(TCP_Pose(q, cfg.TCP_Offset)), list(q))
                       for segment in ('S1', 'S2', 'S3') for name, q in zip(vias[segment], generated[segment][1:-1])]
-        station = [points[c[key]] for key in ('home', 'drop', 'below', 'retreat', 'approach', 'pick', 'above')]
-        header = ['# Rotation sequence of sf1_plc_v4.script, case %d: the station points (verbatim) and the generated via' % case,
-                  '# points of S1-S3 (_p informational, the robot is driven by _q). Generated by Example/plan_rotation.py,',
-                  '# seed %d, penalty weight %g s/m. Simulation passed != safe on the robot: run it on the real cell at'
-                  % (CONST_SEED, args.penalty_weight),
-                  '# reduced speed first.']
-        with open(os.path.join(args.out, 'SF1_Rotation_%d.urscript' % case), 'w', encoding='utf-8') as handle:
-            handle.write(Write_URScript(Make_Document(station + via_points, header)))
         lines = program[case]
-        entries = ([('comment', 'S1 (generated): %s -> %s' % (c['home'], c['drop']))]
-                   + [('movej', name) for name in vias['S1']] + [('movej', c['drop'])]
-                   + [('comment', 'Station: drop (verbatim from the program)'),
-                      ('program', Program_Line(lines, 'movel', c['below'])),
-                      ('comment', 'Gripper open: the program\'s Robotiq node goes here (%s)' % Program_Line(lines, 'gripper', 'open').strip()),
-                      ('program', Program_Line(lines, 'movej', c['retreat'])),
-                      ('comment', 'S2 (generated): %s -> %s' % (c['retreat'], c['approach']))]
-                   + [('movej', name) for name in vias['S2']] + [('movej', c['approach'])]
-                   + [('comment', 'Station: pick (verbatim from the program)'), ('program', Program_Line(lines, 'movej', c['pick'])),
-                      ('comment', 'Gripper close: the program\'s Robotiq node goes here (%s)' % Program_Line(lines, 'gripper', 'close').strip()),
-                      ('program', Program_Line(lines, 'movel', c['above'])),
-                      ('comment', 'S3 (generated): %s -> %s' % (c['above'], c['home']))]
-                   + [('movej', name) for name in vias['S3']] + [('movej', c['home'])])
-        sequence_header = ['# Rotation sequence of sf1_plc_v4.script, case %d, home -> ... -> home; the robot starts at home_q.' % case,
-                           '# Generated movej use the program\'s a and v with r=0; station lines are copied verbatim. Points:',
-                           '# SF1_Rotation_%d.urscript. Simulation passed != safe on the robot: run it at reduced speed first.' % case]
+        entries = Whole_Case_Entries(lines, c, vias)
+        # The learned points of the optimised case, in the order of first use (the taught via points
+        # of S1 - S3 are no longer used), then the generated via points.
+        learned = Learned_Order(entries, lines)
+        header = ['# Case %d of sf1_plc_v4.script, the whole case, optimised: the learned points it moves to (verbatim, in' % case,
+                  '# the order of first use) and the generated via points of S1-S3 (_p informational, the robot is driven',
+                  '# by _q). Generated by Example/plan_rotation.py, seed %d, penalty weight %g s/m. Simulation passed !='
+                  % (CONST_SEED, args.penalty_weight),
+                  '# safe on the robot: run it on the real cell at reduced speed first.']
+        with open(os.path.join(args.out, 'SF1_Rotation_%d.urscript' % case), 'w', encoding='utf-8') as handle:
+            handle.write(Write_URScript(Make_Document([points[name] for name in learned] + via_points, header)))
+        sequence_header = ['# Case %d of sf1_plc_v4.script, the whole case, optimised: the program\'s lines verbatim except the' % case,
+                           '# transfer segments S1-S3 of the rotation sequence, which are generated movej (the program\'s a and v,',
+                           '# r=0). The robot enters the case where the previous case left it. Points: SF1_Rotation_%d.urscript.' % case,
+                           '# Simulation passed != safe on the robot: run it at reduced speed first.']
         with open(os.path.join(args.out, 'SF1_Rotation_%d_Sequence.script' % case), 'w', encoding='utf-8') as handle:
             handle.write(Write_Motion_Sequence(entries, sequence_header, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN))
         # Report.

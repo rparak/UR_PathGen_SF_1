@@ -1,6 +1,13 @@
-# Rotation sequence of sf1_plc_v4.script, case 18, home -> ... -> home; the robot starts at home_q.
-# Generated movej use the program's a and v with r=0; station lines are copied verbatim. Points:
-# SF1_Rotation_18.urscript. Simulation passed != safe on the robot: run it at reduced speed first.
+# Case 18 of sf1_plc_v4.script, the whole case, optimised: the program's lines verbatim except the
+# transfer segments S1-S3 of the rotation sequence, which are generated movej (the program's a and v,
+# r=0). The robot enters the case where the previous case left it. Points: SF1_Rotation_18.urscript.
+# Simulation passed != safe on the robot: run it at reduced speed first.
+# Before the rotation sequence (verbatim from the program)
+movej(get_inverse_kin(Waypoint_16_p, qnear=Waypoint_16_q), a=0.17453292519943295, v=0.17453292519943295)
+movej(get_inverse_kin(load3_p, qnear=load3_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(load2_p, qnear=load2_q), a=1.3962634015954636, v=1.0471975511965976)
+# Arrival at home (verbatim from the program)
+movej(get_inverse_kin(home_p, qnear=home_q), a=1.3962634015954636, v=1.0471975511965976)
 # S1 (generated): home -> drop_rotate_2
 movej(via_home_drop_rotate_2_01_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
 movej(drop_rotate_2_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
@@ -18,3 +25,9 @@ movel(Waypoint_8_p, a=1.2, v=0.25)
 # S3 (generated): Waypoint_8 -> home
 movej(via_Waypoint_8_home_01_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
 movej(home_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
+# After the rotation sequence (verbatim from the program)
+movej(get_inverse_kin(load2_p, qnear=load2_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(load3_p, qnear=load3_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(Waypoint_12_p, qnear=Waypoint_12_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(bench_rect_drop_p, qnear=bench_rect_drop_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(bench_drop_12_p, qnear=bench_drop_12_q), a=0.08726646259971647, v=0.08726646259971647)

@@ -24,6 +24,8 @@
 # System (Default)
 import os
 import re
+# Difflib (Sequence comparison)
+import difflib
 # Dataclasses (Data Classes)
 import dataclasses
 # Numpy (Array computing) [pip3 install numpy]
@@ -69,6 +71,15 @@ CONST_CASES = {
 CONST_OPENING = {(case, segment): (0.085 if segment == 'S2' else 0.050) for case in (17, 18) for segment in ('S1', 'S2', 'S3')}
 CONST_STATION_POINTS = ('drop_rotate_1', 'drop_rotate_2', 'Waypoint_4', 'Waypoint_7', 'Waypoint_5', 'Waypoint_18',
                         'Waypoint_11', 'pick_rotate_1', 'pick_rotate_2', 'Waypoint_6', 'Waypoint_8')
+# The moves of each whole case before and after its rotation sequence (out of and back into machine
+# (a)), typed from the program, and whether the arrival at home that opens the rotation sequence is
+# written as generated: case 17's program line blends there (r=0.01) into S1, case 18's does not.
+#   Unit [Dict<int, Tuple<string>>], [Dict<int, bool>]
+CONST_BEFORE = {17: ('load_hower', 'load3', 'load2'), 18: ('Waypoint_16', 'load3', 'load2')}
+CONST_AFTER = {17: ('load2', 'load3', 'Waypoint_10', 'Waypoint_13', 'bench_drop_11'),
+               18: ('load2', 'load3', 'Waypoint_12', 'bench_rect_drop', 'bench_drop_12')}
+CONST_LOADING = {case: CONST_BEFORE[case] + CONST_AFTER[case] for case in (17, 18)}
+CONST_GENERATED_ARRIVAL = {17: True, 18: False}
 # Via points the taught program uses per segment.
 #   Unit [Dict<string, int>]
 CONST_TAUGHT_VIAS = {'S1': 1, 'S2': 3, 'S3': 1}
@@ -230,13 +241,14 @@ def test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end(r
 def test_the_station_points_keep_their_tokens(root, program, case):
     """
     Description:
-        The station points and home in the output are the program's points, token for token; every
-        other point is a generated via point.
+        The output holds home, the station points and the points of the moves before and after the
+        rotation sequence, each the program's point token for token; every other point is a
+        generated via point.
     """
 
-    points, _ = program
+    points, lines = program
     document, _ = _Output(root, case)
-    fixed = {'home'} | set(CONST_CASES[case].values())
+    fixed = {'home'} | set(CONST_CASES[case].values()) | set(CONST_LOADING[case])
     for name, point in document.Points.items():
         if name in fixed:
             assert (point.P_Tokens, point.Q_Tokens) == (points[name].P_Tokens, points[name].Q_Tokens)
@@ -249,10 +261,13 @@ def test_the_station_points_keep_their_tokens(root, program, case):
 def test_the_sequence_file_has_the_program_structure(root, program, case):
     """
     Description:
-        The sequence file's motion lines are, in order: S1's via points and the drop as generated
-        movej (joint targets, the program's a and v, r=0), the drop's movel, the retreat and the
-        pick copied verbatim from the program, S2 and S3 as generated movej ending at home; the
-        gripper actions appear as comments; the header says simulation is not safety.
+        The sequence file is the whole case. Its motion lines are, in order: the program's moves
+        before the rotation sequence verbatim; the arrival at home (generated with r=0 where the
+        program blends into S1, else verbatim); S1's via points and the drop as generated movej
+        (joint targets, the program's a and v, r=0); the drop's movel, the retreat and the pick
+        verbatim; S2 and S3 as generated movej ending at home; the program's moves after the
+        rotation sequence verbatim. The gripper actions appear as comments; the header says
+        simulation is not safety.
     """
 
     points, lines = program
@@ -260,17 +275,52 @@ def test_the_sequence_file_has_the_program_structure(root, program, case):
     c = CONST_CASES[case]
     def Generated_Lines(names):
         return ['movej(%s_q, a=%s, v=%s, r=0)' % (n, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN) for n in names]
-    def Verbatim_Lines(kind, target):
-        return [line.Raw.strip() for line in lines[case] if line.Kind == kind and line.Target == target]
+    def Verbatim_Lines(kind, target, which=0):
+        return [[line.Raw.strip() for line in lines[case] if line.Kind == kind and line.Target == target][which]]
+    def Loading(names, which):
+        return [line for n in names for line in Verbatim_Lines('movej', n, which if n in ('load2', 'load3') else 0)]
     vias = {s: _Path(document, points, a, b)[1] for s, (a, b) in _Segments(case).items()}
-    expected = (Generated_Lines(vias['S1'] + [c['drop']]) + Verbatim_Lines('movel', c['below']) + Verbatim_Lines('movej', c['retreat'])
+    arrival = Generated_Lines(['home']) if CONST_GENERATED_ARRIVAL[case] else Verbatim_Lines('movej', 'home', 0)
+    expected = (Loading(CONST_BEFORE[case], 0) + arrival
+                + Generated_Lines(vias['S1'] + [c['drop']]) + Verbatim_Lines('movel', c['below']) + Verbatim_Lines('movej', c['retreat'])
                 + Generated_Lines(vias['S2'] + [c['approach']]) + Verbatim_Lines('movej', c['pick']) + Verbatim_Lines('movel', c['above'])
-                + Generated_Lines(vias['S3'] + ['home']))
+                + Generated_Lines(vias['S3'] + ['home']) + Loading(CONST_AFTER[case], 1))
     motion = [line for line in sequence.splitlines() if line and not line.startswith('#')]
     assert motion == expected
     comments = [line for line in sequence.splitlines() if line.startswith('# Gripper')]
     assert [line.split(':')[0] for line in comments] == ['# Gripper open', '# Gripper close']
     assert 'Simulation passed != safe on the robot' in sequence
+
+
+@pytest.mark.parametrize('case', sorted(CONST_CASES))
+def test_the_optimised_case_is_the_taught_case_with_s1_to_s3_replaced(root, case):
+    """
+    Description:
+        The optimised whole case (Data/Generated/) and the simplified taught program
+        (Data/Programs/sf1_plc_v4/) differ only in S1 - S3: aligned line by line, every taught line
+        that is not kept is a move of S1 - S3 (to Waypoint_1/2/3, the drop, the approach or the
+        closing home) or, where the program blends into S1, the arrival at home; every optimised
+        line that is not taught is a generated movej (joint target, r=0). The gripper comments are
+        identical, so the two files can be compared and pasted side by side.
+    """
+
+    c = CONST_CASES[case]
+    with open(os.path.join(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_case_%d_sequence.script' % case),
+              encoding='utf-8') as handle:
+        taught = [line for line in handle.read().splitlines() if not line.startswith('#') or line.startswith('# Gripper')]
+    optimised = [line for line in _Output(root, case)[1].splitlines() if not line.startswith('#') or line.startswith('# Gripper')]
+    generated = re.compile(r'^movej\(\w+_q, a=%s, v=%s, r=0\)$' % (re.escape(CONST_MOVEJ_A_TOKEN), re.escape(CONST_MOVEJ_V_TOKEN)))
+    replaced_targets = {'Waypoint_1', 'Waypoint_2', 'Waypoint_3', c['drop'], c['approach'], 'home'}
+    removed, added = [], []
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, taught, optimised, autojunk=False).get_opcodes():
+        if tag != 'equal':
+            removed += taught[i1:i2]
+            added += optimised[j1:j2]
+    targets = [re.match(r'^movej\(get_inverse_kin\((\w+)_p, qnear=\1_q\)', line).group(1) for line in removed]
+    assert set(targets) <= replaced_targets, targets
+    assert targets.count('home') == (2 if CONST_GENERATED_ARRIVAL[case] else 1)
+    assert all(generated.match(line) for line in added), added
+    assert [line for line in taught if line.startswith('# Gripper')] == [line for line in optimised if line.startswith('# Gripper')]
 
 
 def test_a_reduced_planning_run_is_byte_identical_twice(cfg, program):

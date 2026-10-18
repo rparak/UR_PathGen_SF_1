@@ -39,7 +39,11 @@ builds the scene without the visual STL by default (faster, lighter) and starts 
 `--with-stl` loads the STL as well.
 
 Plan the transfer segments of the rotation sequence (cases 17 and 18; about 35 minutes, writes
-`Data/Generated/` and prints the taught vs optimised report):
+`Data/Generated/` and prints the taught vs optimised report). `Data/Generated/` holds, per case, the
+optimised whole case in the same form as the simplified taught program in `Data/Programs/sf1_plc_v4/`:
+`SF1_Rotation_<case>.urscript` (the points, including the generated via points) and
+`SF1_Rotation_<case>_Sequence.script` (the taught lines unchanged except S1 – S3, which are generated
+movej with `r=0`). Both can be pasted into the robot program; run them at reduced speed first:
 
 ```bash
 .venv/bin/python Example/plan_rotation.py

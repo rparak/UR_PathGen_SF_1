@@ -120,8 +120,9 @@ generated-rule check in simulation. What that does not cover:
   cycle-time gain (about 6 s home -> home per case) is not measured.
 - **Clearance has no reserve beyond the margins:** the hard limits are 20 mm, and 5 mm within
   50 mm of a station point. The clearance penalty (weight 0.5 s/m, the owner's choice)
-  keeps the optimised paths at 26.6 mm or more outside the station neighbourhood; without it they
-  went down to 20.4 mm.
+  keeps the optimised paths at 29.7 mm or more outside the station neighbourhood (re-planned
+  2026-10-18 on the shifted machine; 26.6 mm on 2026-10-17); without it they went down to 20.4 mm
+  (2026-10-17).
 - **Space:** a generated segment stays inside `Clearance.Workspace` (the STL's x/y extents, up to
   2.35 m, the height the taught program reaches); what lies outside the STL is unknown.
 - **The carried part, cables, Polyscope safety limits** as elsewhere in this file.

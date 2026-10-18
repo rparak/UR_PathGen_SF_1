@@ -31,6 +31,8 @@ import pytest
 # Custom Lib.:
 #   ../Configuration/Core — the error a missing case raises
 from Configuration.Core import Configuration_Error_Cls
+#   ../URScript/Core — the case extract
+from URScript.Core import Read_Program_Excerpt
 
 """
 Description:
@@ -72,3 +74,26 @@ def test_a_case_without_a_holding_opening_is_refused(root, cfg):
     plan = _Plan_Module(root)
     with pytest.raises(Configuration_Error_Cls, match=r'Tool\.Holding_Openings has no entry for case 18'):
         plan.Opening(dataclasses.replace(cfg, Holding_Openings={17: (0.050, 'a')}), 18, 'holding')
+
+
+@pytest.mark.parametrize('case, generated_arrival', [(17, True), (18, False)])
+def test_the_arrival_at_home_is_generated_only_where_the_program_blends_into_s1(root, case, generated_arrival):
+    """
+    Description:
+        Whole_Case_Entries keeps the program's arrival at home verbatim unless that line blends
+        (case 17: r=0.01, typed from the program); then the arrival is a generated movej to home
+        (r=0), because a blend into a generated segment is not checked. Every program line before
+        the first and after the last home is kept, in order.
+    """
+
+    plan = _Plan_Module(root)
+    with open(os.path.join(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_cases_17_18.script'), encoding='utf-8') as handle:
+        lines = Read_Program_Excerpt(handle.read())[case]
+    entries = plan.Whole_Case_Entries(lines, plan.CONST_CASES[case], {'S1': ['v1'], 'S2': ['v2'], 'S3': ['v3']})
+    homes = [k for k, line in enumerate(lines) if line.Kind == 'movej' and line.Target == 'home']
+    first = [e for e in entries if e[0] != 'comment'][len([1 for line in lines[:homes[0]] if line.Kind in ('movej', 'movel')])]
+    assert first == (('movej', 'home') if generated_arrival else ('program', lines[homes[0]].Raw))
+    programs = [value for kind, value in entries if kind == 'program']
+    before = [line.Raw for line in lines[:homes[0]] if line.Kind in ('movej', 'movel')]
+    after = [line.Raw for line in lines[homes[1] + 1:] if line.Kind in ('movej', 'movel')]
+    assert programs[:len(before)] == before and programs[len(programs) - len(after):] == after
