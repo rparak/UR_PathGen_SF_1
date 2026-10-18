@@ -255,14 +255,15 @@ def test_the_penalty_counts_only_far_from_the_station(planners, program):
     """
     Description:
         The clearance penalty sums max(0, 30 mm - d) over samples outside the station
-        neighbourhood: Waypoint_1 -> Waypoint_2 passes the top profile at 15.3 mm far from the
-        station, so it is at least 14.6 mm; the drop's descent lies inside the neighbourhood, so it is 0.
+        neighbourhood. The grasp approach hover_obj_1 -> pick_obj_1 (case 1, far from the station)
+        reaches 2.8 mm into a fixture at the open 85 mm (SPEC 4.9), so it is at least 32.7 mm. The
+        drop's descent comes within 20 mm of the post, but inside the neighbourhood, so it is 0.
     """
 
     points, _ = program
-    far = planners['S2'].Segment_Penalty(np.array(points['Waypoint_1'].Q), np.array(points['Waypoint_2'].Q))
+    far = planners['S2'].Segment_Penalty(np.array(points['hover_obj_1'].Q), np.array(points['pick_obj_1'].Q))
     near = planners['S1'].Segment_Penalty(np.array(points['drop_rotate_1'].Q), np.array(points['Waypoint_4'].Q))
-    assert far >= 0.030 - 0.0154
+    assert far >= 0.030 + 0.0027
     assert near == 0.0
 
 

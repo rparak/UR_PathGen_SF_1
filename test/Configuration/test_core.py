@@ -94,7 +94,10 @@ def test_the_shipped_configuration_loads_in_si_units():
     assert cfg.Joint_Limits_Max[0] == pytest.approx(2.0 * math.pi)
     assert cfg.Clearance_Environment == 0.020 and cfg.Clearance_Self == 0.005
     assert cfg.Self_Pair_Overrides == [('base', 'upper_arm_link', 0.0)]
-    assert cfg.Assembly_Overrides == [] and cfg.Added_Boxes == []
+    assert cfg.Mount_Yaw == 0.0
+    assert cfg.Assembly_Overrides == [('machine_a', 1154, [-0.100, 0.0, 0.0], 'owner estimate, 2026-10-18, not measured')]
+    assert cfg.Component_Overrides == [(2710, [-0.0157, 0.0, 0.0], 'derived from sf1_plc_v4.script cases 17/18, not measured')]
+    assert cfg.Added_Boxes == []
 
 
 @pytest.mark.parametrize('field', CONST_REQUIRED)

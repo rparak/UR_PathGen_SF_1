@@ -302,6 +302,9 @@ point of the planner.
 
 ### 4.7 Station correction fitted to the taught program (*measured*, 2026-10-17)
 
+*Superseded 2026-10-18 by §4.9: fitted without the machine assembly shift. Kept as the record of the
+first fit.*
+
 No measurement of the cell is available. The ground truth is the owner's statement that every
 segment of `sf1_plc_v4.script` runs on the real robot without collision. At `Base_Yaw` = 180° the
 rotation sequence of cases 17 and 18 (home → … → home, movel checked joint-linear, 50 mm opening
@@ -352,6 +355,101 @@ therefore used, not a split of the component (owner's condition, 2026-10-17).
 Checked as taught, every segment keeps its margins. Checked as generated (station points as the
 fixed points), only Waypoint_1 → Waypoint_2 violates: the top profile at 15.3 mm with the TCP about
 300 mm from every station point.
+
+### 4.8 Owner photos and tape readings (2026-10-18)
+
+**Photos.** Two obstacles at the rotation station are missing from the STL, both on the outer face
+of the left window profile (component 2710). They are estimated from a photo, scaled by the window
+height (0.757 m sill to top profile, about 2.6 mm/px, ±30 mm):
+
+- **the holder:** a black U-shaped holder at sill height, about 80 mm wide and 140 mm tall
+  (z 0.955 – 1.095 m), under the part;
+- **the stub:** a short vertical profile with an orange-framed piece on top, just above the holder,
+  about 60 mm wide (z 1.093 – 1.264 m), reaching about drop height.
+
+Their depth toward the robot is not visible.
+
+**Tape readings** (owner, rough; the owner asked that nothing be fitted to them):
+
+| Reading | Tape | STL | After §4.9 |
+|---|---|---|---|
+| base axis → machine front at window height | ~700 mm | 612 mm (window profiles) | 712 mm (right profile), 728 mm (left profile, fitted) |
+| robot-table edge (x −0.340) → lower cabinet front, low | ~300 mm | 127 mm | 226 mm |
+
+### 4.9 Machine (a) shifted, post refitted (*measured*, 2026-10-18)
+
+**Owner facts.**
+
+- Machine (a) stands about 100 mm further from the robot than the STL, normal to its front (world
+  −x). The machine body, the front column with the window frame and the closed lower cabinet move as
+  one rigid assembly. This is an estimate, not a measurement.
+- `Tool.Mount_Yaw` = 0° is confirmed on the robot. On 2026-10-18 the owner first stated 90° and then
+  withdrew it.
+- The release opening of 85 mm is real: the part is released into a magazine with free space below
+  and above.
+
+**Selection.** Grouping components by touching bounding boxes (1 mm) gives exactly three objects:
+
+- (a) the machine, 1749 components, x −1.609 … −0.466 m;
+- (b) the robot stand, pallet and side tables, 951 components;
+- (c) the side cabinet, 56 components, y ≥ 0.555 m.
+
+Object (a) is the assembly (`machine_a`, the object of component 1154). Its front strip is its 232
+components ahead of x = −0.70 m: posts 2709/2710, top members 2711/2699, the cabinet panel 180 and
+frame 2696 – 2708. The owner confirmed the selection on renders. Both fits of §4.7 are replaced.
+
+**Post refit.** With the shift alone, the taught sequence penetrates the post 2710 by 10.4 mm. The
+smallest further translation of 2710 that keeps every segment of cases 17 and 18 at least 5 mm clear
+(exact distances, every sample, each segment at its opening):
+
+- **15.7 mm along −x** (bisection, 0.15 mm), configured: it is the machine front's normal;
+- 15.5 mm in the free direction, (−15.3, −2.6, +1.2) mm, among 400 directions.
+
+The post totals 115.7 mm behind its STL position, consistent with the first fit (−114.8, −6.2,
+−0.6 mm, §4.7). Its front is at x = −0.728, 74 mm ahead of the shifted body front; the STL draws it
+90 mm ahead. The machine body 1154 needs nothing beyond the shift: the closest taught sample of
+cases 17 and 18 is 60.3 mm from it.
+
+**Rebuild** (`machine_a` −100 mm, 2710 a further −15.7 mm): 6716 pieces, every count, method and body
+as before; conservativeness max 0.769 mm; excess max 234.8 mm, p95 11.27 mm (was 11.30 mm); 398
+pieces flagged (was 396: borderline excess samples of translated components); 1109 s. The manifest
+records both overrides and the 1749 members of the assembly.
+
+**All 21 cases** (125 unique segments, joint-linear, 50 and 85 mm, against the 2026-10-17 state):
+
+- no segment gets new or deeper penetration;
+- penetrating segments: 63 before, 63 after;
+- the machine-interior penetrations shrink by about 9 mm (deepest: Waypoint_19 → bench_drop_8,
+  −154.1 → −145.0 mm, component 1638);
+- no self-collision.
+
+Cases 17 and 18 as taught (minimum distance, mm, its own opening per segment; all to the post 2710
+or nothing within 50 mm):
+
+| Segment | Case 17 | Case 18 |
+|---|---|---|
+| Waypoint_1 → drop | 6.5 | 5.7 |
+| drop → Waypoint_4 / 7 | 5.7 | **5.1** |
+| Waypoint_4 / 7 → Waypoint_5 (85 mm) | 7.2 | 6.0 |
+| Waypoint_5 → Waypoint_1 | 21.3 | 21.3 |
+| Waypoint_1 → Waypoint_2 | ≥ 50 | ≥ 50 |
+| Waypoint_2 → Waypoint_3 | 30.8 | 30.8 |
+| Waypoint_3 → Waypoint_18 / 11 | 36.2 | 42.1 |
+| approach → pick | 15.9 | 17.0 |
+| pick → Waypoint_6 / 8 | 10.0 | 10.3 |
+| Waypoint_6 / 8 → Waypoint_2 | 11.5 | 13.3 |
+
+Every segment keeps its margins as taught and keeps the generated rule too: wherever it comes within
+20 mm of the station, its TCP lies within 50 mm of a station point. Before the shift, Waypoint_1 →
+Waypoint_2 passed the window's top profile at 15.3 mm far from the station; the top profile moved
+with the machine.
+
+**The station zone stays** (5 mm). The drop and release points keep 5.5 – 7.4 mm, by construction
+of the post fit, below the global 20 mm. The zone now holds 12 pieces (14 before the shift).
+
+**Committed S1 – S3** (generated rule): all six pass unchanged. They are not re-planned, and
+`Data/Generated/` stays as committed. They keep at least 181.2 mm to the machine-interior and pallet
+pieces.
 
 ## 5. Platform
 
@@ -521,8 +619,8 @@ field without a reader.
 | `Environment.Visual_Mesh` | the STL, repository-relative | path | REQUIRED |
 | `Environment.Collision_Set` | the `.npz`, repository-relative | path | REQUIRED |
 | `Environment.Stand_Region.Min/Max` | box selecting the stand components (§7.5) | m | REQUIRED |
-| `Environment.Assembly_Overrides` | rigid translations of whole STL objects before the build: `{Name, Object_Of (a component of the object), Translation [x, y, z] (world, ≤ 150 mm), Source}` each; may be empty (§7.6) | –, –, m, text | REQUIRED |
-| `Environment.Component_Overrides` | rigid translations of STL components before the build, added to any assembly translation: `{Component, Translation [x, y, z] (world, ≤ 150 mm), Source}` each; may be empty (§7.6) | –, m, text | REQUIRED |
+| `Environment.Assembly_Overrides` | rigid translations of whole STL objects before the build: `{Name, Object_Of (a component of the object), Translation [x, y, z] (world, ≤ 150 mm), Source}` each; may be empty (§7.6). Shipped: `machine_a`, object (a), −100 mm along x (owner estimate, 2026-10-18, not measured; §4.9) | –, –, m, text | REQUIRED |
+| `Environment.Component_Overrides` | rigid translations of STL components before the build, added to any assembly translation: `{Component, Translation [x, y, z] (world, ≤ 150 mm), Source}` each; may be empty (§7.6). Shipped: 2710 −15.7 mm along x (fitted, §4.9) | –, m, text | REQUIRED |
 | `Environment.Added_Boxes` | obstacles missing from the STL, added to body `env` as world-axis-aligned box primitives with the environment margin: `{Name, Min [x, y, z], Max [x, y, z] (world), Source}` each; a box meeting `Clearance.Station_Zone` is a zone piece; may be empty. The collision set is not rebuilt for them | –, m, m, text | REQUIRED |
 | `Robot.Model` | `models/universal_robots_ur10e/ur10e.xml` | path | REQUIRED |
 | `Robot.Base_Position` | Polyscope base origin in the STL/world frame: `[0.0, 0.0, 0.7152]` | m | REQUIRED |
@@ -532,7 +630,7 @@ field without a reader.
 | `Tool.Coupling.Thickness` | coupling thickness: `0.0169` (manual rev. 2020/02/11 p. 119, Fig. 5-5) | m | REQUIRED |
 | `Tool.Coupling.Diameter` | coupling outer diameter: `0.075` | m | REQUIRED |
 | `Tool.Coupling.Spigot_Depth` | depth of the Ø71 bore receiving the gripper: `0.0029`; gripper datum = thickness − depth = 14.0 mm (measured on the robot) | m | REQUIRED |
-| `Tool.Mount_Yaw` | rotation of the gripper about the flange z axis relative to the Menagerie default: `0.0`. **Documented assumption**, not measured (§9.3, `KNOWN_ISSUES.md`) | deg | REQUIRED |
+| `Tool.Mount_Yaw` | rotation of the gripper about the flange z axis relative to the Menagerie default: `0.0`, the fingers open along flange ±x. **Confirmed on the robot by the owner (2026-10-18)**; a statement of 90° made that day was withdrawn (§9.3) | deg | REQUIRED |
 | `Tool.Opening` | inner pad-face gap held during transit: `0.050` | m | REQUIRED |
 | `Tool.TCP_Offset` | TCP in the flange frame `[x, y, z, rx, ry, rz]`: `[0.0, 0.0, 0.174, 0.0, 0.0, 0.0]`. Source: the Polyscope TCP of SF1 (owner, 2026-10-17), identical to the Robotiq value (manual rev. 2020/02/11 p. 127, §5.2.3) | m, rad (rotvec) | REQUIRED |
 | `Clearance.Environment` | minimum robot/gripper ↔ environment distance: `0.020` | m | REQUIRED |
@@ -600,12 +698,12 @@ corrected flange.
    173.23 mm, variant (b) of §4.4) are pinned as regression values (±0.05 mm).
 5. If a pin fails after a change, the test reports the numbers and **nothing is adjusted to make it
    pass**.
-6. **Mounting orientation, `Tool.Mount_Yaw` = 0: a documented assumption, not measured** (owner).
-   The manual indexes the coupling with the dowel pin next to the wrist connector (p. 21, p. 23
-   Fig. 3-2) but states no angle. The scene uses the Menagerie default orientation. At
-   implementation I report in which flange axis the fingers open in the scene. Recorded in the
-   YAML comment and in `KNOWN_ISSUES.md`. This relaxes only this item: every other requirement, and
-   "simulation passed ≠ safe on the robot", stays as it is.
+6. **Mounting orientation, `Tool.Mount_Yaw` = 0: confirmed by the owner (2026-10-18).** The manual
+   indexes the coupling with the dowel pin next to the wrist connector (p. 21, p. 23 Fig. 3-2) but
+   states no angle; the scene uses the Menagerie default orientation, and the fingers open along
+   flange ±x (§4.5). Until 2026-10-18 this was a documented assumption; a statement of 90° made that
+   day was withdrawn. The taught program cannot discriminate the yaw (a consistent station fit
+   exists at 0° and at 90°), so it is configured, never fitted.
 
 ### 9.4 FK accuracy: regression pin + independent sanity bound
 
@@ -752,7 +850,6 @@ Not in the budget, because they are not small bounded errors. Each is listed in 
 
 - the carried 50 × 50 mm part (not modelled, accepted by the owner; not covered by the gripper
   geometry, §9.6);
-- `Tool.Mount_Yaw` = 0, an unmeasured assumption (§9.3);
 - Polyscope safety limits possibly tighter than ±360°.
 
 Self-collision (5 mm) is not affected by cables or calibration at the gripper. Only eps applies.
@@ -891,8 +988,8 @@ that fails is never written.
 | `test/Configuration/test_core.py` | shipped file loads; each REQUIRED field missing → named failure; invalid values (wrong length, limits outside ±360°, min ≥ max, coupling spigot depth ≥ thickness, negative clearance or sanity bound, an assembly or component override beyond 150 mm, without a source or named twice, an added box with Min ≥ Max, without a source or named twice, an empty list of added boxes accepted, a zone margin above `Clearance.Environment`, a zone box with Min ≥ Max, a zero endpoint radius) fail; all problems listed at once; unknown key → WARNING |
 | `test/Kinematics/test_core.py` | `FK_DH(q) · TCP_config` vs `_p`: regression pin (§9.4) of 1.72 mm / 0.261° and 4.02 mm / 0.376° (±0.01 mm / ±0.001°); diagnostic derived TCP pinned the same way and never read by any check; both points within the sanity bound; `Check_Learned_Point` rejects a point beyond it (perturbed `_q`) with the numbers in the message; configured TCP == (0, 0, 0.174, 0, 0, 0); geodesic angle 0 between r and its π-equivalent; `Normalize_Rotvec` rule incl. near-π |
 | `test/Scene/test_core.py` | scene compiles; base body world position == `Base_Position` exactly and yaw == `Base_Yaw`; **at `Base_Yaw` = 90° (a temporary copy of the configuration) `home_safe`'s TCP lands at `Base_Position` + (−y, x, z) of its `_p` within 3 mm, in MuJoCo and through the base frame (the file is in degrees; read as radians the test fails)**; **MuJoCo flange FK (after the MjSpec offset override) == DH flange FK within 1e-9 m / 1e-9 rad (atan2 geodesic, §9.5) for 1000 seeded random joint vectors within the limits**, plus A and B; pad-span hull present in the gripper rigid group; fingers open along the configured `Mount_Yaw` (flange ±x at 0); visual mesh has no hull (`mesh_graphadr = −1`); base↔env build check runs; loader rejects an elbow limit beyond ±180°; gripper opening == `Tool.Opening` ± 0.5 mm, equality residual < 0.1 mm; coupling cylinder present (visual + collision), Menagerie `base_mount` mesh geoms absent, vendored files byte-identical to `models/MANIFEST.json`; pad end from the flange face 163.3 mm open and 176.8 mm closed (± 0.5 mm, manual chain) and the 50 mm values 154.39 / 173.23 mm (± 0.05 mm, regression); exclusion set == configuration expansion + `base–env_stand`, filterparent disabled; joint ranges == `Joint_Position_Limits`; **placement (§4.6): `pick_obj_1..8` on the pallet table, `unload_obj_1..8` on the side table (between the plate top and the highest part), `bench_drop_1..8` inside object (a); the same check at `Base_Yaw` = 0 refuses all 24**; A and B pass `Check_Clearance`, and **any violation fails the test, listing every pair with its distance and margin** (no report-only path); `hover_unload_2` (clear) pushed into the side table is reported as a collision; a collision set whose recorded assembly or component overrides differ from the configuration is refused; an added box is a box primitive of `env` spanning its configured corners with the environment margin, a zone piece only when it meets the zone box; the station zone applies to a generated configuration only within `Endpoint_Radius` of a station point (DH distances); a segment kind other than taught/generated is refused; a generated configuration with the tool pointing up above 2.35 m violates the workspace (excursion = the pad end's, from DH), the taught rule does not apply the box; the van der Corput order is a permutation of the samples |
-| `test/Scene/test_station.py` | the taught rotation sequence of cases 17 and 18 (home → … → home, typed from the program, 50 mm holding / 85 mm open) checked as taught has no violation: no penetration, the zone margin at the zone pieces, the global margins elsewhere; as generated, Waypoint_1 → Waypoint_2 violates the 20 mm margin only on samples outside the 50 mm neighbourhood, and drop_rotate_1 → Waypoint_4 is clear only with the station points; the manifest records exactly the fitted overrides, which are the configured ones; the zone holds every piece of the post and the top profile, no piece of the side table, pallet table, machine-interior hull or right window profile; the early-exit check agrees with the full check on 72 seeded segments from the taught points (both verdicts occur) |
-| `test/Planner/test_core.py` | duration estimates against hand-computed values (triangle, trapezoid, leading joint, path sum, movel); the committed paths of both cases pass `Verify_Path`, S2 with fewer via points than taught, S1 and S3 no more; the station points keep their tokens; the sequence file's motion lines are in program order (generated movej with the program's a, v and r=0; station lines verbatim; gripper comments; the safety sentence); one reduced planning run is byte-identical twice; RRT-Connect alone is byte-identical twice on a seed that draws from both sample sources (box around the ends, whole range); an impossible plan raises (inflated margin, no iterations, six via points); the penalty counts only far from the station |
+| `test/Scene/test_station.py` | the taught rotation sequence of cases 17 and 18 (home → … → home, typed from the program, 50 mm holding / 85 mm open) checked as taught has no violation: no penetration, the zone margin at the zone pieces, the global margins elsewhere; every taught segment also keeps the generated rule (it comes within 20 mm of the station only within 50 mm of a station point), and drop_rotate_1 → Waypoint_4 is clear as generated only with the station points; the manifest records exactly the assembly shift and the fitted post override, which are the configured ones; `Environment_Distance` equals the exact distance in the 20 – 30 mm band (start of Waypoint_5 → Waypoint_1); the zone holds every piece of the post and the top profile, no piece of the side table, pallet table, machine-interior hull or right window profile; the early-exit check agrees with the full check on 72 seeded segments from the taught points (both verdicts occur) |
+| `test/Planner/test_core.py` | duration estimates against hand-computed values (triangle, trapezoid, leading joint, path sum, movel); the committed paths of both cases pass `Verify_Path`, S2 with fewer via points than taught, S1 and S3 no more; the station points keep their tokens; the sequence file's motion lines are in program order (generated movej with the program's a, v and r=0; station lines verbatim; gripper comments; the safety sentence); one reduced planning run is byte-identical twice; RRT-Connect alone is byte-identical twice on a seed that draws from both sample sources (box around the ends, whole range); an impossible plan raises (inflated margin, no iterations, six via points); the penalty counts only far from the station (a grasp approach of case 1 counts, the drop's descent does not) |
 | `test/Scene/test_margin.py` | margin accuracy on **mesh hull vs mesh hull** (robot geom on a joint, so not static): a robot link hull at 3 orientations vs a box-hull face, and box-hull edge vs edge; at 10 mm a violation is reported, at 30 mm none; reported distance error < 0.5 mm (prototype: 0.000 mm, §4.5) |
 | `test/Collision/test_core.py` | manifest STL hash == sha256 of the file; the STL splits into three objects of 1749 / 951 / 56 components, an assembly named by the machine body moves exactly object (a) with a component override added on top, and the manifest records the configured assemblies' members; `R_crop` ≥ the bound recomputed from the current scene, and no robot collision vertex leaves the sphere over 1000 seeded random `q`; conservativeness violations == 0 at `eps` (vertices + 1 sample/cm² for CoACD components, hull-only exempt); degenerate components thickened and containing the original; excess metrics present and equal to a recomputation on a fixed sample; no robot body at A/B inside a flagged open-shell piece; mismatched hash → `Collision_Error_Cls` |
 | `test/Example/test_demo.py` | headless demo runs N steps without exception; only the chosen joint changes, monotonically between turning points; it stays within `Joint_Position_Limits`; the pre-check runs on the dense segment samples of §9.7; the label equals the check result ("clearance checked" iff no violation, otherwise "VISUAL ONLY — UNCHECKED"); the shipped motion's label is pinned |
@@ -987,7 +1084,7 @@ milestone keeps the hard error of §9.7.
 2. No `calibration.conf`: nominal DH.
 3. The carried 50 × 50 mm part is not modelled (accepted). The pad-span hull covers the space
    between the fingers; **a part protruding beyond the pad ends is not covered** (§9.6).
-4. `Tool.Mount_Yaw` = 0 is an unmeasured assumption (standard Robotiq mounting).
+4. `Tool.Mount_Yaw` = 0 was an unmeasured assumption until the owner confirmed it (2026-10-18).
 5. Joint limits are ±360° (elbow ±180°, the precondition of the upper_arm–forearm exclusion). The
    Polyscope safety limits may be tighter and must be checked against the robot before a path is
    run.
@@ -1087,5 +1184,9 @@ Measured on the development Mac (M2 Pro), Python 3.11, mujoco 3.16.0.
 
   Estimates (§10.6). The optimised paths reach no deeper into the machine window than the taught
   ones (deepest gripper point x = −0.756 m in both, at the shared station ends).
+- **Machine assembly and post refit (2026-10-18, §4.9).** `machine_a` −100 mm, post 2710 a further
+  −15.7 mm; the 2026-10-17 overrides replaced. The collision set was rebuilt: 1109 s, the same 6716
+  pieces, conservativeness 0.769 mm, 398 flagged (was 396). The committed S1 – S3 keep the generated
+  rule unchanged and were not re-planned.
 - **Demo** (base ±45° around `home_safe`): 1234 joint-linear samples, every margin kept, label
   **"clearance checked"**. At 180° (2026-10-17) the same: 1234 samples, every margin kept.

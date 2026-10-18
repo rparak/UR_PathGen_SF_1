@@ -33,7 +33,7 @@ import mujoco
 #   ../src/Scene/Core — the scene and the taught / generated rule under test
 from Scene.Core import Scene_Cls
 #   ../src/Collision/Core — the set's components and the manifest form of the overrides
-from Collision.Core import Read_Collision_Set, Component_Overrides_Record
+from Collision.Core import Read_Collision_Set, Component_Overrides_Record, Assembly_Overrides_Record
 
 """
 Description:
@@ -69,10 +69,12 @@ CONST_SEQUENCES = {
 #   Unit [Tuple<string>]
 CONST_STATION_POINTS = ('drop_rotate_1', 'drop_rotate_2', 'Waypoint_4', 'Waypoint_7', 'Waypoint_5', 'Waypoint_18',
                         'Waypoint_11', 'pick_rotate_1', 'pick_rotate_2', 'Waypoint_6', 'Waypoint_8')
-# The corrections, typed from the fit (SPEC 4.7), and their source.
-#   Unit [List<Tuple<int, List<float> 1x3, string>>] (-, m, -)
-CONST_OVERRIDES = [(1154, [-0.0326, -0.0116, 0.0036], 'derived from sf1_plc_v4.script cases 17/18, not measured'),
-                   (2710, [-0.1148, -0.0062, -0.0006], 'derived from sf1_plc_v4.script cases 17/18, not measured')]
+# The corrections and their sources (SPEC 4.9): the machine assembly as the owner estimates it, and
+# the post fit on top of it, typed from the fit.
+#   Unit [List<Tuple<string, int, List<float> 1x3, string>>] (-, -, m, -),
+#        [List<Tuple<int, List<float> 1x3, string>>] (-, m, -)
+CONST_ASSEMBLIES = [('machine_a', 1154, [-0.100, 0.0, 0.0], 'owner estimate, 2026-10-18, not measured')]
+CONST_OVERRIDES = [(2710, [-0.0157, 0.0, 0.0], 'derived from sf1_plc_v4.script cases 17/18, not measured')]
 # STL components: the left window profile (corrected), the window's top profile (near, not
 # corrected), the side table and the pallet table (far from the station, below the zone box), the
 # machine-interior fallback hull (235 mm excess, behind the zone box) and the right window profile
@@ -118,23 +120,23 @@ def test_the_taught_rotation_sequence_keeps_its_margins(scenes, plc_points, case
     assert not found, '\n'.join(found)
 
 
-def test_a_generated_segment_keeps_the_global_margin_away_from_the_station(scenes, cfg, plc_points):
+@pytest.mark.parametrize('case', sorted(CONST_SEQUENCES))
+def test_every_taught_segment_keeps_the_generated_rule(scenes, plc_points, case):
     """
     Description:
-        Waypoint_1 -> Waypoint_2 passes the window's top profile (a station-zone piece) between the
-        zone and the global margin with its TCP far from every station point: as taught it is clear,
-        as generated it violates the 20 mm margin, only on samples outside the 50 mm neighbourhood.
+        With the machine assembly shifted and the post fitted (SPEC 4.9), the taught rotation
+        sequence keeps even the generated rule: wherever it comes closer than the global margin to
+        the station, its TCP lies within the endpoint radius of a station point. The zone margin is
+        therefore used only near the station points, never along the way.
     """
 
-    scene, a, b = scenes['open'], plc_points['Waypoint_1'].Q, plc_points['Waypoint_2'].Q
-    assert scene.Check_Segment(a, b, kind='taught')[1] == []
-    samples, violations = scene.Check_Segment(a, b, kind='generated', station_q=_Station_Q(plc_points))
-    assert violations
-    q = scene.Segment_Samples(a, b)
-    for k, v in violations:
-        assert v.Margin == cfg.Clearance_Environment
-        assert cfg.Station_Zone_Environment <= v.Distance < cfg.Clearance_Environment
-        assert not scene.Station_Zone_Active(q[k], _Station_Q(plc_points))
+    found = []
+    for a, b, state in CONST_SEQUENCES[case]:
+        _, violations = scenes[state].Check_Segment(plc_points[a].Q, plc_points[b].Q, kind='generated',
+                                                    station_q=_Station_Q(plc_points))
+        found += ['%s -> %s sample %d: %s - %s %.2f mm (margin %.1f mm)' % (a, b, k, v.Body_1, v.Body_2, v.Distance * 1e3,
+                                                                            v.Margin * 1e3) for k, v in violations]
+    assert not found, '\n'.join(found)
 
 
 def test_a_generated_segment_uses_the_zone_margin_near_a_station_point(scenes, cfg, plc_points):
@@ -154,13 +156,15 @@ def test_a_generated_segment_uses_the_zone_margin_near_a_station_point(scenes, c
 def test_the_corrections_are_recorded_and_configured(scenes, cfg):
     """
     Description:
-        The collision set's manifest records exactly the fitted corrections, which are also the
-        configured ones (the scene would refuse a mismatch).
+        The collision set's manifest records exactly the assembly shift and the fitted post
+        correction, which are also the configured ones (the scene would refuse a mismatch).
     """
 
-    recorded = scenes['holding'].Collision_Manifest['component_overrides']
-    assert recorded == Component_Overrides_Record(CONST_OVERRIDES)
-    assert recorded == Component_Overrides_Record(cfg.Component_Overrides)
+    manifest = scenes['holding'].Collision_Manifest
+    assert manifest['assembly_overrides'] == Assembly_Overrides_Record(CONST_ASSEMBLIES)
+    assert manifest['assembly_overrides'] == Assembly_Overrides_Record(cfg.Assembly_Overrides)
+    assert manifest['component_overrides'] == Component_Overrides_Record(CONST_OVERRIDES)
+    assert manifest['component_overrides'] == Component_Overrides_Record(cfg.Component_Overrides)
 
 
 def test_the_zone_covers_the_corrected_station_and_nothing_far(scenes, cfg, root):
@@ -207,8 +211,9 @@ def test_the_environment_distance_equals_the_exact_distance(scenes, plc_points):
     Description:
         Environment_Distance (raised margins, one collision pass) equals the smallest
         mj_geomDistance between every robot geom (the static base excluded, as in the scene) and
-        every environment geom, capped at 30 mm, on samples of Waypoint_1 -> Waypoint_2 that
-        include distances in the 20 - 30 mm band, which contacts at the normal margins never show.
+        every environment geom, capped at 30 mm, on the first samples of Waypoint_5 -> Waypoint_1
+        (open), which include distances in the 20 - 30 mm band that contacts at the normal margins
+        never show.
     """
 
     scene = scenes['open']
@@ -216,9 +221,9 @@ def test_the_environment_distance_equals_the_exact_distance(scenes, plc_points):
     env = [g for g in range(m.ngeom) if m.geom_contype[g] and m.body(m.geom_bodyid[g]).name.startswith('env')]
     robot = [g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0
              and not m.body(m.geom_bodyid[g]).name.startswith('env') and m.body(m.geom_bodyid[g]).name != 'base']
-    samples = scene.Segment_Samples(plc_points['Waypoint_1'].Q, plc_points['Waypoint_2'].Q)
+    samples = scene.Segment_Samples(plc_points['Waypoint_5'].Q, plc_points['Waypoint_1'].Q)
     band = 0
-    for q in samples[1650:1800:10]:
+    for q in samples[:16]:
         measured = scene.Environment_Distance(q, 0.030)[0]
         scene.Set_Joints(q)
         exact = 0.030

@@ -335,17 +335,23 @@ Pinned by `test/Scene/test_core.py::test_the_station_zone_applies_within_the_end
 
 ## The rotation-station geometry is fitted to the taught program
 
-**Decision.** Component 2710 (the left window profile) is translated by (−114.8, −6.2, −0.6) mm and
-component 1154 (the machine body) by (−32.6, −11.6, +3.6) mm, each the smallest translation that
-keeps every segment of the taught rotation sequence (cases 17 and 18) at least 5 mm clear. The
-station zone's box starts at world x = −0.80 m, so the machine-interior fallback hull (component
-1638) stays outside it.
+**Decision.** Machine (a) is shifted −100 mm along x as one assembly (`machine_a`, the owner's
+estimate). On top of it, component 2710 (the left window profile) is translated a further −15.7 mm
+along x: the smallest translation along the machine front's normal that keeps every segment of the
+taught rotation sequence (cases 17 and 18) at least 5 mm clear (the free-direction optimum is
+15.5 mm). The machine body 1154 needs nothing beyond the shift. The station zone's box starts at
+world x = −0.80 m, so the machine-interior fallback hull (component 1638) stays outside it.
+*Corrected 2026-10-18: before the owner's assembly estimate, the fit was 2710 by (−114.8, −6.2,
+−0.6) mm and 1154 by (−32.6, −11.6, +3.6) mm (SPEC §4.7); the post now totals −115.7 mm along x,
+consistent with it (SPEC §4.9).*
 
 **Why.** No measurement is available, and the real robot runs the whole program without collision
 (owner): the program is the only evidence of where the cell is not. A rigid translation per
-component changes the least geometry for that evidence. Moving the whole machine body was accepted
-because no segment of any of the 21 cases gets new or deeper penetration from it (SPEC §4.7); a split
-of the component was the fallback (owner's condition). The approved box (x from −0.85 m) also caught
+component changes the least geometry for that evidence. The machine's placement is the owner's
+estimate, kept apart from the fit as an assembly override; only the post, which the taught drop
+contradicts, is fitted on top, along −x, which matches the owner's description and is only 0.2 mm
+longer than the free direction. No segment of any of the 21 cases gets new or deeper penetration
+(SPEC §4.9). The approved box (x from −0.85 m) also caught
 the 235 mm-excess interior hull and about 30 small parts behind the machine front; at −0.80 m the
 zone holds the station frame only and the taught replay still keeps every margin.
 
@@ -359,6 +365,26 @@ once.
 Pinned by `test/Scene/test_station.py::test_the_taught_rotation_sequence_keeps_its_margins`,
 `test/Scene/test_station.py::test_the_corrections_are_recorded_and_configured` and
 `test/Scene/test_station.py::test_the_zone_covers_the_corrected_station_and_nothing_far`.
+
+## The gripper is mounted at 0°, confirmed by the owner; the yaw is never fitted
+
+**Decision.** `Tool.Mount_Yaw` = 0°: the standard dowel-pin-indexed Robotiq mounting, with the
+fingers opening along flange ±x. The owner confirmed it on the robot (2026-10-18). Earlier that day
+the owner stated 90°; the statement was withdrawn the same day, and nothing derived from it was
+committed.
+
+**Why.** The taught program cannot discriminate the yaw: at 0° and at 90° alike, a station geometry
+exists that keeps cases 17 and 18 at least 5 mm clear (at 90° the post would have needed 172.4 mm).
+So the yaw must come from the robot, not from a fit, and the station geometry is fitted to the
+configured yaw, never the other way round.
+
+**Alternatives.** Choosing the yaw that needs the smaller station correction: rejected, it would turn
+an unmeasured geometry error into a claim about the gripper.
+
+**Revisit if** the gripper is remounted.
+
+Pinned by `test/Scene/test_core.py::test_the_fingers_open_along_the_configured_mount_yaw` and
+`test/Configuration/test_core.py::test_the_shipped_configuration_loads_in_si_units`.
 
 ## A generated segment stays inside the space the taught program proved free
 

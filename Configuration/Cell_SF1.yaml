@@ -31,25 +31,26 @@ Environment:
   # placement the real cell contradicts. An object is every component whose bounding box touches
   # another of it within 1 mm (SPEC 4.1). Each entry: Name, Object_Of (an STL component of the
   # object, as the build numbers them), Translation [x, y, z] in the world frame (at most 150 mm),
-  # Source. A component override below adds its own translation on top. The visual mesh is never
-  # changed; the manifest records the overrides and the members, and the scene refuses a set built
-  # with others. REQUIRED (may be empty). [-, -, m, text]
-  Assembly_Overrides: []
-  # Rigid translations of STL components applied before the collision set is built, for geometry
-  # the real cell contradicts. Each entry: Component (STL component id, as the build numbers them),
-  # Translation [x, y, z] in the world frame (at most 150 mm), Source (where the value comes from).
-  # The visual mesh is never changed; the manifest records the overrides and the scene refuses a
-  # set built with others. REQUIRED (may be empty). [-, m, text]
-  # 2710: the left window profile at the rotation station; 1154: the machine body. Each is the
-  # smallest translation (seed 20261017, 400 directions, bisection) that keeps every joint-linear
-  # segment of cases 17 and 18 at least 5 mm clear; no segment of the other 19 cases gets new or
-  # deeper penetration (SPEC 4.7).
+  # Source. The visual mesh is never changed; the manifest records the overrides and the members,
+  # and the scene refuses a set built with others. REQUIRED (may be empty). [-, -, m, text]
+  # machine_a: object (a), the machine with its front column, window frame and closed lower
+  # cabinet (1749 components), about 100 mm further from the robot than the STL, normal to its
+  # front (owner, 2026-10-18; selection confirmed on renders).
+  Assembly_Overrides:
+    - Name: machine_a
+      Object_Of: 1154
+      Translation: [-0.100, 0.0, 0.0]
+      Source: owner estimate, 2026-10-18, not measured
+  # Rigid translations of single STL components, added to any assembly translation, for geometry
+  # the real cell contradicts. Each entry: Component (STL component id), Translation [x, y, z] in
+  # the world frame (at most 150 mm), Source. REQUIRED (may be empty). [-, m, text]
+  # 2710: the left window profile at the rotation station. The smallest translation along -x (the
+  # machine front's normal; bisection, 0.15 mm) that keeps every joint-linear segment of cases 17
+  # and 18 at least 5 mm clear on top of the assembly shift: 15.7 mm (free direction, 400
+  # directions: 15.5 mm). No segment of the other 19 cases gets new or deeper penetration (SPEC 4.9).
   Component_Overrides:
     - Component: 2710
-      Translation: [-0.1148, -0.0062, -0.0006]
-      Source: derived from sf1_plc_v4.script cases 17/18, not measured
-    - Component: 1154
-      Translation: [-0.0326, -0.0116, 0.0036]
+      Translation: [-0.0157, 0.0, 0.0]
       Source: derived from sf1_plc_v4.script cases 17/18, not measured
   # Obstacles the STL does not contain, added to the environment (body env) as boxes aligned with
   # the world axes, collision only; a box that meets Clearance.Station_Zone is a zone piece. Each
@@ -91,8 +92,9 @@ Tool:
     Diameter: 0.075
     Spigot_Depth: 0.0029
   # Rotation of the gripper about the flange z axis relative to the Menagerie default. 0 = the
-  # standard dowel-pin-indexed mounting; at 0 the fingers open along flange +-x. A documented
-  # assumption, not measured (owner; KNOWN_ISSUES.md). REQUIRED. [deg]
+  # standard dowel-pin-indexed mounting; at 0 the fingers open along flange +-x. Confirmed on the
+  # SF1 robot by the owner (2026-10-18; a statement of 90 deg made that day was withdrawn).
+  # REQUIRED. [deg]
   Mount_Yaw: 0.0
   # Inner pad-face gap held during transit: the gripper holds a 50 x 50 mm part (owner). REQUIRED. [m]
   Opening: 0.050
