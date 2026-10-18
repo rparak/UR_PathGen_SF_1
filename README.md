@@ -104,6 +104,9 @@ Rebuild the environment collision set after the STL changes (takes several minut
 .venv/bin/python -m pytest
 ```
 
+`-m "not slow"` leaves out the tests marked slow (the replay of every segment of the program, about
+70 s).
+
 Style checker and its own tests:
 
 ```bash

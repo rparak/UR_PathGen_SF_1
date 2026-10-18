@@ -1,0 +1,583 @@
+{
+ "description": [
+  "Every unique move of the 21 cases of sf1_plc_v4.script (from, to): each movej and movel to a learned point,",
+  "in program order, from the previous target; a case is entered from home, so the four cases that do not",
+  "start at home add home -> their first target. Derived from the program (sha256 below) by",
+  "test/Scene/test_program.py::test_the_segment_list_is_the_programs, which re-derives it when",
+  "SF1_PLC_V4_SCRIPT names the program.",
+  "penetrating: the segments that penetrate the environment, each with its deepest signed distance (m, the",
+  "smaller of the 50 and 85 mm openings, joint-linear, the samples of SPEC 9.7), measured on the committed",
+  "scene. The reference of the regression check: no other segment may penetrate, none deeper than recorded",
+  "(tolerance in the test). Machine-interior hull 1638 (the loading moves) and the grasp contacts with the",
+  "parts and fixtures on the tables (KNOWN_ISSUES)."
+ ],
+ "source_sha256": "ecec8e53007d93acd5cf3da5b545f588a02dbc1b9c26497c82282c37bcfb8eae",
+ "measured": "2026-10-18: machine_a -100 mm, post 2710 a further -15.7 mm (SPEC 4.9)",
+ "segments": [
+  [
+   "Waypoint_1",
+   "Waypoint_2"
+  ],
+  [
+   "Waypoint_1",
+   "drop_rotate_1"
+  ],
+  [
+   "Waypoint_1",
+   "drop_rotate_2"
+  ],
+  [
+   "Waypoint_10",
+   "Waypoint_13"
+  ],
+  [
+   "Waypoint_11",
+   "pick_rotate_2"
+  ],
+  [
+   "Waypoint_12",
+   "bench_rect_drop"
+  ],
+  [
+   "Waypoint_13",
+   "bench_drop_11"
+  ],
+  [
+   "Waypoint_14",
+   "bench_drop_3"
+  ],
+  [
+   "Waypoint_15",
+   "bench_drop_4"
+  ],
+  [
+   "Waypoint_16",
+   "load3"
+  ],
+  [
+   "Waypoint_18",
+   "pick_rotate_1"
+  ],
+  [
+   "Waypoint_19",
+   "bench_drop_6"
+  ],
+  [
+   "Waypoint_19",
+   "bench_drop_7"
+  ],
+  [
+   "Waypoint_19",
+   "bench_drop_8"
+  ],
+  [
+   "Waypoint_2",
+   "Waypoint_3"
+  ],
+  [
+   "Waypoint_2",
+   "home"
+  ],
+  [
+   "Waypoint_3",
+   "Waypoint_11"
+  ],
+  [
+   "Waypoint_3",
+   "Waypoint_18"
+  ],
+  [
+   "Waypoint_4",
+   "Waypoint_5"
+  ],
+  [
+   "Waypoint_5",
+   "Waypoint_1"
+  ],
+  [
+   "Waypoint_6",
+   "Waypoint_2"
+  ],
+  [
+   "Waypoint_7",
+   "Waypoint_5"
+  ],
+  [
+   "Waypoint_8",
+   "Waypoint_2"
+  ],
+  [
+   "Waypoint_9",
+   "bench_drop_1"
+  ],
+  [
+   "Waypoint_9",
+   "bench_drop_2"
+  ],
+  [
+   "bench_load_hovr",
+   "Waypoint_17"
+  ],
+  [
+   "bench_load_hovr",
+   "Waypoint_19"
+  ],
+  [
+   "bench_load_hovr",
+   "bench_rect_drop"
+  ],
+  [
+   "bench_rect_drop",
+   "bench_drop_12"
+  ],
+  [
+   "bench_rect_drop",
+   "bench_drop_5"
+  ],
+  [
+   "drop_rotate_1",
+   "Waypoint_4"
+  ],
+  [
+   "drop_rotate_2",
+   "Waypoint_7"
+  ],
+  [
+   "home",
+   "Waypoint_1"
+  ],
+  [
+   "home",
+   "Waypoint_16"
+  ],
+  [
+   "home",
+   "load2"
+  ],
+  [
+   "home",
+   "load_hower"
+  ],
+  [
+   "home",
+   "pickup1"
+  ],
+  [
+   "home",
+   "rect_pick_hower"
+  ],
+  [
+   "hover_obj_1",
+   "pick_obj_1"
+  ],
+  [
+   "hover_obj_1",
+   "pickup2"
+  ],
+  [
+   "hover_obj_2",
+   "pick_obj_2"
+  ],
+  [
+   "hover_obj_2",
+   "pickup2"
+  ],
+  [
+   "hover_obj_3",
+   "pick_obj_3"
+  ],
+  [
+   "hover_obj_3",
+   "pickup2"
+  ],
+  [
+   "hover_obj_4",
+   "pick_obj_4"
+  ],
+  [
+   "hover_obj_4",
+   "pickup2"
+  ],
+  [
+   "hover_obj_5",
+   "pick_obj_5"
+  ],
+  [
+   "hover_obj_5",
+   "pickup2"
+  ],
+  [
+   "hover_obj_6",
+   "pick_obj_6"
+  ],
+  [
+   "hover_obj_6",
+   "pickup2"
+  ],
+  [
+   "hover_obj_7",
+   "pick_obj_7"
+  ],
+  [
+   "hover_obj_7",
+   "pickup2"
+  ],
+  [
+   "hover_obj_8",
+   "pick_obj_8"
+  ],
+  [
+   "hover_obj_8",
+   "pickup2"
+  ],
+  [
+   "hover_unload_1",
+   "unload2"
+  ],
+  [
+   "hover_unload_1",
+   "unload_obj_1"
+  ],
+  [
+   "hover_unload_2",
+   "unload2"
+  ],
+  [
+   "hover_unload_2",
+   "unload_obj_2"
+  ],
+  [
+   "hover_unload_3",
+   "unload2"
+  ],
+  [
+   "hover_unload_3",
+   "unload_obj_3"
+  ],
+  [
+   "hover_unload_4",
+   "unload2"
+  ],
+  [
+   "hover_unload_4",
+   "unload_obj_4"
+  ],
+  [
+   "hover_unload_5",
+   "unload2"
+  ],
+  [
+   "hover_unload_5",
+   "unload_obj_5"
+  ],
+  [
+   "hover_unload_6",
+   "unload2"
+  ],
+  [
+   "hover_unload_6",
+   "unload_obj_6"
+  ],
+  [
+   "hover_unload_7",
+   "unload2"
+  ],
+  [
+   "hover_unload_7",
+   "unload_obj_7"
+  ],
+  [
+   "hover_unload_8",
+   "unload2"
+  ],
+  [
+   "hover_unload_8",
+   "unload_obj_8"
+  ],
+  [
+   "load2",
+   "home"
+  ],
+  [
+   "load2",
+   "load3"
+  ],
+  [
+   "load2",
+   "unload1"
+  ],
+  [
+   "load3",
+   "Waypoint_10"
+  ],
+  [
+   "load3",
+   "Waypoint_12"
+  ],
+  [
+   "load3",
+   "bench_load_hovr"
+  ],
+  [
+   "load3",
+   "load2"
+  ],
+  [
+   "load3",
+   "load_hower"
+  ],
+  [
+   "load_1",
+   "load2"
+  ],
+  [
+   "load_hower",
+   "Waypoint_14"
+  ],
+  [
+   "load_hower",
+   "Waypoint_15"
+  ],
+  [
+   "load_hower",
+   "Waypoint_9"
+  ],
+  [
+   "load_hower",
+   "bench_sqr_pick"
+  ],
+  [
+   "load_hower",
+   "load3"
+  ],
+  [
+   "pick_obj_1",
+   "hover_obj_1"
+  ],
+  [
+   "pick_obj_2",
+   "hover_obj_2"
+  ],
+  [
+   "pick_obj_3",
+   "hover_obj_3"
+  ],
+  [
+   "pick_obj_4",
+   "hover_obj_4"
+  ],
+  [
+   "pick_obj_5",
+   "hover_obj_5"
+  ],
+  [
+   "pick_obj_6",
+   "hover_obj_6"
+  ],
+  [
+   "pick_obj_7",
+   "hover_obj_7"
+  ],
+  [
+   "pick_obj_8",
+   "hover_obj_8"
+  ],
+  [
+   "pick_rotate_1",
+   "Waypoint_6"
+  ],
+  [
+   "pick_rotate_2",
+   "Waypoint_8"
+  ],
+  [
+   "pickup1",
+   "pickup2"
+  ],
+  [
+   "pickup2",
+   "hover_obj_1"
+  ],
+  [
+   "pickup2",
+   "hover_obj_2"
+  ],
+  [
+   "pickup2",
+   "hover_obj_3"
+  ],
+  [
+   "pickup2",
+   "hover_obj_4"
+  ],
+  [
+   "pickup2",
+   "hover_obj_5"
+  ],
+  [
+   "pickup2",
+   "hover_obj_6"
+  ],
+  [
+   "pickup2",
+   "hover_obj_7"
+  ],
+  [
+   "pickup2",
+   "hover_obj_8"
+  ],
+  [
+   "pickup2",
+   "load_1"
+  ],
+  [
+   "rect_pick_hower",
+   "load3"
+  ],
+  [
+   "unload1",
+   "home"
+  ],
+  [
+   "unload1",
+   "unload2"
+  ],
+  [
+   "unload2",
+   "home"
+  ],
+  [
+   "unload2",
+   "hover_unload_1"
+  ],
+  [
+   "unload2",
+   "hover_unload_2"
+  ],
+  [
+   "unload2",
+   "hover_unload_3"
+  ],
+  [
+   "unload2",
+   "hover_unload_4"
+  ],
+  [
+   "unload2",
+   "hover_unload_5"
+  ],
+  [
+   "unload2",
+   "hover_unload_6"
+  ],
+  [
+   "unload2",
+   "hover_unload_7"
+  ],
+  [
+   "unload2",
+   "hover_unload_8"
+  ],
+  [
+   "unload2",
+   "unload1"
+  ],
+  [
+   "unload_obj_1",
+   "hover_unload_1"
+  ],
+  [
+   "unload_obj_2",
+   "hover_unload_2"
+  ],
+  [
+   "unload_obj_3",
+   "hover_unload_3"
+  ],
+  [
+   "unload_obj_4",
+   "hover_unload_4"
+  ],
+  [
+   "unload_obj_5",
+   "hover_unload_5"
+  ],
+  [
+   "unload_obj_6",
+   "hover_unload_6"
+  ],
+  [
+   "unload_obj_7",
+   "hover_unload_7"
+  ],
+  [
+   "unload_obj_8",
+   "hover_unload_8"
+  ]
+ ],
+ "penetrating": {
+  "Waypoint_10|Waypoint_13": -0.137419,
+  "Waypoint_12|bench_rect_drop": -0.140231,
+  "Waypoint_13|bench_drop_11": -0.140802,
+  "Waypoint_14|bench_drop_3": -0.141747,
+  "Waypoint_15|bench_drop_4": -0.140878,
+  "Waypoint_16|load3": -0.117782,
+  "Waypoint_19|bench_drop_6": -0.144746,
+  "Waypoint_19|bench_drop_7": -0.144245,
+  "Waypoint_19|bench_drop_8": -0.144994,
+  "Waypoint_9|bench_drop_1": -0.140208,
+  "Waypoint_9|bench_drop_2": -0.139881,
+  "bench_load_hovr|Waypoint_17": -0.143002,
+  "bench_load_hovr|Waypoint_19": -0.141369,
+  "bench_load_hovr|bench_rect_drop": -0.140231,
+  "bench_rect_drop|bench_drop_12": -0.143711,
+  "bench_rect_drop|bench_drop_5": -0.14407,
+  "home|Waypoint_16": -0.117782,
+  "home|load_hower": -0.109121,
+  "home|rect_pick_hower": -0.109122,
+  "hover_obj_1|pick_obj_1": -0.012505,
+  "hover_obj_2|pick_obj_2": -0.012586,
+  "hover_obj_3|pick_obj_3": -0.014753,
+  "hover_obj_4|pick_obj_4": -0.014425,
+  "hover_obj_5|pick_obj_5": -0.016938,
+  "hover_obj_6|pick_obj_6": -0.017797,
+  "hover_obj_7|pick_obj_7": -0.018019,
+  "hover_obj_8|pick_obj_8": -0.018969,
+  "hover_unload_1|unload_obj_1": -0.016345,
+  "hover_unload_2|unload_obj_2": -0.015333,
+  "hover_unload_3|unload_obj_3": -0.019487,
+  "hover_unload_4|unload_obj_4": -0.019087,
+  "hover_unload_5|unload_obj_5": -0.014393,
+  "hover_unload_6|unload_obj_6": -0.015572,
+  "hover_unload_7|unload_obj_7": -0.019257,
+  "hover_unload_8|unload_obj_8": -0.019939,
+  "load2|load3": -0.099511,
+  "load3|Waypoint_10": -0.108877,
+  "load3|Waypoint_12": -0.10917,
+  "load3|bench_load_hovr": -0.113124,
+  "load3|load2": -0.099511,
+  "load3|load_hower": -0.109121,
+  "load_hower|Waypoint_14": -0.138351,
+  "load_hower|Waypoint_15": -0.138362,
+  "load_hower|Waypoint_9": -0.137283,
+  "load_hower|bench_sqr_pick": -0.138512,
+  "load_hower|load3": -0.109121,
+  "pick_obj_1|hover_obj_1": -0.012505,
+  "pick_obj_2|hover_obj_2": -0.012586,
+  "pick_obj_3|hover_obj_3": -0.014753,
+  "pick_obj_4|hover_obj_4": -0.014425,
+  "pick_obj_5|hover_obj_5": -0.016938,
+  "pick_obj_6|hover_obj_6": -0.017797,
+  "pick_obj_7|hover_obj_7": -0.018019,
+  "pick_obj_8|hover_obj_8": -0.018969,
+  "rect_pick_hower|load3": -0.109122,
+  "unload_obj_1|hover_unload_1": -0.016345,
+  "unload_obj_2|hover_unload_2": -0.015333,
+  "unload_obj_3|hover_unload_3": -0.019487,
+  "unload_obj_4|hover_unload_4": -0.019087,
+  "unload_obj_5|hover_unload_5": -0.014393,
+  "unload_obj_6|hover_unload_6": -0.015572,
+  "unload_obj_7|hover_unload_7": -0.019257,
+  "unload_obj_8|hover_unload_8": -0.019939
+ }
+}

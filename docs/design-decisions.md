@@ -623,3 +623,28 @@ constrains the station geometry as much as case 17.
 Pinned by `test/Example/test_write_taught_programs.py`, `test/Planner/test_core.py::test_the_sequence_file_has_the_program_structure`,
 `test/Example/test_replay.py::test_list_prints_the_catalogue` and, for the ground truth,
 `test/Scene/test_station.py::test_the_taught_rotation_sequence_keeps_its_margins`.
+
+## The program's penetrations are a recorded reference, not required to be zero
+
+**Decision.** `test/Scene/test_program.py` replays every unique segment of the 21 cases of
+`sf1_plc_v4.script` (125, both openings) and compares it with a recorded reference
+(`test/Scene/data/sf1_plc_v4_segments.json`): the 63 segments that penetrate the environment, each
+with its depth. A segment that penetrates without being recorded, a recorded one more than 0.5 mm
+deeper, or any self-collision fails. The reference is re-recorded only with a deliberate change of
+the scene, its before / after comparison in the commit.
+
+**Why.** Every segment runs on the real robot (owner), so a change of the model that makes the
+program penetrate more is a change away from the cell. The program cannot be required to be clear:
+the machine-interior hull 1638 fills the space the loading moves use (down to -145 mm), and the grasp
+points reach into the modelled parts (KNOWN_ISSUES). 0.5 mm is far above the sampling and solver
+noise (the reference was reproduced to 1e-5 m by an independent scratch replay) and far below a
+real geometry change.
+
+**Alternatives.** Zero penetration everywhere: impossible with the interior hull. A scratch replay
+before each change (as on 2026-10-17 and 2026-10-18): not run by default, so a change could skip it.
+Checking cases 17 and 18 only: the post fit and the machine shift move geometry the other cases use.
+
+**Revisit if** component 1638 is decomposed, the parts on the tables are removed from the model, or
+the program changes (its sha256 is recorded).
+
+Pinned by `test/Scene/test_program.py`.

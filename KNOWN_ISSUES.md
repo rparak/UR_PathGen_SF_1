@@ -107,6 +107,8 @@ the grasp and unload points reach into the modelled parts on the pallet and side
 - **Evidence:** scratch replay of all 121 unique segments of the 21 cases (2026-10-18: plus the 4
   home → first target entries), joint-linear, 50 and 85 mm openings, on the set of each date
   (SPEC §4.9).
+- **Pinned by:** `test/Scene/test_program.py::test_no_program_segment_penetrates_more_than_recorded`
+  (the 63 penetrating segments and their depths are its reference: none may be added or deepen).
 - **What would close it:** a decomposition of component 1638 that passes the conservativeness check
   (or a measured, simplified machine interior), then a replay of the loading segments.
 
