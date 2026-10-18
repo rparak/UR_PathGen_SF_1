@@ -1,8 +1,19 @@
-# Lines of the owner's robot program sf1_plc_v4.script, verbatim: the rotation sequence of cases 17 and 18,
-# home to home. Source sha256: ecec8e53007d93acd5cf3da5b545f588a02dbc1b9c26497c82282c37bcfb8eae
+# Lines of the owner's robot program sf1_plc_v4.script, verbatim: the whole cases 17 and 18 (the body of
+# 'elif (n == switch_1):'), the rotation sequence home -> ... -> home inside. Source sha256:
+# ecec8e53007d93acd5cf3da5b545f588a02dbc1b9c26497c82282c37bcfb8eae
 # An extract only: the program itself (Robotiq URCap code, network settings) is not committed.
 # A line starting with '# case <n>:' at column 0 opens the lines of that case; program lines keep their indentation.
-# case 17: lines 3407-3463
+# case 17: lines 3397-3478
+        $ 288 "Case 17"
+        $ 289 "MoveJ"
+        $ 290 "load_hower" "breakAfter"
+        movej(get_inverse_kin(load_hower_p, qnear=load_hower_q), a=0.17453292519943295, v=0.17453292519943295)
+        $ 291 "load3" "breakAfter"
+        movej(get_inverse_kin(load3_p, qnear=load3_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
+        $ 292 "load2" "breakAfter"
+        movej(get_inverse_kin(load2_p, qnear=load2_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
+        $ 293 "MoveJ"
+        $ 294 "home" "breakAfter"
         movej(get_inverse_kin(home_p, qnear=home_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
         $ 295 "Waypoint_1" "breakAfter"
         movej(get_inverse_kin(Waypoint_1_p, qnear=Waypoint_1_q), a=1.3962634015954636, v=1.0471975511965976, r=0.05)
@@ -60,7 +71,32 @@
         movej(get_inverse_kin(Waypoint_2_p, qnear=Waypoint_2_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
         $ 310 "home" "breakAfter"
         movej(get_inverse_kin(home_p, qnear=home_q), a=1.3962634015954636, v=1.0471975511965976)
-# case 18: lines 3490-3546
+        $ 311 "MoveJ"
+        $ 312 "load2" "breakAfter"
+        movej(get_inverse_kin(load2_p, qnear=load2_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 313 "load3" "breakAfter"
+        movej(get_inverse_kin(load3_p, qnear=load3_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 314 "Waypoint_10" "breakAfter"
+        movej(get_inverse_kin(Waypoint_10_p, qnear=Waypoint_10_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 315 "Waypoint_13" "breakAfter"
+        movej(get_inverse_kin(Waypoint_13_p, qnear=Waypoint_13_q), a=0.17453292519943295, v=0.17453292519943295)
+        $ 316 "bench_drop_11" "breakAfter"
+        movej(get_inverse_kin(bench_drop_11_p, qnear=bench_drop_11_q), a=0.08726646259971647, v=0.08726646259971647)
+        $ 317 "write_output_boolean_register(0,True) "
+        write_output_boolean_register(0,True)
+        $ 318 "Wait: 0.5"
+        sleep(0.5)
+# case 18: lines 3480-3561
+        $ 319 "Case 18"
+        $ 320 "MoveJ"
+        $ 321 "Waypoint_16" "breakAfter"
+        movej(get_inverse_kin(Waypoint_16_p, qnear=Waypoint_16_q), a=0.17453292519943295, v=0.17453292519943295)
+        $ 322 "load3" "breakAfter"
+        movej(get_inverse_kin(load3_p, qnear=load3_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 323 "load2" "breakAfter"
+        movej(get_inverse_kin(load2_p, qnear=load2_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 324 "MoveJ"
+        $ 325 "home" "breakAfter"
         movej(get_inverse_kin(home_p, qnear=home_q), a=1.3962634015954636, v=1.0471975511965976)
         $ 326 "Waypoint_1" "breakAfter"
         movej(get_inverse_kin(Waypoint_1_p, qnear=Waypoint_1_q), a=1.3962634015954636, v=1.0471975511965976, r=0.05)
@@ -118,3 +154,18 @@
         movej(get_inverse_kin(Waypoint_2_p, qnear=Waypoint_2_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
         $ 341 "home" "breakAfter"
         movej(get_inverse_kin(home_p, qnear=home_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 342 "MoveJ"
+        $ 343 "load2" "breakAfter"
+        movej(get_inverse_kin(load2_p, qnear=load2_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 344 "load3" "breakAfter"
+        movej(get_inverse_kin(load3_p, qnear=load3_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 345 "Waypoint_12" "breakAfter"
+        movej(get_inverse_kin(Waypoint_12_p, qnear=Waypoint_12_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 346 "bench_rect_drop" "breakAfter"
+        movej(get_inverse_kin(bench_rect_drop_p, qnear=bench_rect_drop_q), a=1.3962634015954636, v=1.0471975511965976)
+        $ 347 "bench_drop_12" "breakAfter"
+        movej(get_inverse_kin(bench_drop_12_p, qnear=bench_drop_12_q), a=0.08726646259971647, v=0.08726646259971647)
+        $ 348 "write_output_boolean_register(0,True) "
+        write_output_boolean_register(0,True)
+        $ 349 "Wait: 0.5"
+        sleep(0.5)

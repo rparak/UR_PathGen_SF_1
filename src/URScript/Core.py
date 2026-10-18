@@ -399,3 +399,44 @@ def Write_Motion_Sequence(entries: tp.Sequence[tp.Tuple[str, str]], header: tp.S
         else:
             raise URScript_Error_Cls('A motion-sequence entry is movej, program or comment, not %r.' % (kind,))
     return ''.join(out)
+
+
+def Gripper_Comment(line: Program_Line_Str) -> str:
+    """
+    Description:
+        The comment that stands for a gripper action of the program in a motion sequence.
+
+    Args:
+        (1) line [Program_Line_Str(object)]: A gripper line of the program.
+
+    Returns:
+        (1) parameter [string]: The comment text (without '# ').
+    """
+
+    if line.Kind != 'gripper':
+        raise URScript_Error_Cls('Only a gripper line has a gripper comment, not a %s line: %s' % (line.Kind, line.Raw.strip()))
+    return 'Gripper %s: the program\'s Robotiq node goes here (%s)' % (line.Target, line.Raw.strip())
+
+
+def Program_Entries(lines: tp.Sequence[Program_Line_Str]) -> tp.List[tp.Tuple[str, str]]:
+    """
+    Description:
+        The motion-sequence entries (Write_Motion_Sequence) of program lines as taught: every movej
+        and movel as a program line, verbatim with its target, a, v and r; every gripper action as
+        its comment (Gripper_Comment). Every other line (URCap code, Polyscope markers, PLC I/O,
+        waits) is left out.
+
+    Args:
+        (1) lines [List<Program_Line_Str>]: Program lines in order (Read_Program_Excerpt).
+
+    Returns:
+        (1) parameter [List<Tuple<string, string>>]: The entries in order.
+    """
+
+    entries = []
+    for line in lines:
+        if line.Kind in ('movej', 'movel'):
+            entries.append(('program', line.Raw))
+        elif line.Kind == 'gripper':
+            entries.append(('comment', Gripper_Comment(line)))
+    return entries

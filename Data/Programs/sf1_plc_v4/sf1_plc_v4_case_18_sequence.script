@@ -1,0 +1,27 @@
+# Case 18 of sf1_plc_v4.script as taught, the whole case: every movej and movel in program order,
+# verbatim (targets, a, v, r), the gripper actions as comments. Left out: the Robotiq URCap code,
+# the PLC I/O and the waits. The robot enters the case where the previous case left it.
+# Points: sf1_plc_v4_case_18.urscript. Written by Example/write_taught_programs.py.
+movej(get_inverse_kin(Waypoint_16_p, qnear=Waypoint_16_q), a=0.17453292519943295, v=0.17453292519943295)
+movej(get_inverse_kin(load3_p, qnear=load3_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(load2_p, qnear=load2_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(home_p, qnear=home_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(Waypoint_1_p, qnear=Waypoint_1_q), a=1.3962634015954636, v=1.0471975511965976, r=0.05)
+movej(get_inverse_kin(drop_rotate_2_p, qnear=drop_rotate_2_q), a=1.3962634015954636, v=1.0471975511965976)
+movel(Waypoint_7_p, a=1.2, v=0.25)
+# Gripper open: the program's Robotiq node goes here (rq_set_pos_spd_for(0, 255, 255, "1"))
+movej(get_inverse_kin(Waypoint_5_p, qnear=Waypoint_5_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(Waypoint_1_p, qnear=Waypoint_1_q), a=1.3962634015954636, v=1.0471975511965976, r=0.05)
+movej(get_inverse_kin(Waypoint_2_p, qnear=Waypoint_2_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
+movej(get_inverse_kin(Waypoint_3_p, qnear=Waypoint_3_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(Waypoint_11_p, qnear=Waypoint_11_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(pick_rotate_2_p, qnear=pick_rotate_2_q), a=1.3962634015954636, v=1.0471975511965976)
+# Gripper close: the program's Robotiq node goes here (rq_set_pos_spd_for(255, 255, 255, "1"))
+movel(Waypoint_8_p, a=1.2, v=0.25)
+movej(get_inverse_kin(Waypoint_2_p, qnear=Waypoint_2_q), a=1.3962634015954636, v=1.0471975511965976, r=0.01)
+movej(get_inverse_kin(home_p, qnear=home_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(load2_p, qnear=load2_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(load3_p, qnear=load3_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(Waypoint_12_p, qnear=Waypoint_12_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(bench_rect_drop_p, qnear=bench_rect_drop_q), a=1.3962634015954636, v=1.0471975511965976)
+movej(get_inverse_kin(bench_drop_12_p, qnear=bench_drop_12_q), a=0.08726646259971647, v=0.08726646259971647)

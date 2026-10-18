@@ -30,7 +30,8 @@ import pytest
 # Custom Lib.:
 #   ../src/URScript/Core — the reader and writer under test
 from URScript.Core import (Read_URScript, Write_URScript, Write_Movej_Sequence, Make_Generated_Point, Make_Document,
-                           Format_Generated, URScript_Error_Cls, Read_Program_Excerpt, Write_Motion_Sequence)
+                           Format_Generated, URScript_Error_Cls, Read_Program_Excerpt, Write_Motion_Sequence, Program_Entries,
+                           Gripper_Comment)
 
 """
 Description:
@@ -70,18 +71,25 @@ CONST_PLC_ENV = 'SF1_PLC_V4_SCRIPT'
 # Header lines of the extract before the verbatim lines.
 #   Unit [int]
 CONST_PLC_HEADER = 4
-# The program lines of the rotation sequence of cases 17 and 18 (home to home), 1-based, inclusive.
+# The program lines of the whole cases 17 and 18 (the body of 'elif (n == switch_1):'), 1-based,
+# inclusive.
 #   Unit [Dict<int, Tuple<int>>]
-CONST_PLC_CASE_LINES = {17: (3407, 3463), 18: (3490, 3546)}
-# The rotation sequence in program order, typed from the Polyscope program tree (moves and gripper).
+CONST_PLC_CASE_LINES = {17: (3397, 3478), 18: (3480, 3561)}
+# The whole case in program order, typed from the Polyscope program tree (moves and gripper): out of
+# machine (a), the rotation sequence home -> ... -> home, back into machine (a).
 #   Unit [Dict<int, List<Tuple<string, string>>>]
 CONST_PLC_CASE_ORDER = {
-    case: [('movej', 'home'), ('movej', 'Waypoint_1'), ('movej', drop), ('movel', below), ('gripper', 'open'),
-           ('movej', 'Waypoint_5'), ('movej', 'Waypoint_1'), ('movej', 'Waypoint_2'), ('movej', 'Waypoint_3'),
-           ('movej', approach), ('movej', pick), ('gripper', 'close'), ('movel', above), ('movej', 'Waypoint_2'),
-           ('movej', 'home')]
-    for case, drop, below, approach, pick, above in ((17, 'drop_rotate_1', 'Waypoint_4', 'Waypoint_18', 'pick_rotate_1', 'Waypoint_6'),
-                                                     (18, 'drop_rotate_2', 'Waypoint_7', 'Waypoint_11', 'pick_rotate_2', 'Waypoint_8'))}
+    case: [('movej', n) for n in before]
+          + [('movej', 'home'), ('movej', 'Waypoint_1'), ('movej', drop), ('movel', below), ('gripper', 'open'),
+             ('movej', 'Waypoint_5'), ('movej', 'Waypoint_1'), ('movej', 'Waypoint_2'), ('movej', 'Waypoint_3'),
+             ('movej', approach), ('movej', pick), ('gripper', 'close'), ('movel', above), ('movej', 'Waypoint_2'),
+             ('movej', 'home')]
+          + [('movej', n) for n in after]
+    for case, before, drop, below, approach, pick, above, after in (
+        (17, ('load_hower', 'load3', 'load2'), 'drop_rotate_1', 'Waypoint_4', 'Waypoint_18', 'pick_rotate_1', 'Waypoint_6',
+         ('load2', 'load3', 'Waypoint_10', 'Waypoint_13', 'bench_drop_11')),
+        (18, ('Waypoint_16', 'load3', 'load2'), 'drop_rotate_2', 'Waypoint_7', 'Waypoint_11', 'pick_rotate_2', 'Waypoint_8',
+         ('load2', 'load3', 'Waypoint_12', 'bench_rect_drop', 'bench_drop_12')))}
 
 def _Read_File(root, *parts):
     with open(os.path.join(root, *parts), encoding='utf-8') as handle:
@@ -173,8 +181,8 @@ def test_the_case_extract_is_its_source_verbatim(root):
     """
     Description:
         With SF1_PLC_V4_SCRIPT naming the owner's program, every line of each case in the case
-        extract is the program's line of the recorded range, byte for byte, and the program has the
-        recorded sha256. Without the program the test is skipped, never passed.
+        extract is the program's line of the recorded range, byte for byte, the range is the whole
+        body of the case's branch, and the program has the recorded sha256. Without the program the test is skipped, never passed.
     """
 
     source = os.environ.get(CONST_PLC_ENV, '')
@@ -188,6 +196,9 @@ def test_the_case_extract_is_its_source_verbatim(root):
     assert sorted(cases) == sorted(CONST_PLC_CASE_LINES)
     for case, (first, last) in CONST_PLC_CASE_LINES.items():
         assert [line.Raw for line in cases[case]] == lines[first - 1:last]
+        # The whole case: the range is the body of its branch, from after its 'elif' to the next one.
+        assert lines[first - 2].strip() == 'elif (%d == switch_1):' % case
+        assert lines[last].strip().startswith('elif (')
 
 
 def test_the_case_extract_reads_in_program_order(root):
@@ -304,3 +315,28 @@ def test_a_motion_sequence_writes_generated_moves_program_lines_and_comments():
                     '# Gripper open\n')
     with pytest.raises(URScript_Error_Cls, match='movej, program or comment'):
         Write_Motion_Sequence([('movel', 'x')], [], '1', '1')
+
+
+def test_program_entries_keep_the_moves_and_comment_the_gripper():
+    """
+    Description:
+        Program_Entries keeps every movej and movel line verbatim (indentation is removed only by
+        the writer), turns a gripper action into its comment naming the program line, and leaves
+        out everything else (Polyscope markers, PLC I/O, waits); a non-gripper line has no gripper
+        comment.
+    """
+
+    text = ('# case 17: test\n'
+            '        $ 290 "load_hower" "breakAfter"\n'
+            '        movej(get_inverse_kin(a_p, qnear=a_q), a=0.17453292519943295, v=0.17453292519943295)\n'
+            '        rq_set_pos_spd_for(0, 255, 255, "1")\n'
+            '        movel(b_p, a=1.2, v=0.25)\n'
+            '        write_output_boolean_register(0,True)\n'
+            '        sleep(0.5)\n')
+    lines = Read_Program_Excerpt(text)[17]
+    assert Program_Entries(lines) == [
+        ('program', '        movej(get_inverse_kin(a_p, qnear=a_q), a=0.17453292519943295, v=0.17453292519943295)'),
+        ('comment', 'Gripper open: the program\'s Robotiq node goes here (rq_set_pos_spd_for(0, 255, 255, "1"))'),
+        ('program', '        movel(b_p, a=1.2, v=0.25)')]
+    with pytest.raises(URScript_Error_Cls, match='Only a gripper line'):
+        Gripper_Comment(lines[1])

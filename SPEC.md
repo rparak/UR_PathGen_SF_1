@@ -509,13 +509,15 @@ CAD/Collision/SF1_Environment_Collision.npz   convex pieces (vertices, faces, pi
 CAD/Collision/SF1_Environment_Collision.json  manifest (§7.6)
 Configuration/Cell_SF1.yaml                   cell configuration (§8)
 Data/Programs/sf1_plc_v4/                     extracts of the owner's program, verbatim, with its sha256:
-                                              its 156 global _p/_q lines, and the rotation sequence of
-                                              cases 17 and 18 (§10.1)
+                                              its 156 global _p/_q lines, and the whole cases 17 and 18
+                                              (§10.1); the simplified taught programs
+                                              sf1_plc_v4_case_<n>.urscript + _sequence.script (§10.4)
 models/MANIFEST.json                          Menagerie commit, licence, sha256 of every vendored file
 models/universal_robots_ur10e/                xml, assets/, LICENSE, README.md, CHANGELOG.md (no png)
 models/robotiq_2f85/                          same
 src/Configuration/Core.py   Load_Configuration → Cell_Configuration_Str (the only YAML reader)
-src/URScript/Core.py        Read_URScript, Write_URScript, Write_Movej_Sequence (the only URScript reader/writer)
+src/URScript/Core.py        Read_URScript, Write_URScript, Write_Movej_Sequence, Write_Motion_Sequence, Program_Entries
+                            (the only URScript reader/writer)
 src/Kinematics/Core.py      UR10e DH FK, rotvec ↔ matrix, Geodesic_Angle, Normalize_Rotvec, Derive_TCP_Offset
 src/Collision/Core.py       Build_Collision_Set, Write_Collision_Set, Read_Collision_Set (the only npz/manifest reader/writer)
 src/Scene/Core.py           Build_Scene (MjSpec), Set_Configuration, Check_Clearance, the taught / generated rule
@@ -523,6 +525,7 @@ src/Planner/Core.py         Planner_Cls (direct, RRT-Connect, shortcut, refineme
 Example/plan_rotation.py    plans S1 - S3 of cases 17 and 18, writes Data/Generated/, prints the report
 Example/replay_rotation.py  viewer replay of taught vs optimised, labelled by the generated rule; screenshots
 Data/Generated/             SF1_Rotation_<case>.urscript (points) and SF1_Rotation_<case>_Sequence.script
+Example/write_taught_programs.py  writes the simplified taught programs of the extract (Data/Programs/sf1_plc_v4/)
 Example/build_collision.py  regenerates CAD/Collision/ from the STL (runs CoACD; not in the test suite)
 Example/demo_rotate_axis.py the viewer demo
 test/<Domain>/test_<module>.py mirroring src/, test/Install/test_install.py, test/Example/test_demo.py
@@ -903,7 +906,10 @@ global <name>_q=[j0, j1, j2, j3, j4, j5]      # rad: base, shoulder, elbow, wris
   `Normalize_Rotvec` and is informational (§10.4).
 
 **Program excerpt** (`Data/Programs/sf1_plc_v4/sf1_plc_v4_cases_17_18.script`, read by
-`Read_Program_Excerpt` only): lines of the robot program kept verbatim, indentation included. Column-0
+`Read_Program_Excerpt` only): lines of the robot program kept verbatim, indentation included: the
+whole body of each case's branch `elif (n == switch_1):` (case 17 lines 3397 – 3478, case 18
+3480 – 3561), out of machine (a), the rotation sequence home → … → home, back into machine (a).
+*Corrected 2026-10-18: it held only the rotation sequence.* Column-0
 `#` lines before the first block are the header (source, sha256); a column-0 `# case <n>:` line opens
 a case. Each program line is classified as a movej to a learned point
 (`movej(get_inverse_kin(<name>_p, qnear=<name>_q), …)`), a movel to a learned pose, a gripper
@@ -940,6 +946,14 @@ movej(<name>_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
 Speed does not change the path of a `movej` with `r=0`. `r=0` is written explicitly because it is
 the one argument that does change the path. Joint targets only, never `movej(p[...])`. `_p` of via
 points is informational: the robot would otherwise solve its own IK and could pick another branch.
+
+**Simplified taught programs** (`Example/write_taught_programs.py`,
+`Data/Programs/sf1_plc_v4/sf1_plc_v4_case_<n>.urscript` and `…_case_<n>_sequence.script`): the whole
+case as its motion program, written by `Write_Motion_Sequence` from `Program_Entries`: every movej
+and movel of the case in program order, verbatim without indentation (targets, a, v, r), each
+gripper action as a `# Gripper open/close` comment naming the program line, nothing else (no URCap
+code, no PLC I/O, no waits). The points file holds the points the case moves to, with the
+program's tokens. The robot enters a case where the previous case left it.
 
 **Exception: station lines copied verbatim.** In a motion sequence (`Write_Motion_Sequence`) the
 station operations of the robot program are copied verbatim (without indentation), with their own
@@ -1006,7 +1020,7 @@ that fails is never written.
 
 | Test file | What it pins |
 |---|---|
-| `test/URScript/test_core.py` | exact float values of all 24 numbers; byte-identical round trip; `.238`, `-.175`, `E-5` tokens; strict errors (malformed, missing pair, duplicate, wrong length, line number in message); generated-point format; no wrapping (4.0 rad); `movej` line uses `_q` and `r=0`; renamed file tokens == original export; the case extract reads in program order, equals its source lines 3407–3463 / 3490–3546 when `SF1_PLC_V4_SCRIPT` is set (otherwise skipped), and a malformed excerpt is refused; the `sf1_plc_v4` positions extract is read strictly with every token, and equals its source lines 2453–2608 byte for byte with the recorded sha256 when `SF1_PLC_V4_SCRIPT` names the program (otherwise skipped, never passed) |
+| `test/URScript/test_core.py` | exact float values of all 24 numbers; byte-identical round trip; `.238`, `-.175`, `E-5` tokens; strict errors (malformed, missing pair, duplicate, wrong length, line number in message); generated-point format; no wrapping (4.0 rad); `movej` line uses `_q` and `r=0`; renamed file tokens == original export; the case extract reads in program order (the whole case), equals its source lines 3397–3478 / 3480–3561 — the whole body of each case's branch — when `SF1_PLC_V4_SCRIPT` is set (otherwise skipped), and a malformed excerpt is refused; `Program_Entries` keeps movej/movel verbatim, comments the gripper and drops every other line; the `sf1_plc_v4` positions extract is read strictly with every token, and equals its source lines 2453–2608 byte for byte with the recorded sha256 when `SF1_PLC_V4_SCRIPT` names the program (otherwise skipped, never passed) |
 | `test/Configuration/test_core.py` | shipped file loads; each REQUIRED field missing → named failure; invalid values (wrong length, limits outside ±360°, min ≥ max, coupling spigot depth ≥ thickness, negative clearance or sanity bound, an assembly or component override beyond 150 mm, without a source or named twice, an added box with Min ≥ Max, without a source or named twice, an empty list of added boxes accepted, a zone margin above `Clearance.Environment`, a zone box with Min ≥ Max, a zero endpoint radius) fail; all problems listed at once; unknown key → WARNING |
 | `test/Kinematics/test_core.py` | `FK_DH(q) · TCP_config` vs `_p`: regression pin (§9.4) of 1.72 mm / 0.261° and 4.02 mm / 0.376° (±0.01 mm / ±0.001°); diagnostic derived TCP pinned the same way and never read by any check; both points within the sanity bound; `Check_Learned_Point` rejects a point beyond it (perturbed `_q`) with the numbers in the message; configured TCP == (0, 0, 0.174, 0, 0, 0); geodesic angle 0 between r and its π-equivalent; `Normalize_Rotvec` rule incl. near-π |
 | `test/Scene/test_core.py` | scene compiles; base body world position == `Base_Position` exactly and yaw == `Base_Yaw`; **at `Base_Yaw` = 90° (a temporary copy of the configuration) `home`'s TCP lands at `Base_Position` + (−y, x, z) of its `_p` within 3 mm, in MuJoCo and through the base frame (the file is in degrees; read as radians the test fails)**; **MuJoCo flange FK (after the MjSpec offset override) == DH flange FK within 1e-9 m / 1e-9 rad (atan2 geodesic, §9.5) for 1000 seeded random joint vectors within the limits**, plus A and B; pad-span hull present in the gripper rigid group; fingers open along the configured `Mount_Yaw` (flange ±x at 0); visual mesh has no hull (`mesh_graphadr = −1`); base↔env build check runs; loader rejects an elbow limit beyond ±180°; gripper opening == `Tool.Opening` ± 0.5 mm, equality residual < 0.1 mm; coupling cylinder present (visual + collision), Menagerie `base_mount` mesh geoms absent, vendored files byte-identical to `models/MANIFEST.json`; pad end from the flange face 163.3 mm open and 176.8 mm closed (± 0.5 mm, manual chain) and the 50 mm values 154.39 / 173.23 mm (± 0.05 mm, regression); exclusion set == configuration expansion + `base–env_stand`, filterparent disabled; joint ranges == `Joint_Position_Limits`; **placement (§4.6): `pick_obj_1..8` on the pallet table, `unload_obj_1..8` on the side table (between the plate top and the highest part), `bench_drop_1..8` inside object (a); the same check at `Base_Yaw` = 0 refuses all 24**; A and B pass `Check_Clearance`, and **any violation fails the test, listing every pair with its distance and margin** (no report-only path); `hover_unload_2` (clear) pushed into the side table is reported as a collision; a collision set whose recorded assembly or component overrides differ from the configuration is refused; an added box is a box primitive of `env` spanning its configured corners with the environment margin, a zone piece only when it meets the zone box; the station zone applies to a generated configuration only within `Endpoint_Radius` of a station point (DH distances); a segment kind other than taught/generated is refused; a generated configuration with the tool pointing up above 2.35 m violates the workspace (excursion = the pad end's, from DH), the taught rule does not apply the box; the van der Corput order is a permutation of the samples |
@@ -1015,6 +1029,8 @@ that fails is never written.
 | `test/Scene/test_margin.py` | margin accuracy on **mesh hull vs mesh hull** (robot geom on a joint, so not static): a robot link hull at 3 orientations vs a box-hull face, and box-hull edge vs edge; at 10 mm a violation is reported, at 30 mm none; reported distance error < 0.5 mm (prototype: 0.000 mm, §4.5) |
 | `test/Collision/test_core.py` | manifest STL hash == sha256 of the file; the STL splits into three objects of 1749 / 951 / 56 components, an assembly named by the machine body moves exactly object (a) with a component override added on top, and the manifest records the configured assemblies' members; `R_crop` ≥ the bound recomputed from the current scene, and no robot collision vertex leaves the sphere over 1000 seeded random `q`; conservativeness violations == 0 at `eps` (vertices + 1 sample/cm² for CoACD components, hull-only exempt); degenerate components thickened and containing the original; excess metrics present and equal to a recomputation on a fixed sample; no robot body at A/B inside a flagged open-shell piece; mismatched hash → `Collision_Error_Cls` |
 | `test/Example/test_demo.py` | headless demo runs N steps without exception; only the chosen joint changes, monotonically between turning points; it stays within `Joint_Position_Limits`; the pre-check runs on the dense segment samples of §9.7; the label equals the check result ("clearance checked" iff no violation, otherwise "VISUAL ONLY — UNCHECKED"); the shipped motion's label is pinned |
+| `test/Example/test_write_taught_programs.py` | each case's simplified program is, after its header, exactly the case's movej/movel lines in program order (the program's line without indentation) and a gripper comment naming the program line at each gripper action, nothing else; its points file holds exactly the case's targets in first-use order with the extract's tokens; the script reproduces the committed files byte for byte |
+| `test/Example/test_plan_rotation.py` | the holding opening of a case is its configured `Tool.Holding_Openings` value (not `Tool.Opening`), open is 85 mm; a case without an entry is refused |
 | `test/Example/test_replay.py` | `replay_rotation.py` without `--with-stl` (headless, screenshots) builds the scene without the visual STL: it says so and has exactly the geoms of the scene without it |
 | `test/Install/test_install.py` | `bash -n`; sourced steps under a hermetic `PATH`: OS detection (Darwin arm64, Linux), Python 3.11 resolution (`python3` never called), hash verification fails on a tampered model file, every log line in the log format |
 | `.claude/skills/project-style-rpx/scripts/test_check_style.py` | the checker itself (outside `test/`) |

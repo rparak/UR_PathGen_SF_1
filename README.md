@@ -52,6 +52,16 @@ Replay taught vs optimised (macOS: `mjpython`), or write screenshots instead of 
 .venv/bin/python Example/replay_rotation.py --case 17 --segment S2 --screenshots <directory>
 ```
 
+`Data/Programs/sf1_plc_v4/` holds verbatim extracts of the owner's robot program (its learned points
+and the whole cases 17 and 18) and, written from them, the simplified taught program of each case:
+`sf1_plc_v4_case_<n>.urscript` (the points) and `sf1_plc_v4_case_<n>_sequence.script` (every movej and
+movel of the case in program order with the program's a, v, r; gripper actions as comments; no URCap
+code, no PLC I/O). Rewrite them after the extracts change:
+
+```bash
+.venv/bin/python Example/write_taught_programs.py
+```
+
 Rebuild the environment collision set after the STL changes (takes several minutes, runs CoACD):
 
 ```bash
