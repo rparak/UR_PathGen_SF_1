@@ -837,3 +837,28 @@ gripper cable or a wrist-3 safety limit objects, or the pick is re-taught.
 Pinned by `test/Example/test_plan_rotation.py::test_the_delivered_points_turn_only_the_picks_wrist_3`,
 `test/URScript/test_core.py::test_replacing_joints_keeps_the_pose_and_every_unchanged_token` and
 `test/Planner/test_core.py::test_the_station_points_keep_their_tokens`.
+
+## Every variant is kept as files with its status; the proposals use the nominal-DH IK of the taught poses
+
+**Decision.** `Example/write_variants.py` writes taught, b_optimised, c1, c2 and c3 into
+`Data/Generated/variants/<name>/` in the delivered formats, each file stating its status, and
+measures them all into `comparison.md` / `comparison.csv` from those files (owner, 2026-10-19). The
+proposals c2 and c3 put the drop on another branch with `Solve_IK_Analytic` of the program's `_p`
+(nominal DH), never mink or a numeric IK from a seed.
+
+**Why.** The owner compares the variants visually (the replay reads them) and decides on re-teaching
+when a robot is available; files in the delivered form can be pasted and replayed alike, and a
+table measured from the files cannot drift from them (a test re-measures). The closed form gives
+every branch of a pose and labels it; a seeded numeric IK finds one branch and cannot say which.
+The nominal-DH solution is millimetres from the robot's calibrated IK (4.0 mm FK residual at the
+drop, SPEC 9.4): good enough to propose a branch, not to run it - hence "proposal, not verified".
+
+**Alternatives.** Only the delivered output (the comparison would live in a chat). Re-planning the
+proposals from the robot's own IK: no robot. Writing the proposals' `_q` as learned points of the
+program: they were never taught.
+
+**Revisit if** the drop is re-taught on another branch (the export then replaces the proposal), or a
+variant is no longer worth comparing.
+
+Pinned by `test/Example/test_write_variants.py` (the files, the statuses, c1 = the delivered output,
+the proposals' branches, the table against the files) and `test/Kinematics/test_core.py`.

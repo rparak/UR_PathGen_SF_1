@@ -663,3 +663,67 @@ def test_components_within_names_the_machine_interior_hull(scene, cfg, points):
     assert scene.Components_Within(points['home'].Q, [1638], cfg.Clearance_Environment) == []
     with pytest.raises(Scene_Error_Cls, match='only below Clearance.Environment'):
         scene.Components_Within(points['home'].Q, [1638], cfg.Clearance_Environment + 0.001)
+
+
+def test_the_report_clearance_names_the_closest_pair_and_the_rules_margin(scene, cfg, points):
+    """
+    Description:
+        Environment_Clearance at two station points (holding opening): the closest pair is the one
+        Environment_Distance finds (same distance, same robot body), and the least room is the
+        distance minus the margin of the rule. At pick_rotate_1 the closest object is a station box,
+        a zone piece: taught 5 mm (the zone margin), generated far from a station point 20 mm. At
+        Waypoint_6 it is machine (a) outside the zone (45.0 mm, SPEC 10.6): taught 20 mm, generated
+        30 mm (Clearance.Machine_Extra) even within the station neighbourhood.
+    """
+
+    station_q = [points[n].Q for n in ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5', 'Waypoint_18', 'pick_rotate_1', 'Waypoint_6')]
+    tcps = scene.Station_TCPs(station_q)
+    q = points['pick_rotate_1'].Q
+    distance, body = scene.Environment_Distance(q, 0.2)
+    closest, pair, room, room_pair, margin = scene.Environment_Clearance(q, 'taught', None, 0.2)
+    assert (closest, pair.split(' - ')[0]) == (distance, body)
+    assert pair.split(' - ')[1] in ('station_bracket', 'station_stub') and room_pair == pair
+    assert (margin, room) == (cfg.Station_Zone_Environment, pytest.approx(closest - cfg.Station_Zone_Environment, abs=1e-12))
+    _, _, room, _, margin = scene.Environment_Clearance(q, 'generated', None, 0.2)
+    assert margin == cfg.Clearance_Environment and room <= closest - cfg.Clearance_Environment + 1e-12
+    q = points['Waypoint_6'].Q
+    closest, pair, room, room_pair, margin = scene.Environment_Clearance(q, 'taught', None, 0.2)
+    assert pair.startswith('gripper_base - machine_a piece') and closest == pytest.approx(0.0450, abs=0.0005)
+    assert (margin, room_pair) == (cfg.Clearance_Environment, pair)
+    _, _, room, room_pair, margin = scene.Environment_Clearance(q, 'generated', tcps, 0.2)
+    assert scene.Near_Station(q, tcps) and room_pair == pair
+    assert (margin, room) == (cfg.Clearance_Environment + cfg.Machine_Extra_Margin,
+                              pytest.approx(closest - cfg.Clearance_Environment - cfg.Machine_Extra_Margin, abs=1e-12))
+
+
+def test_the_robot_top_is_its_highest_collision_vertex(scene, cfg, points):
+    """
+    Description:
+        Robot_Top equals the highest point of the robot's collision geometry computed here from the
+        compiled model directly (mesh vertices, box corners, the cylinder's rim; 1e-12 m) at home,
+        at pick_rotate_1 and with the arm straight up, where it also lies above the TCP and above
+        the base plus the DH chain up to the wrist (d1 + |a2| + |a3|).
+    """
+
+    m, d = scene.Model, scene.Data
+    robot = [g for g in range(m.ngeom) if m.geom_contype[g] and m.geom_bodyid[g] != 0 and not m.body(m.geom_bodyid[g]).name.startswith('env')]
+    up = [0.0, -math.pi / 2.0, 0.0, -math.pi / 2.0, 0.0, 0.0]
+    for q in (points['home'].Q, points['pick_rotate_1'].Q, up):
+        top = scene.Robot_Top(q)
+        highest = -np.inf
+        for g in robot:
+            R, p = d.geom_xmat[g].reshape(3, 3), d.geom_xpos[g]
+            if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_MESH:
+                first, count = m.mesh_vertadr[m.geom_dataid[g]], m.mesh_vertnum[m.geom_dataid[g]]
+                z = float((m.mesh_vert[first:first + count] @ R.T + p)[:, 2].max())
+            elif m.geom_type[g] == mujoco.mjtGeom.mjGEOM_BOX:
+                corners = np.array([[x, y, w] for x in (-1, 1) for y in (-1, 1) for w in (-1, 1)]) * m.geom_size[g]
+                z = float((corners @ R.T + p)[:, 2].max())
+            else:
+                assert m.geom_type[g] == mujoco.mjtGeom.mjGEOM_CYLINDER
+                radius, half = m.geom_size[g][:2]
+                z = float(p[2] + abs(R[2, 2]) * half + radius * math.sqrt(max(0.0, 1.0 - R[2, 2] ** 2)))
+            highest = max(highest, z)
+        assert top == pytest.approx(highest, abs=1e-12)
+        assert top >= (scene.Base_Frame() @ TCP_Pose(q, cfg.TCP_Offset))[2, 3]
+    assert scene.Robot_Top(up) >= cfg.Base_Position[2] + 0.1807 + 0.6127 + 0.57155

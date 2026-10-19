@@ -168,6 +168,21 @@ program's pick lines solve `get_inverse_kin(<name>_p, qnear=<name>_q)` on the ro
   `test/Planner/test_core.py::test_the_station_points_keep_their_tokens`.
 - **What would close it:** the first run on the robot.
 
+## The proposals c2 and c3 are nominal-DH branches of the taught drop, never taught
+
+`Data/Generated/variants/c2` and `c3` put the drop's three points on another IK branch (SPEC §10.6):
+the nominal-DH IK of the program's `_p`, 12.05 s and 13.86 s home -> home against the delivered
+14.66 s (estimates).
+
+- **Not verified:** the robot's calibrated IK gives other joints (the drop's FK residual is 4.0 mm,
+  SPEC §9.4), so the station clearances of 12.0 mm (the taught branch: 10.6 mm) are model values;
+  c2 flips the wrist in S1 (θ5 passes π while the part is held) and its Waypoint_5 lies 8° from the
+  wrist singularity (a movej); cables and the carried part are not modelled.
+- **Impact:** neither may run as written. Using one means re-teaching the drop on that branch and
+  re-verifying it on the robot at reduced speed; the re-taught program then replaces the proposal.
+- **Pinned by:** `test/Example/test_write_variants.py::test_a_proposal_moves_the_drop_to_its_branch_and_nothing_else`.
+- **What would close it:** re-teaching on the robot (owner, 2026-10-19: not now, no robot available).
+
 ## The replay's timing is an estimate
 
 `Example/replay_rotation.py` plays each move for its estimated duration (the trapezoid of SPEC

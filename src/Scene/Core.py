@@ -993,6 +993,105 @@ class Scene_Cls(object):
             m.geom_margin[self.__env_geoms] = saved
         return best, body
 
+    def Environment_Label(self, g: int) -> str:
+        """
+        Description:
+            A readable name of an environment geom: an added box by its name, a piece of the
+            collision set by its number with what it belongs to (Clearance.Machine_Extra's assembly
+            outside the zone, the station zone, the stand) or its STL component.
+
+        Args:
+            (1) g [int]: The geom.
+
+        Returns:
+            (1) parameter [string]: The name.
+        """
+
+        m = self.__model
+        name = m.geom(g).name
+        if name.startswith(CONST_ADDED_BOX_PREFIX):
+            return name[len(CONST_ADDED_BOX_PREFIX):]
+        piece = int(name.rsplit('_', 1)[1])
+        if g in self.__machine_geoms:
+            return '%s piece %d' % (self.__cfg.Machine_Extra_Assembly, piece)
+        if g in self.__zone_geoms:
+            return 'station-zone piece %d' % piece
+        if m.body(m.geom_bodyid[g]).name == 'env_stand':
+            return 'stand piece %d' % piece
+        return 'piece %d (component %d)' % (piece, self.__piece_components[piece])
+
+    def Environment_Clearance(self, q: tp.Sequence[float], kind: str, station_tcps: tp.Optional[np.ndarray],
+                              distmax: float) -> tp.Tuple[float, str, float, str, float]:
+        """
+        Description:
+            For a report: the closest robot - environment pair at q, and the pair with the least
+            room above the margin the rule of its kind gives it (Check_Configuration: taught - the
+            zone margin at the zone pieces; generated - the zone margin only near a station point,
+            Clearance.Machine_Extra added to that assembly outside the zone). One collision pass with
+            the environment margins raised to distmax - Clearance.Self, as Environment_Distance.
+            The station-box floors and the workspace are not part of it.
+
+        Args:
+            (1) q [Vector<float> 1x6]: Joint angles (rad).
+            (2) kind [string]: 'taught' or 'generated'.
+            (3) station_tcps [Matrix<float> Nx3]: The station points' TCPs (generated rule).
+            (4) distmax [float]: The cap (m); larger than Clearance.Self.
+
+        Returns:
+            (1) parameter [Tuple<float, string, float, string, float>]: The closest distance (m) and
+                                                                        its pair, the least room (m),
+                                                                        its pair and its margin (m);
+                                                                        distmax and '' when nothing
+                                                                        is within the cap.
+        """
+
+        if kind not in ('taught', 'generated'):
+            raise Scene_Error_Cls('A segment is either "taught" or "generated", not %r.' % (kind,))
+        near = kind == 'taught' or self.Near_Station(q, station_tcps)
+        cfg, m, d = self.__cfg, self.__model, self.__data
+        saved = m.geom_margin[self.__env_geoms].copy()
+        try:
+            m.geom_margin[self.__env_geoms] = distmax - cfg.Clearance_Self
+            self.Set_Joints(q)
+            mujoco.mj_collision(m, d)
+            env = set(self.__env_geoms.tolist())
+            closest, closest_pair, room, room_pair, room_margin = distmax, '', distmax, '', 0.0
+            for i in range(d.ncon):
+                contact = d.contact[i]
+                if (contact.geom1 in env) == (contact.geom2 in env) or contact.dist >= distmax:
+                    continue
+                e, r = (contact.geom1, contact.geom2) if contact.geom1 in env else (contact.geom2, contact.geom1)
+                pair = '%s - %s' % (m.body(m.geom_bodyid[r]).name, self.Environment_Label(e))
+                margin = cfg.Clearance_Environment
+                if e in self.__machine_geoms and kind == 'generated':
+                    margin += cfg.Machine_Extra_Margin
+                if e in self.__zone_geoms and near:
+                    margin = cfg.Station_Zone_Environment
+                if contact.dist < closest:
+                    closest, closest_pair = float(contact.dist), pair
+                if contact.dist - margin < room:
+                    room, room_pair, room_margin = float(contact.dist) - margin, pair, margin
+        finally:
+            m.geom_margin[self.__env_geoms] = saved
+        return closest, closest_pair, room, room_pair, room_margin
+
+    def Robot_Top(self, q: tp.Sequence[float]) -> float:
+        """
+        Description:
+            The height (world z) of the highest collision vertex of the robot and the gripper at q.
+
+        Args:
+            (1) q [Vector<float> 1x6]: Joint angles (rad).
+
+        Returns:
+            (1) parameter [float]: The height (m).
+        """
+
+        self.Set_Joints(q)
+        d = self.__data
+        return max(float(np.max(local @ d.geom_xmat[g].reshape(3, 3).T[:, 2] + d.geom_xpos[g][2]))
+                   for g, local in zip(self.__robot_geoms, self.__robot_local))
+
     def Check_Configuration(self, q: tp.Sequence[float], kind: str = 'generated',
                             station_tcps: tp.Optional[np.ndarray] = None,
                             box_floors: tp.Optional[tp.Dict[str, float]] = None) -> tp.List[Violation_Str]:
