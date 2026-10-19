@@ -31,7 +31,7 @@ import pytest
 #   ../src/Kinematics/Core — the kinematics under test
 from Kinematics.Core import (DH_FK, TCP_Residual, Derive_TCP_Offset, Geodesic_Angle, Rotvec_To_Matrix, Matrix_To_Rotvec,
                              Check_FK_Consistency, Kinematics_Error_Cls, Orientation_Sanity_Bound, TCP_Pose,
-                             Solve_IK_Near, Linear_Path)
+                             Solve_IK_Near, Linear_Path, Solve_IK_Analytic, IK_Branch, Nearest_Representative, Wrap_Angle)
 
 """
 Description:
@@ -216,6 +216,66 @@ def test_the_ik_finds_the_configuration_on_the_branch_it_starts_from(cfg):
     far[:3, 3] += [3.0, 0.0, 0.0]
     with pytest.raises(Kinematics_Error_Cls, match='out of reach or at a singularity'):
         Solve_IK_Near(far, np.zeros(6), cfg.TCP_Offset)
+
+
+def test_the_analytic_ik_gives_all_eight_branches_and_the_configuration_itself(cfg):
+    """
+    Description:
+        For 50 seeded configurations within the joint limits away from the singularities (elbow
+        and wrist 2 at least 0.3 rad from 0 and pi), Solve_IK_Analytic of their DH TCP returns at
+        most 8 solutions, each on its own branch (a pose may be out of reach on one shoulder or
+        elbow branch), each reaching the TCP within 1e-9 m / 1e-9 rad (checked here with TCP_Pose),
+        and one of them is the configuration itself modulo 2 pi (1e-8 rad), on the branch IK_Branch
+        names. Some pose has all 8.
+    """
+
+    rng = np.random.default_rng(20261019)
+    counts = []
+    for _ in range(50):
+        q = rng.uniform(-2.0 * math.pi, 2.0 * math.pi, 6)
+        q[2] = rng.uniform(0.3, math.pi - 0.3) * rng.choice([-1.0, 1.0])
+        q[4] = rng.uniform(0.3, math.pi - 0.3) * rng.choice([-1.0, 1.0])
+        target = TCP_Pose(q, cfg.TCP_Offset)
+        solutions = Solve_IK_Analytic(target, cfg.TCP_Offset)
+        counts.append(len(solutions))
+        assert 1 <= len(solutions) <= 8 and len({branch for branch, _ in solutions}) == len(solutions)
+        for _, s in solutions:
+            reached = TCP_Pose(s, cfg.TCP_Offset)
+            assert np.linalg.norm(reached[:3, 3] - target[:3, 3]) < 1e-9
+            assert Geodesic_Angle(reached[:3, :3], target[:3, :3]) < 1e-9
+        same = [branch for branch, s in solutions if max(abs(Wrap_Angle(a - b)) for a, b in zip(s, q)) < 1e-8]
+        assert same == [IK_Branch(q)]
+    assert max(counts) == 8
+
+
+@pytest.mark.parametrize('name, branch', [('home', 'S- E- W+'), ('drop_rotate_1', 'S+ E+ W-'), ('Waypoint_4', 'S+ E+ W-'),
+                                          ('Waypoint_5', 'S+ E+ W-'), ('Waypoint_18', 'S- E- W+'), ('pick_rotate_1', 'S- E- W+'),
+                                          ('Waypoint_6', 'S- E- W+')])
+def test_the_taught_points_lie_on_their_measured_branches(points, name, branch):
+    """
+    Description:
+        The branches of case 17's taught home and station points (measured 2026-10-19): the drop's
+        three points are on the branch opposite home in shoulder, elbow and wrist; the pick's are on
+        home's branch. The pose of each (its _q's DH TCP) has all 8 solutions.
+    """
+
+    assert IK_Branch(points[name].Q) == branch
+    assert len(Solve_IK_Analytic(DH_FK(points[name].Q), [0.0] * 6)) == 8
+
+
+def test_the_nearest_representative_turns_every_joint_but_the_elbow():
+    """
+    Description:
+        Nearest_Representative moves each joint but the elbow by whole turns to within pi of the
+        reference: wrist 3 of the taught pick (4.739 rad) next to home (0) becomes 4.739 - 2 pi; a
+        joint already within pi is kept exactly; the elbow is never turned, even 3 rad away.
+    """
+
+    q = Nearest_Representative([0.5, -7.0, 3.0, 2.0, -4.0, 4.739], [0.0, 0.0, -0.1, 0.0, 0.0, 0.0])
+    assert q[0] == 0.5 and q[3] == 2.0 and q[2] == 3.0
+    assert q[5] == pytest.approx(4.739 - 2.0 * math.pi, abs=1e-12)
+    assert q[1] == pytest.approx(-7.0 + 2.0 * math.pi, abs=1e-12)
+    assert q[4] == pytest.approx(-4.0 + 2.0 * math.pi, abs=1e-12)
 
 
 def test_a_movel_follows_the_straight_tcp_line_to_its_target(cfg, points):

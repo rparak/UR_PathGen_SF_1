@@ -87,13 +87,29 @@ def DH_FK(q: tp.Sequence[float]) -> np.ndarray:
 
     T = np.eye(4)
     for i in range(6):
-        ct, st = math.cos(q[i]), math.sin(q[i])
-        ca, sa = math.cos(CONST_DH_ALPHA[i]), math.sin(CONST_DH_ALPHA[i])
-        T = T @ np.array([[ct, -st * ca, st * sa, CONST_DH_A[i] * ct],
-                          [st, ct * ca, -ct * sa, CONST_DH_A[i] * st],
-                          [0.0, sa, ca, CONST_DH_D[i]],
-                          [0.0, 0.0, 0.0, 1.0]])
+        T = T @ DH_Transform(i, q[i])
     return T
+
+
+def DH_Transform(i: int, theta: float) -> np.ndarray:
+    """
+    Description:
+        The DH transform of one joint: frame i to frame i + 1 at the joint angle theta.
+
+    Args:
+        (1) i [int]: The joint, 0 (base) to 5 (wrist 3).
+        (2) theta [float]: Its angle (rad).
+
+    Returns:
+        (1) parameter [Matrix<float> 4x4]: The transform.
+    """
+
+    ct, st = math.cos(theta), math.sin(theta)
+    ca, sa = math.cos(CONST_DH_ALPHA[i]), math.sin(CONST_DH_ALPHA[i])
+    return np.array([[ct, -st * ca, st * sa, CONST_DH_A[i] * ct],
+                     [st, ct * ca, -ct * sa, CONST_DH_A[i] * st],
+                     [0.0, sa, ca, CONST_DH_D[i]],
+                     [0.0, 0.0, 0.0, 1.0]])
 
 
 def Rotvec_To_Matrix(r: tp.Sequence[float]) -> np.ndarray:
@@ -389,3 +405,129 @@ def Linear_Path(q_a: tp.Sequence[float], q_b: tp.Sequence[float], tcp_offset: tp
                                       np.round(np.asarray(q_b), 4).tolist()))
     path[-1] = np.array(q_b, dtype=float)
     return path
+
+
+def Wrap_Angle(x: float) -> float:
+    """
+    Description:
+        An angle in [-pi, pi).
+
+    Args:
+        (1) x [float]: The angle (rad).
+
+    Returns:
+        (1) parameter [float]: The wrapped angle (rad).
+    """
+
+    return (x + math.pi) % (2.0 * math.pi) - math.pi
+
+
+def Solve_IK_Analytic(T_goal: np.ndarray, tcp_offset: tp.Sequence[float]) -> tp.List[tp.Tuple[str, np.ndarray]]:
+    """
+    Description:
+        Every closed-form solution of the UR10e (official DH) for a TCP pose: up to 8, one per
+        branch 'S<s> E<e> W<w>'. S: the sign of the shoulder solution, theta1 = atan2(y5, x5)
+        + s * acos(d4 / r5) + pi / 2 (wrist centre (x5, y5), r5 its distance from the base axis);
+        E: the sign of the elbow angle; W: the sign of sin(theta5). Angles in [-pi, pi), the elbow
+        in [-pi, pi] (its limit); every other joint may also take its value +- 2 pi
+        (Nearest_Representative). A branch at a singularity (wrist sin(theta5) = 0, elbow
+        stretched, wrist centre on the base axis) is left out. Each solution is checked by DH_FK
+        to 1e-9 m and rad: a wrong one is an error, never returned.
+
+    Args:
+        (1) T_goal [Matrix<float> 4x4]: The TCP pose in the Polyscope base frame.
+        (2) tcp_offset [Vector<float> 1x6]: The configured TCP (m, rad).
+
+    Returns:
+        (1) parameter [List<Tuple<string, Vector<float> 1x6>>]: (branch, joint angles (rad)).
+    """
+
+    d1, _, _, d4, _, d6 = CONST_DH_D
+    a2, a3 = CONST_DH_A[1], CONST_DH_A[2]
+    T = np.asarray(T_goal, dtype=float) @ np.linalg.inv(Pose_To_Matrix(tcp_offset))
+    wrist = T[:3, 3] - d6 * T[:3, 2]
+    r5 = math.hypot(wrist[0], wrist[1])
+    out: tp.List[tp.Tuple[str, np.ndarray]] = []
+    if r5 <= d4:
+        return out
+    for s in (1.0, -1.0):
+        t1 = math.atan2(wrist[1], wrist[0]) + s * math.acos(d4 / r5) + math.pi / 2.0
+        s1, c1 = math.sin(t1), math.cos(t1)
+        c5 = (T[0, 3] * s1 - T[1, 3] * c1 - d4) / d6
+        if abs(c5) >= 1.0:
+            continue
+        for w in (1.0, -1.0):
+            t5 = w * math.acos(c5)
+            s5 = math.sin(t5)
+            t6 = math.atan2((-T[0, 1] * s1 + T[1, 1] * c1) / s5, (T[0, 0] * s1 - T[1, 0] * c1) / s5)
+            T14 = np.linalg.inv(DH_Transform(0, t1)) @ T @ np.linalg.inv(DH_Transform(4, t5) @ DH_Transform(5, t6))
+            x, y = (T14 @ np.array([0.0, -d4, 0.0, 1.0]))[:2]
+            c3 = (x * x + y * y - a2 * a2 - a3 * a3) / (2.0 * a2 * a3)
+            if abs(c3) >= 1.0:
+                continue
+            for e in (1.0, -1.0):
+                t3 = e * math.acos(c3)
+                t2 = -math.atan2(y, -x) + math.asin(a3 * math.sin(t3) / math.hypot(x, y))
+                T34 = np.linalg.inv(DH_Transform(1, t2) @ DH_Transform(2, t3)) @ T14
+                t4 = math.atan2(T34[1, 0], T34[0, 0])
+                q = np.array([Wrap_Angle(t1), Wrap_Angle(t2), t3, Wrap_Angle(t4), Wrap_Angle(t5), Wrap_Angle(t6)])
+                found = DH_FK(q)
+                if np.linalg.norm(found[:3, 3] - T[:3, 3]) > 1e-9 or Geodesic_Angle(found[:3, :3], T[:3, :3]) > 1e-9:
+                    raise Kinematics_Error_Cls('The analytic solution %s of branch S%s E%s W%s misses its pose; the closed-form '
+                                               'IK is wrong for this pose.' % (np.round(q, 6).tolist(), '+-'[s < 0],
+                                                                                '+-'[e < 0], '+-'[w < 0]))
+                out.append(('S%s E%s W%s' % ('+-'[s < 0], '+-'[e < 0], '+-'[w < 0]), q))
+    return out
+
+
+def IK_Branch(q: tp.Sequence[float]) -> str:
+    """
+    Description:
+        The branch (Solve_IK_Analytic) of a configuration: that of the analytic solution of its own
+        flange pose that equals it, joint by joint modulo 2 pi.
+
+    Args:
+        (1) q [Vector<float> 1x6]: Joint angles (rad).
+
+    Returns:
+        (1) parameter [string]: 'S<s> E<e> W<w>'.
+    """
+
+    solutions = Solve_IK_Analytic(DH_FK(q), [0.0] * 6)
+    if not solutions:
+        raise Kinematics_Error_Cls('The configuration %s is at a singularity; it has no branch.' % np.round(np.asarray(q), 6).tolist())
+    def Distance(solution: np.ndarray) -> float:
+        """
+        Description:
+            The largest joint difference modulo 2 pi.
+
+        Args:
+            (1) solution [Vector<float> 1x6]: An analytic solution (rad).
+
+        Returns:
+            (1) parameter [float]: The difference (rad).
+        """
+
+        return max(abs(Wrap_Angle(a - b)) for a, b in zip(solution, q))
+    return min(solutions, key=lambda item: Distance(item[1]))[0]
+
+
+def Nearest_Representative(q: tp.Sequence[float], q_near: tp.Sequence[float]) -> np.ndarray:
+    """
+    Description:
+        The same configuration with every joint but the elbow moved by whole turns (2 pi) to lie
+        within pi of q_near: the representative a joint-linear move from q_near reaches with the
+        least rotation. The elbow is kept (its limit is +-pi, SPEC 8).
+
+    Args:
+        (1) q [Vector<float> 1x6]: Joint angles (rad).
+        (2) q_near [Vector<float> 1x6]: The reference (rad).
+
+    Returns:
+        (1) parameter [Vector<float> 1x6]: The representative (rad).
+    """
+
+    out = np.array(q, dtype=float)
+    for i in (0, 1, 3, 4, 5):
+        out[i] = q_near[i] + Wrap_Angle(out[i] - q_near[i])
+    return out
