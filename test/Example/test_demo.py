@@ -68,8 +68,7 @@ def test_the_demo_runs_headless_and_reports_its_label(root, tmp_path):
     assert (labels[0] == 'clearance checked') == checked
     assert 'Replayed' in result.stdout
     print(result.stdout)
-    if CONST_SHIPPED_LABEL is not None:
-        assert labels[0] == CONST_SHIPPED_LABEL
+    assert labels[0] == CONST_SHIPPED_LABEL
 
 
 def test_only_the_base_joint_moves_within_its_limits(root, cfg, points):

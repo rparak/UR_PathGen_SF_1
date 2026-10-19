@@ -38,8 +38,6 @@ import time
 import typing as tp
 # Numpy (Array computing) [pip3 install numpy]
 import numpy as np
-# MuJoCo (Physics simulator) [pip3 install mujoco]
-import mujoco
 # Custom Lib.:
 #   ../Configuration/Core — the cell configuration
 from Configuration.Core import Load_Configuration, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE, CONST_PROJECT_ROOT

@@ -565,8 +565,7 @@ def test_the_base_upper_arm_override_has_a_true_minimum_above_zero(robot_scene, 
     true_minimum = min(min(refined), grid[0][0])
     assert true_minimum > 0.0
     print('base - upper_arm_link true minimum: %.4f mm (grid minimum %.4f mm)' % (true_minimum * 1e3, grid[0][0] * 1e3))
-    if CONST_BASE_UPPER_ARM_MIN is not None:
-        assert true_minimum * 1e3 == pytest.approx(CONST_BASE_UPPER_ARM_MIN, abs=0.01)
+    assert true_minimum * 1e3 == pytest.approx(CONST_BASE_UPPER_ARM_MIN, abs=0.01)
 
 
 def test_the_visual_mesh_is_not_hulled(cfg):

@@ -285,11 +285,9 @@ def test_a_collinear_component_is_thickened_in_two_directions():
     assert kind == 'collinear'
     hull = ConvexHull(points)
     assert hull.volume > 0.0
-    direction = np.array([1.0, 1.0, 0.0]) / np.sqrt(2.0)
     for axis in (np.array([0.0, 0.0, 1.0]), np.array([1.0, -1.0, 0.0]) / np.sqrt(2.0)):
         extent = points @ axis
         assert extent.max() - extent.min() == pytest.approx(2.0 * CONST_THICKEN, rel=1e-6)
-    assert abs(np.dot(direction, np.array([0.0, 0.0, 1.0]))) < 1e-12
     assert np.max(line @ hull.equations[:, :3].T + hull.equations[:, 3]) <= 1e-12
 
 

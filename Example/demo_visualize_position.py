@@ -35,8 +35,6 @@ import dataclasses
 import time
 # Typing (Support for type hints)
 import typing as tp
-# MuJoCo (Physics simulator) [pip3 install mujoco]
-import mujoco
 # Custom Lib.:
 #   ../Configuration/Core — the cell configuration
 from Configuration.Core import Load_Configuration, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE

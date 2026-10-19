@@ -64,10 +64,6 @@ CONST_FLANGE_OFFSET = (0.0, CONST_DH_D[5], 0.0)
 CONST_FLANGE_SITE = 'attachment_site'
 CONST_ROBOT_JOINTS = ('shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint', 'wrist_1_joint',
                       'wrist_2_joint', 'wrist_3_joint')
-# Robot bodies, base to wrist 3. The base is static (no joint).
-#   Unit [Tuple<string>]
-CONST_ROBOT_BODIES = ('base', 'shoulder_link', 'upper_arm_link', 'forearm_link', 'wrist_1_link', 'wrist_2_link',
-                      'wrist_3_link')
 # Prefix of every gripper element in the scene.
 #   Unit [string]
 CONST_GRIPPER_PREFIX = 'gripper_'
@@ -691,7 +687,7 @@ class Scene_Cls(object):
             (1) parameter [float]: The length (m).
         """
 
-        m, d = self.__model, self.__data
+        m = self.__model
         flange = self.Flange_Pose()
         best = 0.0
         for g in range(m.ngeom):
