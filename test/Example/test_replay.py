@@ -37,13 +37,20 @@ Description:
     headless. The expected order of the moves is read from the files with patterns typed here, not
     with the replay's reader.
 """
-# The catalogue, each case 17 home -> home: number -> the variants in order.
+# The catalogue, each case 17 home -> home: number -> the variants in order (one per variant of
+# Data/Generated/variants/, then all five; owner, 2026-10-19).
 #   Unit [Dict<int, Tuple<string>>]
-CONST_CATALOGUE = {1: ('taught',), 2: ('optimised',), 3: ('taught', 'optimised')}
+CONST_VARIANTS = ('taught', 'b_optimised', 'c1', 'c2', 'c3')
+CONST_CATALOGUE = {1: ('taught',), 2: ('b_optimised',), 3: ('c1',), 4: ('c2',), 5: ('c3',), 6: CONST_VARIANTS}
 # The sequence file of each variant.
 #   Unit [Dict<string, Tuple<string>>]
-CONST_FILES = {'taught': ('Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_case_17_sequence.script'),
-               'optimised': ('Data', 'Generated', 'SF1_Rotation_17_Sequence.script')}
+CONST_FILES = {v: ('Data', 'Generated', 'variants', v, 'SF1_Rotation_17_Sequence.script') for v in CONST_VARIANTS}
+# The title line of each variant: its estimated home -> home time (comparison.csv) and, for the
+# proposals, the note that they are not verified on the robot.
+#   Unit [Dict<string, string>]
+CONST_TITLES = {'taught': 'taught, estimated 23.37 s', 'b_optimised': 'b_optimised, estimated 17.50 s',
+                'c1': 'c1, estimated 14.66 s', 'c2': 'c2 (proposal - not verified on the robot), estimated 12.05 s',
+                'c3': 'c3 (proposal - not verified on the robot), estimated 13.86 s'}
 # A move or a gripper action in a sequence file, and in the replay's step lines.
 #   Unit [Pattern]
 CONST_FILE_MOVE = re.compile(r'^(movej|movel)\((?:get_inverse_kin\()?(\w+?)_[pq][,)]')
@@ -139,7 +146,7 @@ def test_the_speed_scales_the_playback(root, tmp_path):
 
 
 @pytest.mark.parametrize('args, stdin, fragment', [
-    (('--path', '4'), '', 'There is no path 4'),
+    (('--path', '7'), '', 'There is no path 7'),
     (('--speed', '0'), '', '--speed must be a finite number greater than 0'),
     (('--path', '1', '--speed', '-1'), '', '--speed must be a finite number greater than 0'),
     (('--path', '1', '--speed', 'nan'), '', '--speed must be a finite number greater than 0'),
@@ -162,19 +169,19 @@ def test_an_invalid_number_or_speed_is_refused(root, tmp_path, args, stdin, frag
 def test_list_prints_the_catalogue(root, tmp_path):
     """
     Description:
-        --list prints the three numbered paths of case 17 and exits without building a scene.
+        --list prints the six numbered paths of case 17 and exits without building a scene.
     """
 
     result = _Run(root, tmp_path, '--list')
     assert result.returncode == 0
-    assert [int(n) for n in re.findall(r'^  (\d)  case 17 ', result.stdout, re.M)] == [1, 2, 3]
+    assert [int(n) for n in re.findall(r'^  (\d)  case 17 ', result.stdout, re.M)] == [1, 2, 3, 4, 5, 6]
     assert 'Scene built' not in result.stdout
 
 
 def test_one_case_is_checked_densely_and_labelled_by_kind(root, scene, tmp_path):
     """
     Description:
-        Path 2 (case 17 optimised, home -> home) with the dense clearance check and screenshots,
+        Path 3 (case 17 delivered, c1, home -> home) with the dense clearance check and screenshots,
         without --with-stl: the scene is built without the visual STL (exactly the geoms of the scene
         without it); its 11 moves (12 motion lines, the start excluded: S1 1, S2 2, S3 1 via) are each
         labelled by their own rule and keep it: every generated movej the generated rule, every
@@ -182,7 +189,7 @@ def test_one_case_is_checked_densely_and_labelled_by_kind(root, scene, tmp_path)
         written.
     """
 
-    result = _Run(root, tmp_path, '--path', '2', '--screenshots', str(tmp_path / 'shots'))
+    result = _Run(root, tmp_path, '--path', '3', '--screenshots', str(tmp_path / 'shots'))
     assert result.returncode == 0, result.stdout + result.stderr
     built = re.search(r'Scene built in [\d.]+ s: (\d+) geoms; visual mesh (not loaded|loaded)\.', result.stdout)
     assert built is not None and built.group(2) == 'not loaded' and int(built.group(1)) == scene.Model.ngeom
@@ -191,4 +198,17 @@ def test_one_case_is_checked_densely_and_labelled_by_kind(root, scene, tmp_path)
     assert {rule for _, rule, _ in moves} == {'taught', 'generated'}
     for target, rule, label in moves:
         assert label == 'clearance kept (%s rule)' % rule, (target, label)
-    assert os.listdir(tmp_path / 'shots') == ['path2_optimised.png']
+    assert os.listdir(tmp_path / 'shots') == ['path3_c1.png']
+
+
+def test_each_variant_is_named_with_its_estimate_and_its_status(root, tmp_path):
+    """
+    Description:
+        Path 6 plays the five variants one after another (headless, --skip-check); each is named with
+        its estimated home -> home time, the time comparison.csv holds, and c2 and c3 as proposals not
+        verified on the robot - the title the viewer's overlay shows.
+    """
+
+    result = _Run(root, tmp_path, '--path', '6', '--headless', '--skip-check')
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert re.findall(r'^\[INFO\] Variant (.+)\.$', result.stdout, re.M) == [CONST_TITLES[v] for v in CONST_VARIANTS]

@@ -57,7 +57,7 @@ from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP, CONST_GRIPPER_PREFIX, C
 #   ../Planner/Core — the duration estimates and their profile
 from Planner.Core import Segment_Duration, Linear_Duration, Profile_Fraction
 #   ../Example/plan_rotation — the case, the openings, the outputs and the clearance labels
-from plan_rotation import (CONST_CASE, CONST_TAUGHT_VIAS, CONST_STATION_POINTS, CONST_PROGRAM_DIR, CONST_OUTPUT_DIR, CONST_POSITIONS,
+from plan_rotation import (CONST_CASE, CONST_TAUGHT_VIAS, CONST_STATION_POINTS, CONST_VARIANT_DIR, CONST_VARIANTS, CONST_FILE_NAMES,
                            CONST_MACHINE_INTERIOR, CONST_LABEL_CLEAR, CONST_LABEL_VIOLATED, CONST_LABEL_INVALID, Segments,
                            Opening)
 
@@ -66,19 +66,20 @@ Description:
     Initialization of constants.
 """
 # The paths that can be replayed, each case 17 home -> home: number -> (the variants shown one after
-# the other, name). Taught: Data/Programs/sf1_plc_v4/; optimised: Data/Generated/.
+# the other, name). One entry per variant of Data/Generated/variants/ (owner, 2026-10-19), and one
+# that plays all five. *Corrected 2026-10-19: 1 taught, 2 optimised, 3 both.*
 #   Unit [Dict<int, Tuple<Tuple<string>, string>>]
 CONST_CATALOGUE = {
     1: (('taught',), 'case 17 taught (home -> home)'),
-    2: (('optimised',), 'case 17 optimised (home -> home)'),
-    3: (('taught', 'optimised'), 'case 17 taught then optimised (home -> home), with the strict comparison'),
+    2: (('b_optimised',), 'case 17 previous optimisation, 2026-10-18 (home -> home)'),
+    3: (('c1',), 'case 17 delivered, c1 (home -> home)'),
+    4: (('c2',), 'case 17 c2, proposal - not verified on the robot (home -> home)'),
+    5: (('c3',), 'case 17 c3, proposal - not verified on the robot (home -> home)'),
+    6: (tuple(CONST_VARIANTS), 'case 17 all five variants one after another (home -> home), with the strict comparison'),
 }
-# The files of each variant: (points, motion sequence).
-#   Unit [Dict<string, Tuple<string, string>>]
-CONST_FILES = {'taught': (os.path.join(CONST_PROGRAM_DIR, 'sf1_plc_v4_case_%d.urscript' % CONST_CASE),
-                          os.path.join(CONST_PROGRAM_DIR, 'sf1_plc_v4_case_%d_sequence.script' % CONST_CASE)),
-               'optimised': (os.path.join(CONST_OUTPUT_DIR, 'SF1_Rotation_%d.urscript' % CONST_CASE),
-                             os.path.join(CONST_OUTPUT_DIR, 'SF1_Rotation_%d_Sequence.script' % CONST_CASE))}
+# The note shown with a variant that has not run on the robot.
+#   Unit [Dict<string, string>]
+CONST_NOTES = {'c2': 'proposal - not verified on the robot', 'c3': 'proposal - not verified on the robot'}
 # The gripper state at home: holding the part. Owner, 2026-10-18: the robot holds the part from the
 # start of the case, places it into the magazine and releases it, picks it up again and returns home
 # holding it; the gripper is open only between the release and the re-pick (S2).
@@ -87,7 +88,7 @@ CONST_ENTRY_STATE = 'holding'
 # Frames per second of the replay; the playback time of a move is its estimated duration / speed.
 #   Unit [float] (1/s)
 CONST_FPS = 30.0
-# The strict comparison of entry 3: S1 - S3 of both variants judged by the generated rule.
+# The strict comparison of entry 6: S1 - S3 of every variant judged by the generated rule.
 #   Unit [string]
 CONST_STRICT_CHECKED = 'keeps the generated rule'
 CONST_STRICT_FAILED = 'fails the generated rule'
@@ -149,16 +150,16 @@ def Load_Variant(variant: str) -> tp.Tuple[tp.List[Motion_Str], tp.Dict]:
         The operations of one variant and its points (the variant's own points file).
 
     Args:
-        (1) variant [string]: 'taught' or 'optimised'.
+        (1) variant [string]: A variant of CONST_VARIANTS (its directory in CONST_VARIANT_DIR).
 
     Returns:
         (1) parameter [Tuple<List<Motion_Str>, Dict<string, Robot_Point_Str>>]: Operations and points.
     """
 
-    points_file, sequence_file = CONST_FILES[variant]
-    with open(points_file, encoding='utf-8') as handle:
+    folder = os.path.join(CONST_VARIANT_DIR, variant)
+    with open(os.path.join(folder, CONST_FILE_NAMES[0]), encoding='utf-8') as handle:
         points = Read_URScript(handle.read()).Points
-    with open(sequence_file, encoding='utf-8') as handle:
+    with open(os.path.join(folder, CONST_FILE_NAMES[1]), encoding='utf-8') as handle:
         return Read_Motion_Sequence(handle.read()), points
 
 
@@ -356,26 +357,44 @@ def Move_Text(move: Move_Str) -> str:
     return '%s -> %s (%s%s)' % (move.Kind, move.Target, move.Rule, ', ' + section if section else '')
 
 
-def Paths(points: tp.Dict, generated: tp.Dict, segment: str) -> tp.Dict[str, tp.List[np.ndarray]]:
+def Variant_Path(variant: str, points: tp.Dict, segment: str) -> tp.List[np.ndarray]:
     """
     Description:
-        The taught and the optimised path of one segment.
+        One segment's path of a variant from its own points: the taught via points for the taught
+        variant, the generated via points via_<from>_<to>_<nn> otherwise; the ends are the
+        variant's own (the delivered station joints, SPEC 10.5; a proposal's drop).
 
     Args:
-        (1) points [Dict<string, Robot_Point_Str>]: The program's points.
-        (2) generated [Dict<string, Robot_Point_Str>]: The points of the generated output (its own ends: the
-                                                       delivered station joints, SPEC 10.5).
+        (1) variant [string]: The variant.
+        (2) points [Dict<string, Robot_Point_Str>]: The variant's points.
         (3) segment [string]: 'S1', 'S2' or 'S3'.
 
     Returns:
-        (1) parameter [Dict<string, List<Vector<float> 1x6>>]: 'taught' and 'optimised'.
+        (1) parameter [List<Vector<float> 1x6>]: The configurations (rad).
     """
 
     start, goal = Segments()[segment]
     prefix = 'via_%s_%s_' % (start, goal)
-    vias = sorted(name for name in generated if name.startswith(prefix))
-    return {'taught': [np.asarray(points[n].Q) for n in [start] + CONST_TAUGHT_VIAS[segment] + [goal]],
-            'optimised': [np.asarray(generated[n].Q) for n in [start] + vias + [goal]]}
+    vias = CONST_TAUGHT_VIAS[segment] if variant == 'taught' else sorted(name for name in points if name.startswith(prefix))
+    return [np.asarray(points[n].Q) for n in [start] + vias + [goal]]
+
+
+def Variant_Title(variant: str, moves: tp.List[Move_Str]) -> str:
+    """
+    Description:
+        The variant's name, its note when it has not run on the robot (CONST_NOTES) and its
+        estimated home -> home time (r = 0, the gripper excluded), for the overlay and the printout.
+
+    Args:
+        (1) variant [string]: The variant.
+        (2) moves [List<Move_Str>]: Its moves.
+
+    Returns:
+        (1) parameter [string]: The title.
+    """
+
+    note = ' (%s)' % CONST_NOTES[variant] if variant in CONST_NOTES else ''
+    return '%s%s, estimated %.2f s' % (variant, note, sum(m.Duration for m in moves))
 
 
 def Label(scene: Scene_Cls, path: tp.List[np.ndarray], station_q: tp.List) -> tp.Tuple[str, int, int]:
@@ -500,6 +519,7 @@ def Print_Steps(playlist: tp.List, openings: tp.Dict[str, float], speed: float) 
 
     for variant, start, moves, frames in playlist:
         print('[INFO] %s: start at %s (gripper %s).' % (variant, start, CONST_ENTRY_STATE))
+        print('[INFO] Variant %s.' % Variant_Title(variant, moves))
         elapsed = 0.0
         for k, move in enumerate(moves):
             if move.Kind == 'gripper':
@@ -575,7 +595,8 @@ def Play(viewer: tp.Any, playlist: tp.List, scenes: tp.Dict[str, Scene_Cls], ope
                 view.Set_Joints(Frame_Configuration(move, t))
             viewer.set_texts((mujoco.mjtFontScale.mjFONTSCALE_150, mujoco.mjtGridPos.mjGRID_TOPLEFT,
                               'Path %s\n%s\n%s\ngripper %s %.1f mm\nt = %.2f s (estimated, x%g)'
-                              % (title, variant, Move_Text(move), move.State, openings[move.State] * 1e3, elapsed + t, speed),
+                              % (title, Variant_Title(variant, moves), Move_Text(move), move.State, openings[move.State] * 1e3,
+                                 elapsed + t, speed),
                               move.Label or '-'))
             viewer.sync()
             time.sleep(1.0 / CONST_FPS)
@@ -614,19 +635,21 @@ def main():
         straight TCP line, at the estimated real time times --speed, the gripper switching between
         case 17's holding opening and open at the gripper actions. Every move is labelled by the
         rule of its kind (taught lines: taught rule; generated movej: generated rule); a move inside
-        machine (a) is labelled "model not valid here" (KNOWN_ISSUES). Entry 3 also prints the
-        strict comparison: S1 - S3 of both variants judged by the generated rule.
+        machine (a) is labelled "model not valid here" (KNOWN_ISSUES). The variants are read from
+        Data/Generated/variants/ (Example/write_variants.py); the overlay names each with its
+        estimated time, c2 and c3 as proposals not verified on the robot. Entry 6 plays all five and
+        prints the strict comparison: S1 - S3 of every variant judged by the generated rule.
 
-            macOS:   .venv/bin/mjpython Example/replay_rotation.py --path 2
+            macOS:   .venv/bin/mjpython Example/replay_rotation.py --path 3
             List:    .venv/bin/python Example/replay_rotation.py --list
-            Images:  .venv/bin/python Example/replay_rotation.py --path 2 --screenshots DIR
-            Tests:   .venv/bin/python Example/replay_rotation.py --path 2 --headless [--skip-check]
+            Images:  .venv/bin/python Example/replay_rotation.py --path 3 --screenshots DIR
+            Tests:   .venv/bin/python Example/replay_rotation.py --path 3 --headless [--skip-check]
 
         The scene is built without the visual STL and the viewer starts with the collision geometry
         (geom group 3) shown; --with-stl loads the STL (geom group 1) as well.
     """
 
-    parser = argparse.ArgumentParser(description='Replay the taught or optimised rotation sequence of case 17.')
+    parser = argparse.ArgumentParser(description='Replay a variant of the rotation sequence of case 17, or all five.')
     parser.add_argument('--config', default=CONST_DEFAULT_CONFIG_FILE, help='the cell configuration (default: %(default)s)')
     parser.add_argument('--path', type=int, default=0, help='the catalogue number (without it the catalogue is printed and asked)')
     parser.add_argument('--list', action='store_true', help='print the catalogue and exit')
@@ -665,29 +688,29 @@ def main():
                       else Scene_Cls(dataclasses.replace(cfg, Opening=openings['open']), with_environment=True))
     print('[INFO] Scene built in %.1f s: %d geoms; visual mesh %s.'
           % (time.time() - t0, scenes['holding'].Model.ngeom, 'loaded' if with_visual else 'not loaded'))
-    with open(CONST_POSITIONS, encoding='utf-8') as handle:
-        program_points = Read_URScript(handle.read()).Points
-    station_q = [program_points[n].Q for n in CONST_STATION_POINTS]
     for variant, (start, moves) in paths.items():
+        station_q = [loaded[variant][1][n].Q for n in CONST_STATION_POINTS]
         if args.skip_check:
             for move in moves:
                 move.Label = '' if move.Kind == 'gripper' else 'clearance not checked (--skip-check)'
         else:
             counts = Check_Moves(moves, scenes, cfg, station_q)
             print('[INFO] %s: %s.' % (variant, '; '.join('%d move(s) %s' % (n, label) for label, n in sorted(counts.items()))))
-    if len(variants) == 2 and not args.skip_check:
-        # The strict comparison: S1 - S3 of both variants by the generated rule (why S2 was optimised).
+    if len(variants) > 1 and not args.skip_check:
+        # The strict comparison: S1 - S3 of every variant by the generated rule.
         for segment in ('S1', 'S2', 'S3'):
             scene = scenes['open' if segment == 'S2' else 'holding']
-            for variant, path in Paths(program_points, loaded['optimised'][1], segment).items():
-                label, samples, violations = Label(scene, path, station_q)
+            for variant in variants:
+                points = loaded[variant][1]
+                path = Variant_Path(variant, points, segment)
+                label, samples, violations = Label(scene, path, [points[n].Q for n in CONST_STATION_POINTS])
                 print('[INFO] Strict comparison (generated rule), case %d %s %s (%d via points): %s - %d samples, %d violations.'
                       % (CONST_CASE, segment, variant, len(path) - 2, label, samples, violations))
     playlist = [(variant, start, moves, Frames(moves, args.speed)) for variant, (start, moves) in paths.items()]
     if args.headless or args.screenshots:
         Print_Steps(playlist, openings, args.speed)
         if args.screenshots:
-            Write_Screenshots(args.screenshots, number, paths, scenes, station_q)
+            Write_Screenshots(args.screenshots, number, paths, scenes, [loaded[variants[0]][1][n].Q for n in CONST_STATION_POINTS])
         return 0
     import mujoco.viewer
     view = scenes['holding']

@@ -61,29 +61,45 @@ program; run them at reduced speed first:
 .venv/bin/python Example/plan_rotation.py --workers 8
 ```
 
-`--workers N` plans S1 – S3 at once in N processes; the output is the same for every N (about 8
+`--workers N` plans S1 – S3 at once in N processes; the output is the same for every N (4 – 8
 minutes with 8 on an M2 Pro, 15 with 1).
+
+Every variant of case 17 home → home is kept for comparison in `Data/Generated/variants/<name>/`,
+each as a points file and a sequence in the same form, with its status in the header: `taught` (the
+program), `b_optimised` (the previous optimisation, 17.50 s), `c1` (delivered, = `Data/Generated/`),
+`c2` and `c3` (proposals for re-teaching the drop on another IK branch, **not verified on the
+robot**). `comparison.md` and `comparison.csv` compare them per segment and in total (estimated
+durations, joint and TCP path lengths, heights, clearance). One script writes them all (about 15
+minutes with 8 workers; `--table-only` re-measures the written files):
+
+```bash
+.venv/bin/python Example/write_variants.py --workers 8
+```
 
 Replay a path in the viewer (macOS: `mjpython`), or write screenshots instead:
 
 ```bash
-.venv/bin/mjpython Example/replay_rotation.py --path 2
-.venv/bin/mjpython Example/replay_rotation.py --path 3 --speed 0.5
-.venv/bin/python Example/replay_rotation.py --path 2 --screenshots <directory>
+.venv/bin/mjpython Example/replay_rotation.py --path 3
+.venv/bin/mjpython Example/replay_rotation.py --path 6 --speed 2
+.venv/bin/python Example/replay_rotation.py --path 3 --screenshots <directory>
 ```
 
-| `--path` | Path (case 17, home → home) |
+| `--path` | Path (case 17, home → home, from `Data/Generated/variants/`) |
 |---|---|
 | 1 | taught |
-| 2 | optimised |
-| 3 | taught, then optimised, with the strict comparison |
+| 2 | b_optimised: the previous optimisation |
+| 3 | c1: delivered |
+| 4 | c2: proposal – not verified on the robot |
+| 5 | c3: proposal – not verified on the robot |
+| 6 | all five, one after another, with the strict comparison |
 
 Without `--path` the catalogue is printed and a number asked; `--list` prints it. `--speed` is
 relative to the estimated real time (1.0). movel moves the TCP on a straight line; the gripper
 switches between the holding width and open at the gripper actions. Each move is labelled by its
-clearance (taught lines by the taught rule, generated moves by the generated rule). Entry 3 also
-prints S1 – S3 of both variants judged by the generated rule. `--headless` prints every move instead
-of opening the viewer.
+clearance (taught lines by the taught rule, generated moves by the generated rule). The overlay
+names the variant with its estimated time (c2 and c3 as proposals). Entry 6 also prints S1 – S3 of
+every variant judged by the generated rule. `--headless` prints every move instead of opening the
+viewer.
 
 `Data/Programs/sf1_plc_v4/` holds verbatim extracts of the owner's robot program (its learned points
 and the whole cases 17 and 18, kept as ground truth for the model) and, written from them, the

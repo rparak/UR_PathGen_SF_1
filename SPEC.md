@@ -1266,9 +1266,10 @@ decide the joints of a pose; an unknown name is refused), `--list` prints every 
 violating pair.
 
 **`Example/replay_rotation.py`** replays one path of a numbered catalogue in one viewer window,
-each case 17 home → home: 1 taught (`Data/Programs/sf1_plc_v4/`), 2 optimised (`Data/Generated/`),
-3 taught then optimised with the strict comparison. *Corrected 2026-10-18: 1 – 4 were the whole
-cases 17 and 18, 5 and 6 their rotation sequences.* `--path N`
+each case 17 home → home, read from `Data/Generated/variants/` (§10.6): 1 taught, 2 b_optimised,
+3 c1 (delivered), 4 c2 and 5 c3 (proposals – not verified on the robot), 6 all five one after
+another with the strict comparison. *Corrected 2026-10-19: 1 taught, 2 optimised, 3 both; corrected
+2026-10-18: 1 – 4 were the whole cases 17 and 18, 5 and 6 their rotation sequences.* `--path N`
 selects, without it the catalogue is printed and a number asked; `--list` prints it. Read through
 `Read_Motion_Sequence`, the one reader of the motion-sequence format.
 - **Motion.** The path starts at its first target, home. A movej is joint-linear; a movel moves the TCP on the straight line to the DH TCP of its
@@ -1286,10 +1287,12 @@ selects, without it the catalogue is printed and a number asked; `--list` prints
   holding scene; the open state is shown by its finger joints, the pad-span hull hidden. Every check
   uses the scene of the move's own state.
 - **Labels.** Each move is checked by the rule of its kind: generated movej by the generated rule,
-  program lines by the taught rule; a movel along its TCP line. Entry 3 also prints the strict
-  comparison: S1 – S3 of both variants judged by the generated rule. `--skip-check` replays without
-  the check (labelled so). The overlay shows the path, the variant, the move and its section, the
-  gripper state and width, the estimated elapsed time and the label.
+  program lines by the taught rule; a movel along its TCP line; the generated rule with the
+  variant's own station points. Entry 6 also prints the strict comparison: S1 – S3 of every variant
+  judged by the generated rule. `--skip-check` replays without the check (labelled so). The overlay
+  shows the path, the variant with its estimated home → home time (c2 and c3 marked "proposal - not
+  verified on the robot", `Variant_Title`, also printed), the move and its section, the gripper
+  state and width, the estimated elapsed time and the label.
 
 **Machine (a) interior.** A configuration that comes within `Clearance.Environment` of the interior
 hull of machine (a) (component 1638, `KNOWN_ISSUES.md`) is labelled *model not valid here*, never as
@@ -1314,7 +1317,7 @@ replayed home → home paths stay far from it; the position viewer shows the lab
 | `test/Example/test_write_taught_programs.py` | the simplified program is, after its header, exactly case 17 home → home as the owner states it (§1, typed in the test) and one contiguous run of the program: each movej/movel the program's line without indentation (home `r=0.01`), a gripper comment naming the program line at each gripper action, nothing else; its points file holds exactly those targets in first-use order with the extract's tokens; the script writes exactly the committed two files, byte for byte |
 | `test/Example/test_plan_rotation.py` | `--workers 0` is refused before anything is written; *slow*: the full run with 4 workers, from an unrelated directory, writes both files byte for byte as committed (written by the sequential run); the holding opening is case 17's configured `Tool.Holding_Openings` value (not another entry's, not `Tool.Opening`), open is 85 mm; a configuration without case 17 is refused; `Rotation_Entries` is home → … → home only: a generated start at home (the program blends, r=0.01), S1 – S3 generated, the station lines verbatim, no loading move |
 | `test/Example/test_visualize_position.py` | headless: `home_q` reports "clearance kept (taught rule)" and `load3` "model not valid here", each at case 17's configured 50 mm with its source; `home_p` and an unknown name are refused (exit 1, no scene built); `--list` prints every position of the extract in order |
-| `test/Example/test_replay.py` | every catalogue entry (case 17 home → home; headless, `--skip-check`) visits the moves of its files in order (patterns typed in the test), each by the rule of its kind, the gripper switching at the actions (85 mm open, 50 mm closed) and every move run in the state after them, each movel on its TCP line (≥ 9 steps), starting at home; `--speed 4` plays in a quarter of the estimated time, `1.0` in the estimated time, within a frame per move; a path outside the catalogue (given or typed), and a speed that is 0, negative or NaN, are refused before a scene is built; `--list` prints the three entries; path 2 with the dense check and screenshots, without `--with-stl`: built without the visual STL (same geoms), its 11 moves each keep the rule of their kind (generated movej the generated rule, program lines the taught rule) |
+| `test/Example/test_replay.py` | every catalogue entry (case 17 home → home; headless, `--skip-check`) visits the moves of its files in order (patterns typed in the test), each by the rule of its kind, the gripper switching at the actions (85 mm open, 50 mm closed) and every move run in the state after them, each movel on its TCP line (≥ 9 steps), starting at home; `--speed 4` plays in a quarter of the estimated time, `1.0` in the estimated time, within a frame per move; a path outside the catalogue (given or typed), and a speed that is 0, negative or NaN, are refused before a scene is built; `--list` prints the six entries; path 3 (c1) with the dense check and screenshots, without `--with-stl`: built without the visual STL (same geoms), its 11 moves each keep the rule of their kind (generated movej the generated rule, program lines the taught rule); path 6 names the five variants in order with their estimated times, c2 and c3 as proposals not verified on the robot |
 | `test/Install/test_install.py` | `bash -n`; sourced steps under a hermetic `PATH`: OS detection (Darwin arm64, Linux), Python 3.11 resolution (`python3` never called), hash verification fails on a tampered model file, every log line in the log format |
 | `.claude/skills/project-style-rpx/scripts/test_check_style.py` | the checker itself (outside `test/`) |
 
