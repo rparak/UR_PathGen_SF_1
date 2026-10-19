@@ -31,7 +31,13 @@ import dataclasses
 import importlib.util
 # Pytest (Testing framework) [pip3 install pytest]
 import pytest
+# Math (Mathematical functions)
+import math
+# Numpy (Array computing) [pip3 install numpy]
+import numpy as np
 # Custom Lib.:
+#   ../Kinematics/Core — the pose of a point
+from Kinematics.Core import TCP_Pose
 #   ../Configuration/Core — the error a missing case raises
 from Configuration.Core import Configuration_Error_Cls
 #   ../URScript/Core — the case extract
@@ -135,3 +141,29 @@ def test_a_parallel_run_writes_the_committed_output(root, tmp_path):
         with open(os.path.join(root, 'Data', 'Generated', name), 'rb') as handle:
             committed = handle.read()
         assert (tmp_path / 'out' / name).read_bytes() == committed, name
+
+
+def test_the_delivered_points_turn_only_the_picks_wrist_3(root, points, cfg):
+    """
+    Description:
+        Delivered_Points (owner, 2026-10-19, SPEC 10.5): wrist 3 of Waypoint_18, pick_rotate_1 and
+        Waypoint_6 one turn lower (taught 4.739 rad), every other joint and every _p token the
+        program's, every other point unchanged; the same arm pose (DH TCP equal to 1e-12 m and
+        rad); the given points are not changed.
+    """
+
+    plan = _Plan_Module(root)
+    before = {name: list(point.Q_Tokens) for name, point in points.items()}
+    delivered = plan.Delivered_Points(points)
+    turned = ('Waypoint_18', 'pick_rotate_1', 'Waypoint_6')
+    for name, point in points.items():
+        d = delivered[name]
+        assert d.P_Tokens == point.P_Tokens
+        if name not in turned:
+            assert d is point
+            continue
+        assert d.Q_Tokens[:5] == point.Q_Tokens[:5] and point.Q[5] == pytest.approx(4.739, abs=0.001)
+        assert d.Q[5] == pytest.approx(point.Q[5] - 2.0 * math.pi, abs=1e-11)
+        a, b = TCP_Pose(d.Q, cfg.TCP_Offset), TCP_Pose(point.Q, cfg.TCP_Offset)
+        assert np.max(np.abs(a - b)) < 1e-12
+    assert {name: list(point.Q_Tokens) for name, point in points.items()} == before

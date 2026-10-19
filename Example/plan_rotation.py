@@ -30,6 +30,8 @@ if CONST_SRC not in sys.path:
     sys.path.append(CONST_SRC)
 # Argparse (Command-line parsing)
 import argparse
+# Math (Mathematical functions)
+import math
 # Re (Regular expressions)
 import re
 # Dataclasses (Data Classes)
@@ -45,7 +47,7 @@ import numpy as np
 from Configuration.Core import (Load_Configuration, Cell_Configuration_Str, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE,
                                 CONST_PROJECT_ROOT)
 #   ../URScript/Core — the program extracts and the output files
-from URScript.Core import (Read_URScript, Read_Program_Excerpt, Make_Generated_Point, Make_Document, Write_URScript,
+from URScript.Core import (Read_URScript, Read_Program_Excerpt, Make_Generated_Point, Make_Document, Write_URScript, Replace_Joints,
                            Write_Motion_Sequence, Rotation_Sequence, Gripper_Comment, Program_Line_Str, URScript_Error_Cls)
 #   ../Kinematics/Core — the informational _p of a via point
 from Kinematics.Core import TCP_Pose, Matrix_To_Pose
@@ -78,6 +80,14 @@ CONST_TAUGHT_VIAS = {'S1': ['Waypoint_1'], 'S2': ['Waypoint_1', 'Waypoint_2', 'W
 # The fixed station points (the endpoint neighbourhood of the generated rule).
 #   Unit [Tuple<string>]
 CONST_STATION_POINTS = ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5', 'Waypoint_18', 'pick_rotate_1', 'Waypoint_6')
+# The delivered station joints (owner, 2026-10-19: "q6 representative chosen to avoid an unnecessary
+# wrist-3 turn"): the pick's three points use wrist 3 one turn lower, 4.739 - 2 pi = -1.544 rad. The
+# same arm pose and the same _p; S3 turns wrist 3 by 1.5 instead of 4.7 rad (home -> home 17.50 ->
+# 14.66 s, estimate). The one exception to never turning a learned joint (SPEC 10.5): the robot's
+# get_inverse_kin(<name>_p, qnear=<name>_q) of the pick's lines takes the solution nearest the new
+# qnear, which the first run at reduced speed confirms (KNOWN_ISSUES). Point -> (joint, turns).
+#   Unit [Dict<string, Tuple<int, int>>] (index, 2 pi)
+CONST_Q_TURNS = {'Waypoint_18': (5, -1), 'pick_rotate_1': (5, -1), 'Waypoint_6': (5, -1)}
 # Gripper opening after rq_set_pos_spd_for(0, ...): the full 85 mm stroke; the release opening of
 # 85 mm is real, the part is released into a magazine with free space (owner, 2026-10-18, SPEC 4.9).
 # While the part is held, case 17's Tool.Holding_Openings entry applies (Opening).
@@ -359,8 +369,42 @@ def Learned_Order(entries: tp.Sequence[tp.Tuple[str, str]], lines: tp.Sequence[P
     return names
 
 
+def Delivered_Points(points: tp.Dict) -> tp.Dict:
+    """
+    Description:
+        The program's points with the delivered station joints (CONST_Q_TURNS): each listed joint
+        turned by its whole turns, every other token the program's (Replace_Joints).
+
+    Args:
+        (1) points [Dict<string, Robot_Point_Str>]: The program's points.
+
+    Returns:
+        (1) parameter [Dict<string, Robot_Point_Str>]: A new dictionary; the given points are not changed.
+    """
+
+    out = dict(points)
+    for name, (joint, turns) in CONST_Q_TURNS.items():
+        q = list(points[name].Q)
+        q[joint] += turns * 2.0 * math.pi
+        out[name] = Replace_Joints(points[name], q)
+    return out
+
+
+def Delivered_Status() -> tp.List[str]:
+    """
+    Description:
+        The status header lines of the delivered output: which station joints differ from the program.
+
+    Returns:
+        (1) parameter [List<string>]: Comment lines.
+    """
+
+    return ['# Delivered. %s use wrist 3 one turn lower than taught (owner, 2026-10-19: q6 representative chosen'
+            % ', '.join(CONST_Q_TURNS), '# to avoid an unnecessary wrist-3 turn); same pose, same _p (SPEC 10.5).']
+
+
 def Write_Outputs(out: str, cfg: Cell_Configuration_Str, points: tp.Dict, lines: tp.Sequence[Program_Line_Str],
-                  generated: tp.Dict[str, tp.List[np.ndarray]], penalty_weight: float) -> None:
+                  generated: tp.Dict[str, tp.List[np.ndarray]], penalty_weight: float, status: tp.Sequence[str]) -> None:
     """
     Description:
         Write the optimised rotation sequence: SF1_Rotation_17.urscript (the learned points it moves
@@ -370,10 +414,11 @@ def Write_Outputs(out: str, cfg: Cell_Configuration_Str, points: tp.Dict, lines:
     Args:
         (1) out [string]: The output directory.
         (2) cfg [Cell_Configuration_Str(object)]: The cell configuration (the TCP of the informational _p).
-        (3) points [Dict<string, Robot_Point_Str>]: The program's points.
+        (3) points [Dict<string, Robot_Point_Str>]: The points the paths were planned between (learned).
         (4) lines [List<Program_Line_Str>]: The program lines of the rotation sequence (Rotation_Sequence).
         (5) generated [Dict<string, List<Vector<float> 1x6>>]: The verified path of S1, S2 and S3, ends included (rad).
         (6) penalty_weight [float]: The clearance penalty weight the paths were planned with (s/m).
+        (7) status [List<string>]: Comment lines saying what the output is, after the description.
     """
 
     vias = {segment: ['via_%s_%s_%02d' % (Segments()[segment][0], Segments()[segment][1], k + 1)
@@ -387,14 +432,14 @@ def Write_Outputs(out: str, cfg: Cell_Configuration_Str, points: tp.Dict, lines:
     header = ['# Case %d of sf1_plc_v4.script, the rotation sequence home -> home, optimised: the learned points it' % CONST_CASE,
               '# moves to (verbatim, in the order of first use) and the generated via points of S1-S3 (_p informational,',
               '# the robot is driven by _q). Generated by Example/plan_rotation.py, seed %d, penalty weight %g s/m.'
-              % (CONST_SEED, penalty_weight),
+              % (CONST_SEED, penalty_weight)] + list(status) + [
               '# Simulation passed != safe on the robot: run it on the real cell at reduced speed first.']
     os.makedirs(out, exist_ok=True)
     with open(os.path.join(out, 'SF1_Rotation_%d.urscript' % CONST_CASE), 'w', encoding='utf-8') as handle:
         handle.write(Write_URScript(Make_Document([points[name] for name in learned] + via_points, header)))
     sequence_header = ['# Case %d of sf1_plc_v4.script, the rotation sequence home -> home, optimised: the station lines' % CONST_CASE,
                        '# verbatim from the program, the transfer segments S1-S3 generated movej (the program\'s a and v,',
-                       '# r=0). Points: SF1_Rotation_%d.urscript.' % CONST_CASE,
+                       '# r=0). Points: SF1_Rotation_%d.urscript.' % CONST_CASE] + list(status) + [
                        '# Simulation passed != safe on the robot: run it at reduced speed first.']
     with open(os.path.join(out, 'SF1_Rotation_%d_Sequence.script' % CONST_CASE), 'w', encoding='utf-8') as handle:
         handle.write(Write_Motion_Sequence(entries, sequence_header, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN))
@@ -428,12 +473,14 @@ def main():
         cfg = Load_Configuration(args.config)
         openings = {segment: Opening(cfg, state) for segment, state in CONST_SEGMENT_STATE.items()}
         with open(CONST_POSITIONS, encoding='utf-8') as handle:
-            points = Read_URScript(handle.read()).Points
+            program_points = Read_URScript(handle.read()).Points
         with open(CONST_CASES_FILE, encoding='utf-8') as handle:
             lines = Rotation_Sequence(Read_Program_Excerpt(handle.read())[CONST_CASE], CONST_POINTS['home'])
     except (Configuration_Error_Cls, URScript_Error_Cls, OSError) as error:
         print('[ERROR] %s' % error)
         return 1
+    # The delivered station joints (CONST_Q_TURNS); the taught rows of the report keep the program's.
+    points = Delivered_Points(program_points)
     print('[INFO] Case %d: holding opening %.1f mm (%s), open %.1f mm.'
           % (CONST_CASE, cfg.Holding_Openings[CONST_CASE][0] * 1e3, cfg.Holding_Openings[CONST_CASE][1], CONST_RELEASE_OPENING * 1e3))
     station_q = [points[name].Q for name in CONST_STATION_POINTS]
@@ -453,11 +500,11 @@ def main():
     rows, generated = [], {}
     for (segment, (start, goal)), result in zip(Segments().items(), results):
         scene = scenes[openings[segment]]
-        taught = [np.asarray(points[n].Q) for n in [start] + CONST_TAUGHT_VIAS[segment] + [goal]]
+        taught = [np.asarray(program_points[n].Q) for n in [start] + CONST_TAUGHT_VIAS[segment] + [goal]]
         generated[segment] = result.Path
         rows.append((segment, Measure(scene, taught, station_q), Measure(scene, result.Path, station_q), result))
     # Outputs: the points and the sequence, written only after every segment is verified.
-    Write_Outputs(args.out, cfg, points, lines, generated, args.penalty_weight)
+    Write_Outputs(args.out, cfg, points, lines, generated, args.penalty_weight, Delivered_Status())
     # Report.
     print('[INFO] Case %d (estimated durations: trapezoid on the leading joint, a=%s, v=%s, blends and gripper excluded;'
           % (CONST_CASE, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN))

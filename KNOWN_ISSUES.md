@@ -131,13 +131,14 @@ deliverable) pass the full generated-rule check in simulation. What that does no
 
 - **Durations are estimates:** a trapezoid on the leading joint with the program's a and v, a stop
   at every via point; the controller's profile, blends and the gripper's time are not modelled. The
-  cycle-time gain (23.37 -> 17.50 s home -> home, estimate) is not measured.
+  cycle-time gain (23.37 -> 14.66 s home -> home, estimate; 17.50 s before the pick's wrist-3 turn)
+  is not measured.
 - **Clearance has no reserve beyond the margins:** the hard limits are 20 mm, and 5 mm within
   50 mm of a station point (the holder only). The clearance penalty (weight 0.5 s/m, the owner's
   choice) only prefers clearance below 30 mm, and machine (a) outside the zone is held at 30 mm
   (±10 mm position accuracy): outside the station neighbourhood the optimised paths keep 30.4 mm
-  (S1), 41.7 mm (S2) and 49.3 mm (S3); near the station S2 passes the stub at 10.1 mm, as close as
-  its taught end (re-planned 2026-10-18 on the final scene, SPEC §17).
+  (S1), 51.7 mm (S2) and 59.4 mm (S3); near the station S2 passes the stub at 10.1 mm, as close as
+  its taught end (re-planned 2026-10-19, SPEC §17).
 - **The optimised paths depend on the estimated machine position:** they keep 30 mm to it, which
   covers the stated ±10 mm; with the machine at the earlier estimate (−100 mm, post fitted) S1 would
   penetrate the top profile by 18.5 mm and S2 by 0.8 mm (S3 would keep 11.5 mm). The space they use is freed only by the owner's estimate of a
@@ -150,6 +151,22 @@ deliverable) pass the full generated-rule check in simulation. What that does no
 - **Impact:** run every generated path on the robot at reduced speed first, with someone at the
   stop button; no real robot is available.
 - **Pinned by:** `test/Planner/test_core.py` (the committed paths pass `Verify_Path`).
+
+## The pick's wrist 3 is one turn lower than taught: unconfirmed on the robot
+
+The delivered output gives Waypoint_18, pick_rotate_1 and Waypoint_6 wrist 3 = −1.544 rad, one turn
+below the taught 4.739 rad (owner, 2026-10-19, SPEC §10.5). The pose and `_p` are unchanged; the
+program's pick lines solve `get_inverse_kin(<name>_p, qnear=<name>_q)` on the robot.
+
+- **Not verified:** that the controller's IK, given the new qnear, returns the configuration one turn
+  lower (the simulation drives `_q` directly), and that the gripper cable and any wrist-3 safety
+  limit allow it. The tool cable is not modelled; over the cycle wrist 3 now spans 0 – 1.50 rad and
+  −1.54 rad, against 0 – 4.74 rad taught, so it winds less, not more.
+- **Impact:** the first run at reduced speed, with someone at the stop button, watches wrist 3 at
+  the pick (Waypoint_18 and pick_rotate_1) and on S3.
+- **Pinned by:** `test/Example/test_plan_rotation.py::test_the_delivered_points_turn_only_the_picks_wrist_3`,
+  `test/Planner/test_core.py::test_the_station_points_keep_their_tokens`.
+- **What would close it:** the first run on the robot.
 
 ## The replay's timing is an estimate
 

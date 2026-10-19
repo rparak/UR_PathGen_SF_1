@@ -363,7 +363,8 @@ def Paths(points: tp.Dict, generated: tp.Dict, segment: str) -> tp.Dict[str, tp.
 
     Args:
         (1) points [Dict<string, Robot_Point_Str>]: The program's points.
-        (2) generated [Dict<string, Robot_Point_Str>]: The points of the generated output.
+        (2) generated [Dict<string, Robot_Point_Str>]: The points of the generated output (its own ends: the
+                                                       delivered station joints, SPEC 10.5).
         (3) segment [string]: 'S1', 'S2' or 'S3'.
 
     Returns:
@@ -374,7 +375,7 @@ def Paths(points: tp.Dict, generated: tp.Dict, segment: str) -> tp.Dict[str, tp.
     prefix = 'via_%s_%s_' % (start, goal)
     vias = sorted(name for name in generated if name.startswith(prefix))
     return {'taught': [np.asarray(points[n].Q) for n in [start] + CONST_TAUGHT_VIAS[segment] + [goal]],
-            'optimised': [np.asarray(points[start].Q)] + [np.asarray(generated[n].Q) for n in vias] + [np.asarray(points[goal].Q)]}
+            'optimised': [np.asarray(generated[n].Q) for n in [start] + vias + [goal]]}
 
 
 def Label(scene: Scene_Cls, path: tp.List[np.ndarray], station_q: tp.List) -> tp.Tuple[str, int, int]:

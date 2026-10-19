@@ -812,3 +812,28 @@ workers, measured 2026-10-19), or a machine with more performance cores is used.
 Pinned by `test/Planner/test_core.py::test_plan_all_gives_the_same_paths_with_one_or_two_workers`,
 `test/Planner/test_core.py::test_plan_all_names_the_segment_that_fails` and
 `test/Example/test_plan_rotation.py::test_a_parallel_run_writes_the_committed_output` (slow).
+
+## The pick's wrist 3 is delivered one turn lower: the one exception to never turning a learned joint
+
+**Decision.** In the delivered output Waypoint_18, pick_rotate_1 and Waypoint_6 use wrist 3 =
+taught − 2π (`CONST_Q_TURNS`, `Delivered_Points` in `Example/plan_rotation.py`; owner, 2026-10-19:
+"q6 representative chosen to avoid an unnecessary wrist-3 turn"). Their `_p` and every other `_q`
+token stay the program's; the program's pick lines stay verbatim and take the new qnear.
+
+**Why.** Wrist 3 at 4.739 rad and at −1.544 rad is the same arm pose, so nothing at the station
+changes and no re-teaching is needed; but S3 had to unwind 4.7 rad of wrist 3 on the way home,
+the leading joint of its estimate. With the lower turn S3 takes 2.74 s instead of 5.62 s (home →
+home 17.50 → 14.66 s, estimate; the branch study of 2026-10-19). The study's other gains need the
+drop on another IK branch (c2, c3), which means re-teaching on a robot that is not available.
+
+**Alternatives.** Turning wrist 3 inside S3 (a generated via point): the joint still travels
+4.7 rad. Wrapping every joint into [−π, π]: changes taught configurations everywhere and hides the
+branch (SPEC §10.5). Re-teaching the drop (c2, 12.06 s; c3, 13.86 s): kept as proposals in
+`Data/Generated/variants/` until a robot is available.
+
+**Revisit if** the first run on the robot shows the controller choosing the other solution, the
+gripper cable or a wrist-3 safety limit objects, or the pick is re-taught.
+
+Pinned by `test/Example/test_plan_rotation.py::test_the_delivered_points_turn_only_the_picks_wrist_3`,
+`test/URScript/test_core.py::test_replacing_joints_keeps_the_pose_and_every_unchanged_token` and
+`test/Planner/test_core.py::test_the_station_points_keep_their_tokens`.

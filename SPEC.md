@@ -1135,10 +1135,20 @@ value. The planner and writer stay on the branch of A and B. A test feeds A and 
 path (the milestone's trivial path [A, B]) → write and asserts the tokens are unchanged, plus a
 synthetic point with a joint at 4.0 rad that must come out as 4.0.
 
+**One owner-approved exception** (2026-10-19, "q6 representative chosen to avoid an unnecessary
+wrist-3 turn"): in the delivered output the pick's three station points, Waypoint_18,
+pick_rotate_1 and Waypoint_6, use wrist 3 one turn lower than taught (4.739 − 2π = −1.544 rad;
+`CONST_Q_TURNS` in `Example/plan_rotation.py`, `Delivered_Points`). The arm pose and the `_p` are
+the program's; only that `_q` token changes (`Replace_Joints`, a generated token), every other token
+is kept. S3 then turns wrist 3 by 1.5 rad instead of 4.7 (home → home 17.50 → 14.66 s, estimate). The
+program's pick lines stay verbatim: `get_inverse_kin(<name>_p, qnear=<name>_q)` takes the solution
+nearest the new qnear on the robot, which the first run at reduced speed confirms (`KNOWN_ISSUES.md`).
+No re-teaching: the pose is unchanged. No other joint is turned.
+
 ### 10.6 Planner and the rotation-sequence output
 
 *Since the machine shift (2026-10-18) S1 – S3 are optimised for time (home → home 23.37 → 17.50 s,
-estimate), not for clearance, and the paths written on the final scene use the space the estimated
+estimate; 14.66 s since the pick's wrist-3 turn, §10.5, 2026-10-19), not for clearance, and the paths written on the final scene use the space the estimated
 shift frees, keeping 30 mm to machine (a) outside the zone (§9.7, §17). Corrected 2026-10-19: the
 taught S1 – S3 were said to all keep the generated rule; since the station-box rule (§9.7) the taught
 S2 does not: its last leg, Waypoint_3 → Waypoint_18, comes 8.3 mm to the station stub, below the
@@ -1148,7 +1158,8 @@ Under the taught rule it is clear.*
 **Segments** (case 17, §1). S1 home → drop_rotate_1 (holding: case 17's `Tool.Holding_Openings`
 entry, 50 mm), S2 Waypoint_5 → Waypoint_18 (open, 85 mm: the full stroke for `rq_set_pos_spd_for(0, ...)`; the
 release opening is real, owner 2026-10-18, §4.9), S3 Waypoint_6 → home (holding). The ends are the
-program's `_q` tokens, never wrapped. The fixed station points of the generated rule (§9.7) are case
+program's `_q` tokens, never wrapped, except the pick's wrist 3 (§10.5): S2 ends and S3 starts one
+turn lower. The fixed station points of the generated rule (§9.7) are case
 17's six: drop_rotate_1, Waypoint_4, Waypoint_5, Waypoint_18, pick_rotate_1, Waypoint_6. *Corrected
 2026-10-18: both cases' eleven, while case 18 was a deliverable.*
 
@@ -1537,5 +1548,19 @@ Measured on the development Mac (M2 Pro), Python 3.11, mujoco 3.16.0.
   +0.50 s (one via more, kept at its taught end's 10.1 mm to the stub), S3 +0.35 s (no longer direct).
   At the earlier −100 mm the new paths would still pass into the top profile (S1 −18.5 mm, S2
   −0.8 mm); S3 would keep 11.5 mm: the 10 mm margin covers the stated ±10 mm, not the whole shift.
+- **The pick's wrist 3 one turn lower; re-plan (2026-10-19, §10.5).** Owner decision after the branch
+  study (variant c1). The pick's three points use q6 − 2π; S1 is unchanged (its ends are), S2 and S3
+  re-planned with the same seed, budget and weight, 8 workers, 263 s; each `Verify_Path`-checked,
+  0 violations. From the planner's report ("outside" = outside the station neighbourhood):
+
+  | S | Before (17.50 s, §17 above) | After (written) |
+  |---|---|---|
+  | S1 | 4.76 s, 1 via; outside 30.4 mm | the same path |
+  | S2 | 4.81 s, 2 vias; min 10.1 mm (stub); outside 41.7 | 4.85 s, 2 vias; min 10.1 mm (stub); outside 51.7 |
+  | S3 | 5.62 s, 1 via, wrist 3 4.74 rad; min 45.0 (post); outside 49.3 | 2.74 s, 1 via, wrist 3 1.55 rad; min 45.0 (post); outside 59.4 |
+  | home → home | 17.50 s | **14.66 s** |
+
+  The other variants (taught, the previous optimisation, the proposals c2 and c3 for re-teaching the
+  drop on another branch) are kept for comparison in `Data/Generated/variants/`.
 - **Demo** (base ±45° around `home`): 1234 joint-linear samples, every margin kept, label
   **"clearance checked"**. At 180° (2026-10-17) the same: 1234 samples, every margin kept.

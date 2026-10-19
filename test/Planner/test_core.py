@@ -23,6 +23,8 @@
 
 # System (Default)
 import os
+# Math (Mathematical functions)
+import math
 import re
 import types
 # Difflib (Sequence comparison)
@@ -45,7 +47,7 @@ from Planner.Core import (Planner_Cls, Planner_Budget_Str, Planner_Error_Cls, Pl
 #   ../src/Scene/Core — the scene at each opening
 from Scene.Core import Scene_Cls
 #   ../src/URScript/Core — the committed outputs and the program extracts
-from URScript.Core import Read_URScript, Read_Program_Excerpt, Make_Generated_Point, Make_Document, Write_URScript
+from URScript.Core import Read_URScript, Read_Program_Excerpt, Make_Generated_Point, Make_Document, Write_URScript, Format_Generated
 #   ../src/Kinematics/Core — the informational _p of a via point
 from Kinematics.Core import TCP_Pose, Matrix_To_Pose
 
@@ -73,6 +75,10 @@ CONST_STATION_POINTS = ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5', 'Waypoint_1
 # Via points the taught program uses per segment.
 #   Unit [Dict<string, int>]
 CONST_TAUGHT_VIAS = {'S1': 1, 'S2': 3, 'S3': 1}
+# The delivered station joints (owner, 2026-10-19, SPEC 10.5): the pick's points use wrist 3 (joint
+# index 5) one turn lower than taught.
+#   Unit [Tuple<string>], [int]
+CONST_TURNED, CONST_TURNED_JOINT = ('Waypoint_18', 'pick_rotate_1', 'Waypoint_6'), 5
 # The reduced planning run repeated for determinism: S1 of case 17 (its direct segment fails; S3's
 # no longer does since the machine shift, SPEC 4.11).
 #   Unit [Planner_Budget_Str], [int]
@@ -141,9 +147,10 @@ def _Output(root):
 
 
 def _Path(document, points, start, goal):
+    # The ends are the output's own points: the delivered station joints (SPEC 10.5).
     prefix = 'via_%s_%s_' % (start, goal)
     vias = sorted(name for name in document.Points if name.startswith(prefix) and re.fullmatch(r'\d{2}', name[len(prefix):]))
-    return [np.array(points[start].Q)] + [np.array(document.Points[name].Q) for name in vias] + [np.array(points[goal].Q)], vias
+    return [np.array(document.Points[name].Q) for name in [start] + vias + [goal]], vias
 
 
 def test_the_duration_estimates_match_hand_computed_values():
@@ -230,8 +237,10 @@ def test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end(r
 def test_the_station_points_keep_their_tokens(root, program):
     """
     Description:
-        The output holds home and the station points, each the program's point token for token, and
-        nothing of the loading moves; every other point is a generated via point.
+        The output holds home and the station points, each the program's point token for token, except
+        wrist 3 of the pick's three points: one turn lower (4.739 - 2 pi, written as a generated token),
+        the owner's choice (SPEC 10.5); nothing of the loading moves; every other point is a generated
+        via point.
     """
 
     points, lines = program
@@ -239,7 +248,10 @@ def test_the_station_points_keep_their_tokens(root, program):
     fixed = {'home'} | set(CONST_CASE.values())
     for name, point in document.Points.items():
         if name in fixed:
-            assert (point.P_Tokens, point.Q_Tokens) == (points[name].P_Tokens, points[name].Q_Tokens)
+            expected = list(points[name].Q_Tokens)
+            if name in CONST_TURNED:
+                expected[CONST_TURNED_JOINT] = Format_Generated(points[name].Q[CONST_TURNED_JOINT] - 2.0 * math.pi)
+            assert (point.P_Tokens, point.Q_Tokens) == (points[name].P_Tokens, expected), name
         else:
             assert name.startswith('via_')
     assert fixed <= set(document.Points)

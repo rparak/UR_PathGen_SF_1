@@ -23,6 +23,8 @@
 
 # System (Default)
 import os
+# Math (Mathematical functions)
+import math
 # Hashlib (Secure hashes)
 import hashlib
 # Pytest (Testing framework) [pip3 install pytest]
@@ -31,7 +33,7 @@ import pytest
 #   ../src/URScript/Core — the reader and writer under test
 from URScript.Core import (Read_URScript, Write_URScript, Write_Movej_Sequence, Make_Generated_Point, Make_Document,
                            Format_Generated, URScript_Error_Cls, Read_Program_Excerpt, Write_Motion_Sequence, Program_Entries,
-                           Gripper_Comment, Read_Motion_Sequence, Rotation_Sequence)
+                           Gripper_Comment, Read_Motion_Sequence, Rotation_Sequence, Replace_Joints)
 
 """
 Description:
@@ -310,6 +312,30 @@ def test_joint_values_are_never_wrapped():
     for name in ('home', 'drop_rotate_1'):
         assert again[name].Q_Tokens == learned[name].Q_Tokens
         assert again[name].P_Tokens == learned[name].P_Tokens
+
+
+def test_replacing_joints_keeps_the_pose_and_every_unchanged_token():
+    """
+    Description:
+        Replace_Joints of a learned point with wrist 3 turned by -2 pi (the owner's choice for the
+        pick, SPEC 10.5): the _p tokens and the five unchanged _q tokens are the file's own, the
+        changed one is the generated token of the new value; written and read back it is that value;
+        the given point is not changed. Six values are required.
+    """
+
+    learned = Read_URScript(CONST_EXPORT).Points['drop_rotate_1']
+    before = (list(learned.P_Tokens), list(learned.Q_Tokens))
+    turned = list(learned.Q)
+    turned[5] -= 2.0 * math.pi
+    point = Replace_Joints(learned, turned)
+    assert point.P_Tokens == learned.P_Tokens and point.P == learned.P
+    assert point.Q_Tokens[:5] == learned.Q_Tokens[:5]
+    assert point.Q_Tokens[5] == Format_Generated(learned.Q[5] - 2.0 * math.pi)
+    again = Read_URScript(Write_URScript(Make_Document([point]))).Points['drop_rotate_1']
+    assert again.Q[5] == float(Format_Generated(learned.Q[5] - 2.0 * math.pi)) and again.Q[:5] == learned.Q[:5]
+    assert (learned.P_Tokens, learned.Q_Tokens) == before
+    with pytest.raises(URScript_Error_Cls, match='needs 6 joint values'):
+        Replace_Joints(learned, turned[:5])
 
 
 def test_movej_uses_joint_targets_and_no_blend():

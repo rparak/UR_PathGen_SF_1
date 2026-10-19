@@ -332,6 +332,29 @@ def Make_Generated_Point(name: str, P: tp.Sequence[float], Q: tp.Sequence[float]
                            P_Tokens=p_tokens, Q_Tokens=q_tokens)
 
 
+def Replace_Joints(point: Robot_Point_Str, Q: tp.Sequence[float]) -> Robot_Point_Str:
+    """
+    Description:
+        The point with other joint values and its pose unchanged: the _p tokens are kept, a joint
+        whose value does not change keeps its token, a changed joint gets a generated token
+        (Format_Generated). For a learned point whose joints an owner decision changes, e.g. a wrist
+        turned by a whole turn; the values are never wrapped here.
+
+    Args:
+        (1) point [Robot_Point_Str(object)]: The point.
+        (2) Q [Vector<float> 1x6]: The new joint vector (rad).
+
+    Returns:
+        (1) parameter [Robot_Point_Str(object)]: A new point; the given one is not changed.
+    """
+
+    if len(Q) != 6:
+        raise URScript_Error_Cls('%s needs 6 joint values, not %d.' % (point.Name, len(Q)))
+    tokens = [token if float(token) == float(value) else Format_Generated(float(value)) for token, value in zip(point.Q_Tokens, Q)]
+    return Robot_Point_Str(Name=point.Name, P=list(point.P), Q=[float(t) for t in tokens], P_Tokens=list(point.P_Tokens),
+                           Q_Tokens=tokens)
+
+
 def Write_URScript(document: URScript_Document_Str) -> str:
     """
     Description:
