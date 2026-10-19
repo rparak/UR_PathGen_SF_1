@@ -1126,10 +1126,13 @@ synthetic point with a joint at 4.0 rad that must come out as 4.0.
 
 ### 10.6 Planner and the rotation-sequence output
 
-*Since the machine shift (2026-10-18) the taught S1 – S3 all keep the generated rule; S1 – S3 are
-optimised for time (home → home 23.37 → 17.50 s, estimate), not for clearance, and the paths
-written on the final scene use the space the estimated shift frees, keeping 30 mm to machine (a)
-outside the zone (§9.7, §17).*
+*Since the machine shift (2026-10-18) S1 – S3 are optimised for time (home → home 23.37 → 17.50 s,
+estimate), not for clearance, and the paths written on the final scene use the space the estimated
+shift frees, keeping 30 mm to machine (a) outside the zone (§9.7, §17). Corrected 2026-10-19: the
+taught S1 – S3 were said to all keep the generated rule; since the station-box rule (§9.7) the taught
+S2 does not: its last leg, Waypoint_3 → Waypoint_18, comes 8.3 mm to the station stub, below the
+floor of 10.1 mm (Waypoint_18's own distance), on 51 samples (`Example/plan_rotation.py` report).
+Under the taught rule it is clear.*
 
 **Segments** (case 17, §1). S1 home → drop_rotate_1 (holding: case 17's `Tool.Holding_Openings`
 entry, 50 mm), S2 Waypoint_5 → Waypoint_18 (open, 85 mm: the full stroke for `rq_set_pos_spd_for(0, ...)`; the
