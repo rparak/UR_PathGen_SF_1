@@ -1,7 +1,7 @@
 # MJCF - vendored models, patches in code, collision geometry
 
 The scene is the UR10e and the Robotiq 2F-85 from MuJoCo Menagerie plus the SF1 environment, built
-by `src/Scene/Core.py` (`Build_Scene`) through `mujoco.MjSpec` (SPEC §4.2, §4.5, §7, §9). ✅ =
+by `src/Scene/Core.py` (`Scene_Cls`) through `mujoco.MjSpec` (SPEC §4.2, §4.5, §7, §9). ✅ =
 enforced by a test; 📄 = documentation only. The tests are in `test/Scene/test_core.py`,
 `test/Scene/test_margin.py`, `test/Collision/test_core.py` and
 `test/Collision/test_conservativeness.py`.
@@ -17,7 +17,7 @@ enforced by a test; 📄 = documentation only. The tests are in `test/Scene/test
 
 ## Every patch is in code, through MjSpec ✅
 
-What the scene needs that the vendored files do not say is applied in `Build_Scene` and recorded in
+What the scene needs that the vendored files do not say is applied in `Scene_Cls` and recorded in
 `docs/design-decisions.md`, never written into `models/`:
 
 - **DH offsets.** The Menagerie body offsets are rounded and its flange site sits 16.5 mm inside the

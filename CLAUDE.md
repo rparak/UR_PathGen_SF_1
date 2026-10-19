@@ -11,7 +11,7 @@ every file. The owner's notes may be in Czech or Slovak; answer in English anywa
 
 - `.claude/skills/project-style-rpx/` — code, shell, YAML, Markdown, URScript and MJCF conventions.
   Use it for every change.
-- `.claude/skills/feature-manager/` — how a feature is added (the next one: the A → B planner).
+- `.claude/skills/feature-manager/` — how a feature, a behaviour change or a bug fix is added.
 - `.claude/skills/project-optimize/` — cleanup, speed, complexity and reliability work. Behaviour
   does not change, and a generated path is compared byte for byte.
 

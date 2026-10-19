@@ -115,7 +115,8 @@ CONST_SEGMENT_STATE = {'S1': 'holding', 'S2': 'open', 'S3': 'holding'}
 CONST_SEED = 20261017
 # Weight of the clearance penalty in the objective (SPEC 10.6), chosen by the owner (2026-10-17):
 # against w = 0 it raised the smallest clearance outside the station
-# neighbourhood from 20.4 - 28.9 mm to 26.6 - 34.5 mm for +0.09 / -0.02 s home -> home (cases 17 / 18).
+# neighbourhood from 20.4 - 28.9 mm to 26.6 - 34.5 mm for +0.09 / -0.02 s home -> home (cases 17 / 18;
+# measured 2026-10-17, when both cases were planned).
 #   Unit [float] (s/m)
 CONST_PENALTY_WEIGHT = 0.5
 # The program's movel acceleration and speed (sf1_plc_v4.script), for the station operations'

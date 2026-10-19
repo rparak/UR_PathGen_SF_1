@@ -24,8 +24,9 @@ global <name>_q=[j0, j1, j2, j3, j4, j5]
 
 ## One reader, one writer 📄
 
-`src/URScript/Core.py` holds the only reader (`Read_URScript`) and the only writers
-(`Write_URScript`, `Write_Movej_Sequence`). No other module parses or formats these lines - not a
+`src/URScript/Core.py` holds the only readers (`Read_URScript`; for the `*.script` files
+`Read_Program_Excerpt` and `Read_Motion_Sequence`) and the only writers (`Write_URScript`,
+`Write_Movej_Sequence`, `Write_Motion_Sequence`). No other module parses or formats these lines - not a
 script, not a test helper (a test compares against literal text, references/python.md > Tests).
 
 ## The reader is strict ✅
@@ -47,7 +48,7 @@ Never a silent skip, never a best-effort parse.
   rad is read and written unchanged (SPEC §10.2).
 - **Generated points** get fixed precision: `%.12f` with the leading zero dropped
   (`0.5` → `.500000000000`, `-0.5` → `-.500000000000`), `-0` written as `0`. Their `_p` comes from DH
-  FK · TCP with `Normalize_Rotvec` (SPEC §9.5).
+  FK · TCP with `Matrix_To_Rotvec` (SPEC §9.5).
 
 ## Joints are never wrapped ✅
 
@@ -88,5 +89,5 @@ fixture, and its number tokens equal the extract's (SPEC §10.3). At most **5 vi
   (`home_p` has |r| = 3.1393 rad).
 - Computed with **atan2**, `θ = atan2(‖vee(M − Mᵀ)‖ / 2, (tr M − 1) / 2)`, `M = R_aᵀ R_b`. The
   arccos form cannot resolve angles below ≈ 6e-8 rad, and the 1e-9 checks need that (SPEC §4.5, §9.5).
-- `Normalize_Rotvec` applies to generated points only: θ ∈ [0, π]; θ < 1e-12 → (0, 0, 0); if
+- `Matrix_To_Rotvec` applies to generated points only: θ ∈ [0, π]; θ < 1e-12 → (0, 0, 0); if
   π − θ < 1e-9, the axis sign makes the first component with |·| > 1e-9 positive.
