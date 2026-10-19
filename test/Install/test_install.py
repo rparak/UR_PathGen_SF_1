@@ -98,12 +98,13 @@ def test_the_script_parses(root):
 def test_the_platform_is_detected(root, stubs, system, arch, platform):
     """
     Description:
-        uname decides the platform; the line is in the log format.
+        uname decides the platform, and the INFO line naming it is printed in the log format.
     """
 
     _Stub(stubs, 'uname', '[ "$1" = "-s" ] && echo %s || echo %s' % (system, arch))
     code, lines, _ = _Run(root, stubs, 'Detect_Platform; echo "PLATFORM=$PLATFORM"')
     assert code == 0 and lines[-1] == 'PLATFORM=%s' % platform
+    assert any('[INFO   ] Detected %s' % {'macos': 'macOS', 'linux': 'Linux'}[platform] in line for line in lines[:-1])
     assert all(CONST_LOG_LINE.match(line) for line in lines[:-1])
 
 

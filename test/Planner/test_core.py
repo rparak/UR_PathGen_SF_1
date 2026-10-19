@@ -358,6 +358,7 @@ def test_plan_all_gives_the_same_paths_with_one_or_two_workers(cfg, program):
     sequential = Plan_All(requests)
     with Make_Pool(2) as pool:
         parallel = Plan_All(requests, pool)
+    assert len(sequential) == len(parallel) == len(requests)
     assert [r.Origin for r in sequential][1] == 'direct'
     assert all(r.Origin.startswith('rrt') for r in (sequential[0], sequential[2]))
     for a, b in zip(sequential, parallel):
@@ -391,13 +392,14 @@ def test_plan_all_names_the_segment_that_fails(cfg, program, kind):
             Plan_All(requests, pool)
 
 
-@pytest.mark.parametrize('kind', ['inflated margin', 'no iterations', 'six via points'])
+@pytest.mark.parametrize('kind', ['inflated margin', 'no iterations', 'six via points', 'outside the joint limits'])
 def test_an_impossible_plan_raises(cfg, program, kind):
     """
     Description:
         The planner never returns a colliding or too long path: an inflated environment margin makes
-        the start break the rule, a budget of one RRT iteration finds nothing, and a path with six
-        via points is refused by the verification - each with Planner_Error_Cls naming the reason.
+        the start break the rule, a budget of one RRT iteration finds nothing, and the verification
+        refuses a path with six via points and a path whose via point lies 0.01 rad beyond the
+        configured upper limit of the base joint - each with Planner_Error_Cls naming the reason.
     """
 
     points, _ = program
@@ -413,6 +415,12 @@ def test_an_impossible_plan_raises(cfg, program, kind):
         budget = dataclasses.replace(CONST_REDUCED, Restarts=1, RRT_Iterations=1)
         with pytest.raises(Planner_Error_Cls, match='found no path'):
             Planner_Cls(scene, station_q, 0.0, budget).Plan(start, goal, CONST_REDUCED_SEED)
+        return
+    if kind == 'outside the joint limits':
+        via = np.array(start, dtype=float)
+        via[0] = cfg.Joint_Limits_Max[0] + 0.01
+        with pytest.raises(Planner_Error_Cls, match='outside the joint limits'):
+            Planner_Cls(scene, station_q, 0.0, CONST_REDUCED).Verify_Path([np.asarray(start), via, np.asarray(goal)])
         return
     path = [np.asarray(start) + (np.asarray(goal) - np.asarray(start)) * t for t in np.linspace(0.0, 1.0, 8)]
     with pytest.raises(Planner_Error_Cls, match='at most 5'):

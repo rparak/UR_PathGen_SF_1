@@ -23,6 +23,8 @@
 
 # Math (Mathematical functions)
 import math
+# Regular expressions (Default)
+import re
 # Numpy (Array computing) [pip3 install numpy]
 import numpy as np
 # Pytest (Testing framework) [pip3 install pytest]
@@ -125,6 +127,24 @@ def test_a_point_whose_joints_disagree_with_its_pose_is_refused(points, cfg):
     with pytest.raises(Kinematics_Error_Cls, match=r'drop_rotate_1: .* mm .* deg from its _p'):
         Check_FK_Consistency('drop_rotate_1', q, points['drop_rotate_1'].P, cfg.TCP_Offset, cfg.FK_Sanity_Bound_Position,
                              Orientation_Sanity_Bound(cfg.FK_Sanity_Bound_Position, 0.18))
+
+
+def test_a_point_whose_orientation_alone_disagrees_is_refused(points, cfg):
+    """
+    Description:
+        The orientation bound applies on its own: home's _p turned 5 deg about the tool z axis, its
+        position unchanged (the residual stays 1.72 mm, inside 10 mm), is refused for about 5 deg
+        against the bound of about 3.2 deg.
+    """
+
+    p = list(points['home'].P)
+    p[3:] = Matrix_To_Rotvec(Rotvec_To_Matrix(p[3:]) @ Rotvec_To_Matrix([0.0, 0.0, math.radians(5.0)]))
+    bound = Orientation_Sanity_Bound(cfg.FK_Sanity_Bound_Position, 0.18)
+    with pytest.raises(Kinematics_Error_Cls, match=r'home: .* is ([0-9.]+) mm / ([0-9.]+) deg from its _p') as error:
+        Check_FK_Consistency('home', points['home'].Q, p, cfg.TCP_Offset, cfg.FK_Sanity_Bound_Position, bound)
+    position, orientation = (float(v) for v in re.search(r'is ([0-9.]+) mm / ([0-9.]+) deg', str(error.value)).groups())
+    assert position < cfg.FK_Sanity_Bound_Position * 1e3
+    assert abs(orientation - 5.0) <= 0.4 and orientation > math.degrees(bound)
 
 
 def test_the_geodesic_angle_ignores_the_rotation_vector_sign_flip_near_pi(points):
