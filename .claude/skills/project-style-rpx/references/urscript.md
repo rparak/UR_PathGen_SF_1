@@ -56,18 +56,26 @@ UR joints span ±2π and `movej` goes to the exact value. A joint is never wrapp
 planner and writer stay on the branch of A and B. A synthetic joint at 4.0 rad comes out as 4.0
 (SPEC §10.5).
 
-## Motion output: `movej(<name>_q, r=0)` only ✅
+## Motion output: generated `movej(<name>_q, a=<a>, v=<v>, r=0)`, station lines verbatim ✅
 
 ```
-movej(<name>_q, r=0)
+movej(<name>_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
 ```
 
-- **Joint targets only, never `movej(p[...])`**: with a pose target the robot solves its own IK and
-  may pick another branch. `movel` is never emitted (SPEC §14 risk 5).
+- **A generated move has a joint target only, never `movej(p[...])`**: with a pose target the robot
+  solves its own IK and may pick another branch. No generated `movel` is written (SPEC §14 risk 5).
+- **Station lines are the one exception**: in a motion sequence (`Write_Motion_Sequence`) the
+  station operations of the robot program are copied verbatim, with their own `movel(...)` and
+  `movej(get_inverse_kin(<name>_p, qnear=<name>_q), ...)` and their a, v, r (SPEC §10.4).
 - `r=0` is written explicitly: it is the one argument that changes the path. A blend radius > 0 is a
   future feature that needs envelope checking (SPEC §8.5).
-- `a` and `v` are omitted (URScript defaults); the operator sets the speed on the robot. Speed does
-  not change the path of a `movej` with `r=0`.
+- `a` and `v` are the robot program's tokens, passed to `Write_Movej_Sequence`, so a generated move
+  runs at the speed the duration estimate assumes. Speed does not change the path of a `movej` with
+  `r=0`.
+
+*Corrected 2026-10-19: this section said that `a` and `v` are omitted and that `movel` is never
+written; the owner's decisions of 2026-10-17 (a, v) and 2026-10-18 (station lines verbatim) changed
+both (docs/design-decisions.md, SPEC §10.4).*
 
 ## Naming 📄
 
