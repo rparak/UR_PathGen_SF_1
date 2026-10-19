@@ -601,6 +601,112 @@ def Play(viewer: tp.Any, playlist: tp.List, scenes: tp.Dict[str, Scene_Cls], ope
             time.sleep(1.0 / CONST_FPS)
 
 
+def Build_Scenes(cfg: Cell_Configuration_Str, openings: tp.Dict[str, float], with_visual: bool) -> tp.Dict[str, Scene_Cls]:
+    """
+    Description:
+        The scene of each gripper state, with the environment: one scene when both openings are
+        equal; the visual STL only in the holding scene (the one the viewer shows).
+
+    Args:
+        (1) cfg [Cell_Configuration_Str(object)]: The cell configuration.
+        (2) openings [Dict<string, float>]: The opening of each gripper state (m).
+        (3) with_visual [bool]: Load the visual STL.
+
+    Returns:
+        (1) parameter [Dict<string, Scene_Cls>]: 'holding' and 'open' -> the scene.
+    """
+
+    scenes = {'holding': Scene_Cls(dataclasses.replace(cfg, Opening=openings['holding']), with_environment=True,
+                                   with_visual=with_visual)}
+    scenes['open'] = (scenes['holding'] if openings['open'] == openings['holding']
+                      else Scene_Cls(dataclasses.replace(cfg, Opening=openings['open']), with_environment=True))
+    return scenes
+
+
+def Label_Moves(paths: tp.Dict, loaded: tp.Dict, scenes: tp.Dict[str, Scene_Cls], cfg: Cell_Configuration_Str,
+                skip_check: bool) -> None:
+    """
+    Description:
+        Label every move of every variant (Check_Moves, with the variant's own station points) and
+        print the count per label, or mark each move "not checked" with --skip-check.
+
+    Args:
+        (1) paths [Dict<string, Tuple<string, List<Move_Str>>>]: Per variant: start and moves; their Label is set.
+        (2) loaded [Dict<string, Tuple<List<Motion_Str>, Dict<string, Robot_Point_Str>>>]: Per variant: operations
+                                                                                          and points.
+        (3) scenes [Dict<string, Scene_Cls>]: The scene of each gripper state.
+        (4) cfg [Cell_Configuration_Str(object)]: The cell configuration.
+        (5) skip_check [bool]: --skip-check.
+    """
+
+    for variant, (_, moves) in paths.items():
+        station_q = [loaded[variant][1][n].Q for n in CONST_STATION_POINTS]
+        if skip_check:
+            for move in moves:
+                move.Label = '' if move.Kind == 'gripper' else 'clearance not checked (--skip-check)'
+        else:
+            counts = Check_Moves(moves, scenes, cfg, station_q)
+            print('[INFO] %s: %s.' % (variant, '; '.join('%d move(s) %s' % (n, label) for label, n in sorted(counts.items()))))
+
+
+def Print_Strict_Comparison(variants: tp.Sequence[str], loaded: tp.Dict, scenes: tp.Dict[str, Scene_Cls]) -> None:
+    """
+    Description:
+        The strict comparison of several variants: S1 - S3 of each, from its own points, judged by
+        the generated rule (Label) in the scene of the segment's gripper state.
+
+    Args:
+        (1) variants [List<string>]: The variants, in catalogue order.
+        (2) loaded [Dict<string, Tuple<List<Motion_Str>, Dict<string, Robot_Point_Str>>>]: Per variant: operations
+                                                                                          and points.
+        (3) scenes [Dict<string, Scene_Cls>]: The scene of each gripper state.
+    """
+
+    for segment in ('S1', 'S2', 'S3'):
+        scene = scenes['open' if segment == 'S2' else 'holding']
+        for variant in variants:
+            points = loaded[variant][1]
+            path = Variant_Path(variant, points, segment)
+            label, samples, violations = Label(scene, path, [points[n].Q for n in CONST_STATION_POINTS])
+            print('[INFO] Strict comparison (generated rule), case %d %s %s (%d via points): %s - %d samples, %d violations.'
+                  % (CONST_CASE, segment, variant, len(path) - 2, label, samples, violations))
+
+
+def Show_In_Viewer(playlist: tp.List, scenes: tp.Dict[str, Scene_Cls], openings: tp.Dict[str, float], title: str, speed: float,
+                   with_visual: bool) -> int:
+    """
+    Description:
+        Play the variants in the passive viewer of the holding scene until it is closed, the
+        collision geometry (geom group 3) shown unless the visual STL is loaded.
+
+    Args:
+        (1) playlist [List<Tuple<string, string, List<Move_Str>, List<Tuple<int, float>>>]: As Print_Steps.
+        (2) scenes [Dict<string, Scene_Cls>]: The scene of each gripper state.
+        (3) openings [Dict<string, float>]: The opening of each gripper state (m).
+        (4) title [string]: The path's number and name.
+        (5) speed [float]: Playback speed relative to the estimated real time.
+        (6) with_visual [bool]: Whether the visual STL is loaded.
+
+    Returns:
+        (1) parameter [int]: The exit code: 0, or 2 when the viewer cannot start.
+    """
+
+    import mujoco.viewer
+    view = scenes['holding']
+    try:
+        viewer = mujoco.viewer.launch_passive(view.Model, view.Data)
+    except RuntimeError as error:
+        print('[ERROR] The MuJoCo viewer cannot start (%s). On macOS run: .venv/bin/mjpython Example/replay_rotation.py' % error)
+        return 2
+    with viewer:
+        if not with_visual:
+            with viewer.lock():
+                viewer.opt.geomgroup[CONST_COLLISION_GROUP] = 1
+        while viewer.is_running():
+            Play(viewer, playlist, scenes, openings, title, speed)
+    return 0
+
+
 def Choose_Path(path: int) -> int:
     """
     Description:
@@ -681,50 +787,19 @@ def main():
           % (number, name, openings['holding'] * 1e3, cfg.Holding_Openings[CONST_CASE][1], openings['open'] * 1e3))
     t0 = time.time()
     with_visual = args.with_stl and not (args.headless or args.screenshots)
-    scenes = {'holding': Scene_Cls(dataclasses.replace(cfg, Opening=openings['holding']), with_environment=True,
-                                   with_visual=with_visual)}
-    scenes['open'] = (scenes['holding'] if openings['open'] == openings['holding']
-                      else Scene_Cls(dataclasses.replace(cfg, Opening=openings['open']), with_environment=True))
+    scenes = Build_Scenes(cfg, openings, with_visual)
     print('[INFO] Scene built in %.1f s: %d geoms; visual mesh %s.'
           % (time.time() - t0, scenes['holding'].Model.ngeom, 'loaded' if with_visual else 'not loaded'))
-    for variant, (start, moves) in paths.items():
-        station_q = [loaded[variant][1][n].Q for n in CONST_STATION_POINTS]
-        if args.skip_check:
-            for move in moves:
-                move.Label = '' if move.Kind == 'gripper' else 'clearance not checked (--skip-check)'
-        else:
-            counts = Check_Moves(moves, scenes, cfg, station_q)
-            print('[INFO] %s: %s.' % (variant, '; '.join('%d move(s) %s' % (n, label) for label, n in sorted(counts.items()))))
+    Label_Moves(paths, loaded, scenes, cfg, args.skip_check)
     if len(variants) > 1 and not args.skip_check:
-        # The strict comparison: S1 - S3 of every variant by the generated rule.
-        for segment in ('S1', 'S2', 'S3'):
-            scene = scenes['open' if segment == 'S2' else 'holding']
-            for variant in variants:
-                points = loaded[variant][1]
-                path = Variant_Path(variant, points, segment)
-                label, samples, violations = Label(scene, path, [points[n].Q for n in CONST_STATION_POINTS])
-                print('[INFO] Strict comparison (generated rule), case %d %s %s (%d via points): %s - %d samples, %d violations.'
-                      % (CONST_CASE, segment, variant, len(path) - 2, label, samples, violations))
+        Print_Strict_Comparison(variants, loaded, scenes)
     playlist = [(variant, start, moves, Frames(moves, args.speed)) for variant, (start, moves) in paths.items()]
     if args.headless or args.screenshots:
         Print_Steps(playlist, openings, args.speed)
         if args.screenshots:
             Write_Screenshots(args.screenshots, number, paths, scenes, [loaded[variants[0]][1][n].Q for n in CONST_STATION_POINTS])
         return 0
-    import mujoco.viewer
-    view = scenes['holding']
-    try:
-        viewer = mujoco.viewer.launch_passive(view.Model, view.Data)
-    except RuntimeError as error:
-        print('[ERROR] The MuJoCo viewer cannot start (%s). On macOS run: .venv/bin/mjpython Example/replay_rotation.py' % error)
-        return 2
-    with viewer:
-        if not with_visual:
-            with viewer.lock():
-                viewer.opt.geomgroup[CONST_COLLISION_GROUP] = 1
-        while viewer.is_running():
-            Play(viewer, playlist, scenes, openings, '%d: %s' % (number, name), args.speed)
-    return 0
+    return Show_In_Viewer(playlist, scenes, openings, '%d: %s' % (number, name), args.speed, with_visual)
 
 
 if __name__ == '__main__':
