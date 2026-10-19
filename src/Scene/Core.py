@@ -322,8 +322,8 @@ class Scene_Cls(object):
     def __Build_Spec(self, pad_span: np.ndarray, with_environment: bool, with_visual: bool) -> mujoco.MjSpec:
         """
         Description:
-            Assemble the MjSpec: DH patch, robot collision hulls, coupling, gripper, exclusions,
-            environment.
+            Assemble the MjSpec in its steps: DH patch, joint ranges, robot collision hulls, coupling
+            and gripper, exclusions, environment, visual mesh.
 
         Args:
             (1) pad_span [Matrix<float> 32x3]: Pad-box corners in the gripper base frame (m).
@@ -333,11 +333,36 @@ class Scene_Cls(object):
             (1) parameter [MjSpec]: The specification.
         """
 
+        spec = mujoco.MjSpec.from_file(self.__cfg.Robot_Model)
+        flange = self.__Place_Robot(spec)
+        self.__Set_Joint_Ranges(spec)
+        self.__Hull_Robot(spec)
+        self.__Attach_Gripper(spec, flange, pad_span)
+        self.__Exclude_Pairs(spec)
+        if with_environment:
+            self.__Add_Environment(spec)
+        else:
+            self.__collision_manifest = {}
+            self.__zone_pieces, self.__zone_boxes, self.__piece_components, self.__machine_pieces = [], [], [], []
+        if with_visual:
+            self.__Add_Visual(spec)
+        return spec
+
+    def __Place_Robot(self, spec: mujoco.MjSpec) -> tp.Any:
+        """
+        Description:
+            Step 1, placement and DH patch. The Menagerie root carries 180 deg about z, which makes its
+            world frame the Polyscope base frame (SPEC 4.2); the base yaw is applied on top.
+
+        Args:
+            (1) spec [MjSpec]: The robot's specification; changed in place.
+
+        Returns:
+            (1) parameter [MjsSite]: The flange site.
+        """
+
         cfg = self.__cfg
-        spec = mujoco.MjSpec.from_file(cfg.Robot_Model)
         bodies = {b.name: b for b in spec.bodies}
-        # 1\ Placement and DH patch. The Menagerie root carries 180 deg about z, which makes its
-        #    world frame the Polyscope base frame (SPEC 4.2); the base yaw is applied on top.
         base = bodies['base']
         base.pos = list(cfg.Base_Position)
         q_menagerie = np.array(base.quat, dtype=float)
@@ -348,12 +373,33 @@ class Scene_Cls(object):
             bodies[name].pos = list(offset)
         flange = [s for s in spec.sites if s.name == CONST_FLANGE_SITE][0]
         flange.pos = list(CONST_FLANGE_OFFSET)
-        # 2\ Joint ranges from the configuration.
+        return flange
+
+    def __Set_Joint_Ranges(self, spec: mujoco.MjSpec) -> None:
+        """
+        Description:
+            Step 2, the joint ranges from the configuration.
+
+        Args:
+            (1) spec [MjSpec]: The specification; changed in place.
+        """
+
+        cfg = self.__cfg
         joints = {j.name: j for j in spec.joints}
         for i, name in enumerate(CONST_ROBOT_JOINTS):
             joints[name].range = [cfg.Joint_Limits_Min[i], cfg.Joint_Limits_Max[i]]
-        # 3\ Robot collision: the hull of every visual mesh (it contains the mesh); the Menagerie
-        #    capsules are removed (they need not contain it).
+
+    def __Hull_Robot(self, spec: mujoco.MjSpec) -> None:
+        """
+        Description:
+            Step 3, robot collision: the hull of every visual mesh (it contains the mesh); the
+            Menagerie capsules are removed (they need not contain it).
+
+        Args:
+            (1) spec [MjSpec]: The specification; changed in place.
+        """
+
+        cfg = self.__cfg
         for geom in list(spec.geoms):
             if geom.type == mujoco.mjtGeom.mjGEOM_MESH:
                 geom.parent.add_geom(type=mujoco.mjtGeom.mjGEOM_MESH, meshname=geom.meshname, pos=list(geom.pos),
@@ -362,8 +408,20 @@ class Scene_Cls(object):
                 geom.contype, geom.conaffinity = 0, 0
             else:
                 spec.delete(geom)
-        # 4\ Gripper: coupling cylinder instead of the Menagerie disc, shifted to the measured datum,
-        #    fixed joints, pad-span hull; attached at the flange with the mounting yaw.
+
+    def __Attach_Gripper(self, spec: mujoco.MjSpec, flange: tp.Any, pad_span: np.ndarray) -> None:
+        """
+        Description:
+            Step 4, the gripper: coupling cylinder instead of the Menagerie disc, shifted to the
+            measured datum, fixed joints, pad-span hull; attached at the flange with the mounting yaw.
+
+        Args:
+            (1) spec [MjSpec]: The specification; changed in place.
+            (2) flange [MjsSite]: The flange site (__Place_Robot).
+            (3) pad_span [Matrix<float> 32x3]: Pad-box corners in the gripper base frame (m).
+        """
+
+        cfg = self.__cfg
         tool = mujoco.MjSpec.from_file(cfg.Tool_Model)
         tool_bodies = {b.name: b for b in tool.bodies}
         mount = tool_bodies['base_mount']
@@ -394,7 +452,18 @@ class Scene_Cls(object):
         mount_frame = flange.parent.add_frame(pos=list(flange.pos), quat=list(flange.quat))
         yaw_frame = mount_frame.add_frame(quat=Yaw_Quat(cfg.Mount_Yaw))
         yaw_frame.attach_body(mount, CONST_GRIPPER_PREFIX, '')
-        # 5\ Exclusions: only the configured ones (MuJoCo's parent/child filter is disabled).
+
+    def __Exclude_Pairs(self, spec: mujoco.MjSpec) -> None:
+        """
+        Description:
+            Step 5, exclusions: only the configured ones (MuJoCo's parent/child filter is disabled). A
+            body name the scene does not have is refused.
+
+        Args:
+            (1) spec [MjSpec]: The specification; changed in place.
+        """
+
+        cfg = self.__cfg
         spec.option.disableflags |= mujoco.mjtDisableBit.mjDSBL_FILTERPARENT
         spec.option.disableflags |= mujoco.mjtDisableBit.mjDSBL_GRAVITY
         known = set(b.name for b in spec.bodies)
@@ -412,70 +481,86 @@ class Scene_Cls(object):
                 if name not in known:
                     raise Scene_Error_Cls('Clearance.Self_Pair_Overrides names the body "%s", which the scene does not have.'
                                           % name)
-        # 6\ Environment: static bodies env and env_stand; only base - env_stand is excluded, because
-        #    the base sits 0.2 mm above the stand profiles and never moves.
-        if with_environment:
-            collision_set = Read_Collision_Set(cfg.Collision_Set, CONST_PROJECT_ROOT)
-            # A set built before overrides existed records none.
-            recorded = collision_set.Manifest.get('assembly_overrides', [])
-            if recorded != Assembly_Overrides_Record(cfg.Assembly_Overrides):
-                raise Scene_Error_Cls('The collision set %s was built with the assembly overrides %s, but the '
-                                      'configuration has %s. Rebuild it with: .venv/bin/python Example/build_collision.py'
-                                      % (cfg.Collision_Set, recorded, Assembly_Overrides_Record(cfg.Assembly_Overrides)))
-            recorded = collision_set.Manifest.get('component_overrides', [])
-            if recorded != Component_Overrides_Record(cfg.Component_Overrides):
-                raise Scene_Error_Cls('The collision set %s was built with the component overrides %s, but the '
-                                      'configuration has %s. Rebuild it with: .venv/bin/python Example/build_collision.py'
-                                      % (cfg.Collision_Set, recorded, Component_Overrides_Record(cfg.Component_Overrides)))
-            # Station zone: every piece whose bounding box meets the configured box.
-            zone_lo, zone_hi = np.asarray(cfg.Station_Zone_Min), np.asarray(cfg.Station_Zone_Max)
-            self.__zone_pieces = [i for i, v in enumerate(collision_set.Pieces)
-                                  if np.all(v.max(axis=0) >= zone_lo) and np.all(v.min(axis=0) <= zone_hi)]
-            # The pieces of Clearance.Machine_Extra's assembly outside the zone: their geoms carry the
-            # extra margin, so MuJoCo generates their contacts up to it; Check_Clearance applies it to
-            # generated configurations only.
-            members = set(collision_set.Manifest.get('assembly_components', {}).get(cfg.Machine_Extra_Assembly, []))
-            zone = set(self.__zone_pieces)
-            self.__machine_pieces = [i for i, c in enumerate(collision_set.Components) if c in members and i not in zone]
-            machine = set(self.__machine_pieces)
-            env_bodies = {name: spec.worldbody.add_body(name=name) for name in ('env', 'env_stand')}
-            for i, (vertices, body) in enumerate(zip(collision_set.Pieces, collision_set.Bodies)):
-                spec.add_mesh(name='env_piece_%d' % i, uservert=vertices.flatten().tolist(),
-                              inertia=mujoco.mjtMeshInertia.mjMESH_INERTIA_SHELL)
-                margin = cfg.Clearance_Environment + (cfg.Machine_Extra_Margin if i in machine else 0.0)
-                env_bodies[body].add_geom(name='env_piece_%d' % i, type=mujoco.mjtGeom.mjGEOM_MESH,
-                                          meshname='env_piece_%d' % i, contype=1, conaffinity=1,
-                                          group=CONST_COLLISION_GROUP, margin=margin, gap=0.0,
-                                          rgba=[0.3, 0.6, 0.9, 0.3])
-            # Obstacles missing from the STL (Environment.Added_Boxes): convex meshes of their eight
-            # corners in env, like the set's pieces, zone pieces by the same rule. Not box primitives:
-            # MuJoCo's box-box collision misses pairs inside the margin (the gripper pads are boxes;
-            # KNOWN_ISSUES, 2026-10-18), mesh pairs go through the convex collider.
-            self.__zone_boxes = []
-            for name, lo, hi, _ in cfg.Added_Boxes:
-                lo_v, hi_v = np.asarray(lo), np.asarray(hi)
-                corners = np.array([[x, y, z] for x in (lo_v[0], hi_v[0]) for y in (lo_v[1], hi_v[1]) for z in (lo_v[2], hi_v[2])])
-                spec.add_mesh(name=CONST_ADDED_BOX_PREFIX + name, uservert=corners.flatten().tolist(),
-                              inertia=mujoco.mjtMeshInertia.mjMESH_INERTIA_SHELL)
-                env_bodies['env'].add_geom(name=CONST_ADDED_BOX_PREFIX + name, type=mujoco.mjtGeom.mjGEOM_MESH,
-                                           meshname=CONST_ADDED_BOX_PREFIX + name, contype=1, conaffinity=1,
-                                           group=CONST_COLLISION_GROUP, margin=cfg.Clearance_Environment, gap=0.0,
-                                           rgba=[0.3, 0.6, 0.9, 0.3])
-                if np.all(hi_v >= zone_lo) and np.all(lo_v <= zone_hi):
-                    self.__zone_boxes.append(name)
-            spec.add_exclude(bodyname1='base', bodyname2='env_stand')
-            self.__collision_manifest = collision_set.Manifest
-            self.__piece_components = list(collision_set.Components)
-        else:
-            self.__collision_manifest = {}
-            self.__zone_pieces, self.__zone_boxes, self.__piece_components, self.__machine_pieces = [], [], [], []
-        if with_visual:
-            vertices, faces = Read_Binary_STL(cfg.Visual_Mesh)
-            spec.add_mesh(name='env_visual', uservert=vertices.flatten().tolist(), userface=faces.flatten().tolist(),
+
+    def __Add_Environment(self, spec: mujoco.MjSpec) -> None:
+        """
+        Description:
+            Step 6, the environment: static bodies env and env_stand; only base - env_stand is
+            excluded, because the base sits 0.2 mm above the stand profiles and never moves. Sets the
+            zone pieces and boxes, the machine pieces, the manifest and the piece components.
+
+        Args:
+            (1) spec [MjSpec]: The specification; changed in place.
+        """
+
+        cfg = self.__cfg
+        collision_set = Read_Collision_Set(cfg.Collision_Set, CONST_PROJECT_ROOT)
+        # A set built before overrides existed records none.
+        recorded = collision_set.Manifest.get('assembly_overrides', [])
+        if recorded != Assembly_Overrides_Record(cfg.Assembly_Overrides):
+            raise Scene_Error_Cls('The collision set %s was built with the assembly overrides %s, but the '
+                                  'configuration has %s. Rebuild it with: .venv/bin/python Example/build_collision.py'
+                                  % (cfg.Collision_Set, recorded, Assembly_Overrides_Record(cfg.Assembly_Overrides)))
+        recorded = collision_set.Manifest.get('component_overrides', [])
+        if recorded != Component_Overrides_Record(cfg.Component_Overrides):
+            raise Scene_Error_Cls('The collision set %s was built with the component overrides %s, but the '
+                                  'configuration has %s. Rebuild it with: .venv/bin/python Example/build_collision.py'
+                                  % (cfg.Collision_Set, recorded, Component_Overrides_Record(cfg.Component_Overrides)))
+        # Station zone: every piece whose bounding box meets the configured box.
+        zone_lo, zone_hi = np.asarray(cfg.Station_Zone_Min), np.asarray(cfg.Station_Zone_Max)
+        self.__zone_pieces = [i for i, v in enumerate(collision_set.Pieces)
+                              if np.all(v.max(axis=0) >= zone_lo) and np.all(v.min(axis=0) <= zone_hi)]
+        # The pieces of Clearance.Machine_Extra's assembly outside the zone: their geoms carry the
+        # extra margin, so MuJoCo generates their contacts up to it; Check_Clearance applies it to
+        # generated configurations only.
+        members = set(collision_set.Manifest.get('assembly_components', {}).get(cfg.Machine_Extra_Assembly, []))
+        zone = set(self.__zone_pieces)
+        self.__machine_pieces = [i for i, c in enumerate(collision_set.Components) if c in members and i not in zone]
+        machine = set(self.__machine_pieces)
+        env_bodies = {name: spec.worldbody.add_body(name=name) for name in ('env', 'env_stand')}
+        for i, (vertices, body) in enumerate(zip(collision_set.Pieces, collision_set.Bodies)):
+            spec.add_mesh(name='env_piece_%d' % i, uservert=vertices.flatten().tolist(),
                           inertia=mujoco.mjtMeshInertia.mjMESH_INERTIA_SHELL)
-            spec.worldbody.add_geom(name='env_visual', type=mujoco.mjtGeom.mjGEOM_MESH, meshname='env_visual',
-                                    contype=0, conaffinity=0, group=CONST_ENV_VISUAL_GROUP, rgba=[0.7, 0.7, 0.72, 1.0])
-        return spec
+            margin = cfg.Clearance_Environment + (cfg.Machine_Extra_Margin if i in machine else 0.0)
+            env_bodies[body].add_geom(name='env_piece_%d' % i, type=mujoco.mjtGeom.mjGEOM_MESH,
+                                      meshname='env_piece_%d' % i, contype=1, conaffinity=1,
+                                      group=CONST_COLLISION_GROUP, margin=margin, gap=0.0,
+                                      rgba=[0.3, 0.6, 0.9, 0.3])
+        # Obstacles missing from the STL (Environment.Added_Boxes): convex meshes of their eight
+        # corners in env, like the set's pieces, zone pieces by the same rule. Not box primitives:
+        # MuJoCo's box-box collision misses pairs inside the margin (the gripper pads are boxes;
+        # KNOWN_ISSUES, 2026-10-18), mesh pairs go through the convex collider.
+        self.__zone_boxes = []
+        for name, lo, hi, _ in cfg.Added_Boxes:
+            lo_v, hi_v = np.asarray(lo), np.asarray(hi)
+            corners = np.array([[x, y, z] for x in (lo_v[0], hi_v[0]) for y in (lo_v[1], hi_v[1]) for z in (lo_v[2], hi_v[2])])
+            spec.add_mesh(name=CONST_ADDED_BOX_PREFIX + name, uservert=corners.flatten().tolist(),
+                          inertia=mujoco.mjtMeshInertia.mjMESH_INERTIA_SHELL)
+            env_bodies['env'].add_geom(name=CONST_ADDED_BOX_PREFIX + name, type=mujoco.mjtGeom.mjGEOM_MESH,
+                                       meshname=CONST_ADDED_BOX_PREFIX + name, contype=1, conaffinity=1,
+                                       group=CONST_COLLISION_GROUP, margin=cfg.Clearance_Environment, gap=0.0,
+                                       rgba=[0.3, 0.6, 0.9, 0.3])
+            if np.all(hi_v >= zone_lo) and np.all(lo_v <= zone_hi):
+                self.__zone_boxes.append(name)
+        spec.add_exclude(bodyname1='base', bodyname2='env_stand')
+        self.__collision_manifest = collision_set.Manifest
+        self.__piece_components = list(collision_set.Components)
+
+    def __Add_Visual(self, spec: mujoco.MjSpec) -> None:
+        """
+        Description:
+            The visual STL of the cell, without collision (geom group CONST_ENV_VISUAL_GROUP).
+
+        Args:
+            (1) spec [MjSpec]: The specification; changed in place.
+        """
+
+        cfg = self.__cfg
+        vertices, faces = Read_Binary_STL(cfg.Visual_Mesh)
+        spec.add_mesh(name='env_visual', uservert=vertices.flatten().tolist(), userface=faces.flatten().tolist(),
+                      inertia=mujoco.mjtMeshInertia.mjMESH_INERTIA_SHELL)
+        spec.worldbody.add_geom(name='env_visual', type=mujoco.mjtGeom.mjGEOM_MESH, meshname='env_visual',
+                                contype=0, conaffinity=0, group=CONST_ENV_VISUAL_GROUP, rgba=[0.7, 0.7, 0.72, 1.0])
 
     def __Set_Gripper(self) -> None:
         """
