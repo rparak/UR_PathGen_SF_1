@@ -23,6 +23,9 @@
 
 # Math (Mathematical functions)
 import math
+# Multiprocessing (Process-based parallelism)
+import multiprocessing
+import multiprocessing.pool
 # Typing (Support for type hints)
 import typing as tp
 # Dataclasses (Data Classes)
@@ -30,6 +33,8 @@ from dataclasses import dataclass, field
 # Numpy (Array computing) [pip3 install numpy]
 import numpy as np
 # Custom Lib.:
+#   ../Configuration/Core — the configuration a worker builds its scene from
+from Configuration.Core import Cell_Configuration_Str
 #   ../Scene/Core — the generated-rule checks
 from Scene.Core import Scene_Cls
 
@@ -63,6 +68,12 @@ CONST_LOCAL_EXPANSION = 1.0
 # Refinement: the perturbation of a via point shrinks from the first to the last value.
 #   Unit [float] (rad)
 CONST_REFINE_SIGMA = (0.20, 0.01)
+# A worker process's own scenes and planners (each Scene_Cls holds one MjModel / MjData), built on
+# its first task for a configuration and kept for its later tasks (Request_Planner). Empty in the
+# main process unless Plan_All runs without a pool.
+#   Unit [Dict<string, Scene_Cls>], [Dict<string, Planner_Cls>]
+CONST_WORKER_SCENES: tp.Dict[str, Scene_Cls] = {}
+CONST_WORKER_PLANNERS: tp.Dict[str, tp.Any] = {}
 
 
 class Planner_Error_Cls(ValueError):
@@ -116,6 +127,38 @@ class Plan_Result_Str:
     # Restarts that found a path (of those tried).
     #   Unit [int]
     Found: int = 0
+
+
+@dataclass
+class Plan_Request_Str:
+    """
+    Description:
+        One generated segment to plan (Plan_All): everything a worker process needs to build its own
+        scene and planner and to plan the segment as Planner_Cls.Plan does.
+    """
+
+    # The segment's name in messages, e.g. 'S1 (home -> drop_rotate_1)'.
+    #   Unit [string]
+    Label: str = ''
+    # The cell configuration at the segment's gripper opening (Opening set).
+    #   Unit [Cell_Configuration_Str]
+    Configuration: tp.Optional[Cell_Configuration_Str] = None
+    # The joints of the fixed station points.
+    #   Unit [List<Vector<float> 1x6>] (rad)
+    Station_Q: tp.List[np.ndarray] = field(default_factory=list)
+    # Weight of the clearance penalty in the cost.
+    #   Unit [float] (s/m)
+    Penalty_Weight: float = 0.0
+    # The iteration budgets.
+    #   Unit [Planner_Budget_Str]
+    Budget: Planner_Budget_Str = field(default_factory=Planner_Budget_Str)
+    # The segment's ends, never wrapped.
+    #   Unit [Vector<float> 1x6] (rad)
+    Start: np.ndarray = field(default_factory=lambda: np.zeros(6))
+    Goal: np.ndarray = field(default_factory=lambda: np.zeros(6))
+    # The recorded seed of the segment.
+    #   Unit [int]
+    Seed: int = 0
 
 
 def Segment_Duration(q_a: tp.Sequence[float], q_b: tp.Sequence[float], a: float, v: float) -> float:
@@ -496,16 +539,120 @@ class Planner_Cls(object):
                 path, cost = trial, trial_cost
         return path
 
+    def __Use_Ends(self, start: np.ndarray, goal: np.ndarray) -> None:
+        """
+        Description:
+            Set the station-box floors of a segment's two ends (Scene_Cls.Station_Box_Floors) for
+            every edge checked after it. The edge verdicts depend on the floors, so those of another
+            segment are forgotten.
+
+        Args:
+            (1 - 2) start, goal [Vector<float> 1x6]: The segment's ends (rad).
+        """
+
+        floors = self.__scene.Station_Box_Floors(start, goal)
+        if floors != self.__box_floors:
+            self.__box_floors, self.__valid_cache = floors, {}
+
+    def Prepare(self, q_start: tp.Sequence[float], q_goal: tp.Sequence[float]) -> bool:
+        """
+        Description:
+            Step 1 of a plan: set the station-box floors of the two ends, refuse an end that breaks
+            the generated rule, and say whether the direct segment keeps it.
+
+        Args:
+            (1 - 2) q_start, q_goal [Vector<float> 1x6]: The ends (rad); never wrapped.
+
+        Returns:
+            (1) parameter [bool]: True when the direct segment keeps the rule.
+        """
+
+        start, goal = np.asarray(q_start, dtype=float), np.asarray(q_goal, dtype=float)
+        self.__Use_Ends(start, goal)
+        for name, q in (('start', start), ('goal', goal)):
+            violations = self.__scene.Check_Configuration(q, 'generated', self.__station_tcps)
+            if violations:
+                raise Planner_Error_Cls('The %s configuration breaks the generated rule: %s.' % (name, '; '.join(
+                    '%s - %s %.1f mm (margin %.1f mm)' % (v.Body_1, v.Body_2, v.Distance * 1e3, v.Margin * 1e3)
+                    for v in violations)))
+        return self.Edge_Valid(start, goal)
+
+    def Restart(self, q_start: tp.Sequence[float], q_goal: tp.Sequence[float], seed: int,
+                restart: int) -> tp.Optional[tp.Tuple[tp.List[np.ndarray], int]]:
+        """
+        Description:
+            Step 2 of a plan, one restart: RRT-Connect and shortcutting with generator [seed, restart],
+            under the station-box floors of the two ends. Depends on its arguments only, so the
+            restarts can run in any order and in any process.
+
+        Args:
+            (1 - 2) q_start, q_goal [Vector<float> 1x6]: The ends (rad).
+            (3) seed [int]: The recorded seed.
+            (4) restart [int]: The restart's number.
+
+        Returns:
+            (1) parameter [Tuple<List<Vector<float> 1x6>, int> or None]: The shortcut path and the
+                                                                         restart, or None.
+        """
+
+        start, goal = np.asarray(q_start, dtype=float), np.asarray(q_goal, dtype=float)
+        self.__Use_Ends(start, goal)
+        rng = np.random.default_rng([seed, restart])
+        path = self.RRT_Connect(start, goal, rng)
+        return None if path is None else (self.Shortcut(path, rng), restart)
+
+    def Refine_Candidate(self, path: tp.List[np.ndarray], seed: int, rank: int,
+                         restart: int) -> tp.Tuple[float, int, int, tp.List[np.ndarray]]:
+        """
+        Description:
+            Step 3 of a plan: refine one of the fastest paths with generator [seed, 1000 + rank],
+            under the station-box floors of its ends.
+
+        Args:
+            (1) path [List<Vector<float> 1x6>]: The path (rad).
+            (2) seed [int]: The recorded seed.
+            (3) rank [int]: Its rank among the found paths (Rank_Found).
+            (4) restart [int]: The restart it came from.
+
+        Returns:
+            (1) parameter [Tuple<float, int, int, List<Vector<float> 1x6>>]: Cost, length, restart and
+                                                                              the refined path.
+        """
+
+        self.__Use_Ends(np.asarray(path[0], dtype=float), np.asarray(path[-1], dtype=float))
+        refined = self.Refine(path, np.random.default_rng([seed, 1000 + rank]))
+        return self.Cost(refined), len(refined), restart, refined
+
+    def Finish(self, path: tp.List[np.ndarray], origin: str, found: int) -> Plan_Result_Str:
+        """
+        Description:
+            Step 4 of a plan: the independent final check (Verify_Path) and the measures.
+
+        Args:
+            (1) path [List<Vector<float> 1x6>]: The chosen path (rad).
+            (2) origin [string]: 'direct' or 'rrt restart <n>'.
+            (3) found [int]: Restarts that found a path.
+
+        Returns:
+            (1) parameter [Plan_Result_Str(object)]: The path and its measures.
+        """
+
+        self.Verify_Path(path)
+        return Plan_Result_Str(Path=path, Duration=Estimate_Duration(path, self.__a, self.__v),
+                               Penalty=sum(self.Segment_Penalty(a, b) for a, b in zip(path[:-1], path[1:])),
+                               Origin=origin, Found=found)
+
     def Plan(self, q_start: tp.Sequence[float], q_goal: tp.Sequence[float], seed: int) -> Plan_Result_Str:
         """
         Description:
-            Plan one generated segment: the direct segment if it keeps the rule; otherwise every
-            restart (generator [seed, restart]) runs RRT-Connect and shortcutting, the fastest paths
-            are refined (generator [seed, 1000 + rank]), and the lowest cost wins, ties going to fewer
-            via points. Every edge keeps the station-box rule with the floors of these two ends
-            (Scene_Cls.Station_Box_Floors). The result is verified with the full check (Verify_Path).
-            Raises when an end breaks the rule, or no path with at most 5 via points is found within
-            the budget.
+            Plan one generated segment in this process: the direct segment if it keeps the rule;
+            otherwise every restart (generator [seed, restart]) runs RRT-Connect and shortcutting,
+            the fastest paths are refined (generator [seed, 1000 + rank]), and the lowest cost wins,
+            ties going to fewer via points (Rank_Found, Choose_Refined). Every edge keeps the
+            station-box rule with the floors of these two ends (Scene_Cls.Station_Box_Floors). The
+            result is verified with the full check (Verify_Path). Raises when an end breaks the
+            rule, or no path with at most 5 via points is found within the budget. Plan_All runs
+            the same steps in a process pool.
 
         Args:
             (1 - 2) q_start, q_goal [Vector<float> 1x6]: The ends (rad); never wrapped.
@@ -516,43 +663,13 @@ class Planner_Cls(object):
         """
 
         start, goal = np.asarray(q_start, dtype=float), np.asarray(q_goal, dtype=float)
-        floors = self.__scene.Station_Box_Floors(start, goal)
-        if floors != self.__box_floors:
-            # The edge verdicts depend on the floors: forget those of another segment's plan.
-            self.__box_floors, self.__valid_cache = floors, {}
-        for name, q in (('start', start), ('goal', goal)):
-            violations = self.__scene.Check_Configuration(q, 'generated', self.__station_tcps)
-            if violations:
-                raise Planner_Error_Cls('The %s configuration breaks the generated rule: %s.' % (name, '; '.join(
-                    '%s - %s %.1f mm (margin %.1f mm)' % (v.Body_1, v.Body_2, v.Distance * 1e3, v.Margin * 1e3)
-                    for v in violations)))
-        if self.Edge_Valid(start, goal):
-            result = Plan_Result_Str(Path=[start, goal], Origin='direct')
-        else:
-            found = []
-            for restart in range(self.__budget.Restarts):
-                rng = np.random.default_rng([seed, restart])
-                path = self.RRT_Connect(start, goal, rng)
-                if path is not None:
-                    found.append((self.Shortcut(path, rng), restart))
-            if not found:
-                raise Planner_Error_Cls('RRT-Connect found no path in %d restarts of %d iterations each.'
-                                        % (self.__budget.Restarts, self.__budget.RRT_Iterations))
-            found.sort(key=lambda item: (Estimate_Duration(item[0], self.__a, self.__v), len(item[0]), item[1]))
-            refined = []
-            for rank, (path, restart) in enumerate(found[:self.__budget.Refine_Candidates]):
-                path = self.Refine(path, np.random.default_rng([seed, 1000 + rank]))
-                refined.append((self.Cost(path), len(path), restart, path))
-            refined.sort(key=lambda item: (item[0], item[1], item[2]))
-            short = [r for r in refined if len(r[3]) - 2 <= CONST_MAX_VIAS]
-            if not short:
-                raise Planner_Error_Cls('Every path found needs more than %d via points (fewest: %d).'
-                                        % (CONST_MAX_VIAS, min(len(r[3]) for r in refined) - 2))
-            result = Plan_Result_Str(Path=short[0][3], Origin='rrt restart %d' % short[0][2], Found=len(found))
-        self.Verify_Path(result.Path)
-        result.Duration = Estimate_Duration(result.Path, self.__a, self.__v)
-        result.Penalty = sum(self.Segment_Penalty(a, b) for a, b in zip(result.Path[:-1], result.Path[1:]))
-        return result
+        if self.Prepare(start, goal):
+            return self.Finish([start, goal], 'direct', 0)
+        found = [r for r in (self.Restart(start, goal, seed, k) for k in range(self.__budget.Restarts)) if r is not None]
+        ranked = Rank_Found(found, self.__budget)
+        refined = [self.Refine_Candidate(path, seed, rank, restart) for rank, (path, restart) in enumerate(ranked)]
+        path, restart = Choose_Refined(refined)
+        return self.Finish(path, 'rrt restart %d' % restart, len(found))
 
     def Verify_Path(self, path: tp.Sequence[np.ndarray]) -> None:
         """
@@ -580,3 +697,195 @@ class Planner_Cls(object):
                 raise Planner_Error_Cls('Segment %d of the path breaks the generated rule at sample %d of %d: %s - %s '
                                         '%.1f mm (margin %.1f mm).' % (index, k, samples, v.Body_1, v.Body_2,
                                                                        v.Distance * 1e3, v.Margin * 1e3))
+
+
+def Rank_Found(found: tp.List[tp.Tuple[tp.List[np.ndarray], int]],
+               Planner_Budget_Str: Planner_Budget_Str) -> tp.List[tp.Tuple[tp.List[np.ndarray], int]]:
+    """
+    Description:
+        The paths the restarts found, fastest first (estimated duration, then fewer configurations,
+        then the earlier restart), cut to the Refine_Candidates that are refined. Raises when no
+        restart found a path.
+
+    Args:
+        (1) found [List<Tuple<List<Vector<float> 1x6>, int>>]: (shortcut path, restart), in restart order.
+        (2) Planner_Budget_Str [Planner_Budget_Str(object)]: The iteration budgets.
+
+    Returns:
+        (1) parameter [List<Tuple<List<Vector<float> 1x6>, int>>]: The candidates in rank order.
+    """
+
+    if not found:
+        raise Planner_Error_Cls('RRT-Connect found no path in %d restarts of %d iterations each.'
+                                % (Planner_Budget_Str.Restarts, Planner_Budget_Str.RRT_Iterations))
+    a, v = float(CONST_MOVEJ_A_TOKEN), float(CONST_MOVEJ_V_TOKEN)
+    ranked = sorted(found, key=lambda item: (Estimate_Duration(item[0], a, v), len(item[0]), item[1]))
+    return ranked[:Planner_Budget_Str.Refine_Candidates]
+
+
+def Choose_Refined(refined: tp.List[tp.Tuple[float, int, int, tp.List[np.ndarray]]]) -> tp.Tuple[tp.List[np.ndarray], int]:
+    """
+    Description:
+        The plan's result among the refined candidates: the lowest cost, ties going to fewer via
+        points, then to the earlier restart; a path with more than 5 via points is never chosen.
+
+    Args:
+        (1) refined [List<Tuple<float, int, int, List<Vector<float> 1x6>>>]: (cost, length, restart, path).
+
+    Returns:
+        (1) parameter [Tuple<List<Vector<float> 1x6>, int>]: The path and its restart.
+    """
+
+    ordered = sorted(refined, key=lambda item: (item[0], item[1], item[2]))
+    short = [r for r in ordered if len(r[3]) - 2 <= CONST_MAX_VIAS]
+    if not short:
+        raise Planner_Error_Cls('Every path found needs more than %d via points (fewest: %d).'
+                                % (CONST_MAX_VIAS, min(len(r[3]) for r in ordered) - 2))
+    return short[0][3], short[0][2]
+
+
+def Request_Planner(Plan_Request_Str: Plan_Request_Str) -> Planner_Cls:
+    """
+    Description:
+        This process's planner for a request: built on first use, one scene per configuration
+        (CONST_WORKER_SCENES) and one planner per configuration, station points, weight and budget
+        (CONST_WORKER_PLANNERS).
+
+    Args:
+        (1) Plan_Request_Str [Plan_Request_Str(object)]: The request.
+
+    Returns:
+        (1) parameter [Planner_Cls(object)]: The planner.
+    """
+
+    r = Plan_Request_Str
+    scene_key = repr(r.Configuration)
+    planner_key = repr((scene_key, [np.asarray(q, dtype=float).tolist() for q in r.Station_Q], r.Penalty_Weight, r.Budget))
+    if scene_key not in CONST_WORKER_SCENES:
+        CONST_WORKER_SCENES[scene_key] = Scene_Cls(r.Configuration)
+    if planner_key not in CONST_WORKER_PLANNERS:
+        CONST_WORKER_PLANNERS[planner_key] = Planner_Cls(CONST_WORKER_SCENES[scene_key], r.Station_Q, r.Penalty_Weight, r.Budget)
+    return CONST_WORKER_PLANNERS[planner_key]
+
+
+def Run_Plan_Task(task: tp.Tuple[str, Plan_Request_Str, tp.Tuple]) -> tp.Tuple[str, tp.Any]:
+    """
+    Description:
+        One step of Plan_All in a worker process: 'prepare' (Planner_Cls.Prepare), 'restart'
+        (Restart), 'refine' (Refine_Candidate) or 'finish' (Finish), on the process's own planner.
+        A Planner_Error_Cls comes back as its message, so Plan_All can name the segment.
+
+    Args:
+        (1) task [Tuple<string, Plan_Request_Str, Tuple>]: The step, the request and the step's arguments.
+
+    Returns:
+        (1) parameter [Tuple<string, Any>]: ('ok', the step's result) or ('error', the message).
+    """
+
+    kind, request, args = task
+    planner = Request_Planner(request)
+    try:
+        if kind == 'prepare':
+            return 'ok', planner.Prepare(request.Start, request.Goal)
+        if kind == 'restart':
+            return 'ok', planner.Restart(request.Start, request.Goal, request.Seed, *args)
+        if kind == 'refine':
+            return 'ok', planner.Refine_Candidate(args[0], request.Seed, args[1], args[2])
+        if kind == 'finish':
+            return 'ok', planner.Finish(*args)
+    except Planner_Error_Cls as error:
+        return 'error', str(error)
+    raise ValueError('A plan task is prepare, restart, refine or finish, not %r.' % (kind,))
+
+
+def Make_Pool(workers: int) -> multiprocessing.pool.Pool:
+    """
+    Description:
+        A pool of worker processes for Plan_All, started with 'spawn' (a fresh interpreter each, safe
+        with MuJoCo on every platform). Each worker builds its own scenes and planners.
+
+    Args:
+        (1) workers [int]: The number of processes (>= 1).
+
+    Returns:
+        (1) parameter [multiprocessing.pool.Pool]: The pool; the caller closes it.
+    """
+
+    if workers < 1:
+        raise ValueError('A pool needs at least one worker, not %d.' % workers)
+    return multiprocessing.get_context('spawn').Pool(workers)
+
+
+def Plan_All(requests: tp.Sequence[Plan_Request_Str], pool: tp.Optional[multiprocessing.pool.Pool] = None) -> tp.List[Plan_Result_Str]:
+    """
+    Description:
+        Plan several segments. Without a pool each is planned in this process by Planner_Cls.Plan.
+        With a pool the same steps run in its workers, every segment at once: all prepares, then
+        every restart of every segment that needs a search, then their refinements, then the final
+        checks, each step's results in request and restart order. Each step depends only on its
+        request, its own generator ([seed, restart], [seed, 1000 + rank]) and its arguments, and the
+        result is chosen by the same rule (Rank_Found, Choose_Refined), so the paths are identical
+        to Plan's, byte for byte, for any number of workers. Raises Planner_Error_Cls naming the
+        first segment that fails.
+
+    Args:
+        (1) requests [List<Plan_Request_Str>]: The segments.
+        (2) pool [multiprocessing.pool.Pool]: Make_Pool's workers; none = this process.
+
+    Returns:
+        (1) parameter [List<Plan_Result_Str>]: The results, in request order.
+    """
+
+    def Run(tasks: tp.List[tp.Tuple[str, Plan_Request_Str, tp.Tuple]]) -> tp.List[tp.Any]:
+        """
+        Description:
+            Run the tasks in the pool, in order; raise on the first error, naming its segment.
+
+        Args:
+            (1) tasks [List<Tuple<string, Plan_Request_Str, Tuple>>]: The tasks.
+
+        Returns:
+            (1) parameter [List<Any>]: Their results.
+        """
+
+        out = []
+        for (_, request, _), (status, value) in zip(tasks, pool.map(Run_Plan_Task, tasks, chunksize=1)):
+            if status == 'error':
+                raise Planner_Error_Cls('%s: %s' % (request.Label, value))
+            out.append(value)
+        return out
+
+    if pool is None:
+        results = []
+        for r in requests:
+            try:
+                results.append(Request_Planner(r).Plan(r.Start, r.Goal, r.Seed))
+            except Planner_Error_Cls as error:
+                raise Planner_Error_Cls('%s: %s' % (r.Label, error)) from error
+        return results
+    direct = Run([('prepare', r, ()) for r in requests])
+    search = [i for i, d in enumerate(direct) if not d]
+    restarts = [(i, k) for i in search for k in range(requests[i].Budget.Restarts)]
+    found = Run([('restart', requests[i], (k,)) for i, k in restarts])
+    ranked = {}
+    for i in search:
+        try:
+            ranked[i] = Rank_Found([f for (j, _), f in zip(restarts, found) if j == i and f is not None], requests[i].Budget)
+        except Planner_Error_Cls as error:
+            raise Planner_Error_Cls('%s: %s' % (requests[i].Label, error)) from error
+    candidates = [(i, rank, path, restart) for i in search for rank, (path, restart) in enumerate(ranked[i])]
+    refined = Run([('refine', requests[i], (path, rank, restart)) for i, rank, path, restart in candidates])
+    chosen = {}
+    for i in search:
+        try:
+            chosen[i] = Choose_Refined([r for (j, _, _, _), r in zip(candidates, refined) if j == i])
+        except Planner_Error_Cls as error:
+            raise Planner_Error_Cls('%s: %s' % (requests[i].Label, error)) from error
+    finish = []
+    for i, r in enumerate(requests):
+        if direct[i]:
+            finish.append(('finish', r, ([np.asarray(r.Start, dtype=float), np.asarray(r.Goal, dtype=float)], 'direct', 0)))
+        else:
+            count = sum(1 for (j, _), f in zip(restarts, found) if j == i and f is not None)
+            finish.append(('finish', r, (chosen[i][0], 'rrt restart %d' % chosen[i][1], count)))
+    return Run(finish)

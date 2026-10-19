@@ -22,6 +22,9 @@
 
 # System (Default)
 import os
+import sys
+# Subprocess (Subprocess management)
+import subprocess
 # Dataclasses (Data Classes)
 import dataclasses
 # Importlib (Import machinery)
@@ -96,3 +99,39 @@ def test_the_optimised_sequence_starts_at_home_with_a_generated_move(root):
                      ('program', raw['movej', 'Waypoint_5']), ('movej', 'v2'), ('movej', 'Waypoint_18'),
                      ('program', raw['movej', 'pick_rotate_1']), ('program', raw['movel', 'Waypoint_6']), ('movej', 'v3'),
                      ('movej', 'home')]
+
+
+def _Run(root, tmp_path, *args):
+    return subprocess.run([sys.executable, os.path.join(root, 'Example', 'plan_rotation.py')] + list(args),
+                          capture_output=True, text=True, cwd=str(tmp_path), timeout=3600)
+
+
+def test_a_worker_count_below_one_is_refused(root, tmp_path):
+    """
+    Description:
+        --workers 0 is refused with exit 1 and a sentence naming the flag, before anything is
+        planned or written.
+    """
+
+    result = _Run(root, tmp_path, '--workers', '0', '--out', str(tmp_path / 'out'))
+    assert result.returncode == 1
+    assert '[ERROR] --workers must be 1 or more' in result.stdout
+    assert not (tmp_path / 'out').exists()
+
+
+@pytest.mark.slow
+def test_a_parallel_run_writes_the_committed_output(root, tmp_path):
+    """
+    Description:
+        The full planning run with 4 spawned workers (S1 - S3 at once, the recorded seed and budget),
+        started in a fresh interpreter from an unrelated directory, writes both output files byte for
+        byte as committed in Data/Generated/ (written by the sequential run), and reports its wall time.
+    """
+
+    result = _Run(root, tmp_path, '--workers', '4', '--out', str(tmp_path / 'out'))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '[INFO] Wall time: planning' in result.stdout and '(4 workers)' in result.stdout
+    for name in ('SF1_Rotation_17.urscript', 'SF1_Rotation_17_Sequence.script'):
+        with open(os.path.join(root, 'Data', 'Generated', name), 'rb') as handle:
+            committed = handle.read()
+        assert (tmp_path / 'out' / name).read_bytes() == committed, name

@@ -786,3 +786,29 @@ owner restates the accuracy.
 
 Pinned by `test/Scene/test_station.py::test_generated_segments_keep_the_extra_margin_to_the_machine_outside_the_zone`
 and `test/Configuration/test_core.py::test_the_shipped_configuration_loads_in_si_units`.
+
+## Planning runs in a spawned process pool, with the same steps and the same choice as one process
+
+**Decision.** `Plan_All` plans S1 – S3 at once in `--workers N` spawned processes, each with its own
+scene and planner. `Planner_Cls.Plan` is split into steps that both paths run (`Prepare`, `Restart`,
+`Refine_Candidate`, `Finish`), each depending only on its arguments and its own generator, and the
+result is chosen by the same functions (`Rank_Found`, `Choose_Refined`). The worker count is a
+command-line flag (default 1), not a configuration field: it changes the wall time only, and the
+right value belongs to the machine.
+
+**Why.** Planning took about 15 minutes (owner, 2026-10-19: approved with S1 – S3 at once). A step
+that shares nothing but its inputs gives the same result in any process and order, so the output
+stays byte-identical (SPEC 10.6) whatever N is. Spawn starts a fresh interpreter, safe with MuJoCo
+on every platform; each worker builds its own MjModel / MjData. The edge and penalty caches are per
+process; they only remember results, so losing them changes the time, not the path.
+
+**Alternatives.** Threads: MuJoCo releases the GIL, but the planner's Python loops do not. Fork:
+not safe on macOS with the libraries loaded. Splitting a refinement: its 150 steps each depend on
+the last, so splitting changes the result. A time budget: rejected earlier (budgets are counts).
+
+**Revisit if** the refinement's budget changes (it is the critical path: 857 s -> 463 s with 8
+workers, measured 2026-10-19), or a machine with more performance cores is used.
+
+Pinned by `test/Planner/test_core.py::test_plan_all_gives_the_same_paths_with_one_or_two_workers`,
+`test/Planner/test_core.py::test_plan_all_names_the_segment_that_fails` and
+`test/Example/test_plan_rotation.py::test_a_parallel_run_writes_the_committed_output` (slow).

@@ -52,8 +52,8 @@ from Kinematics.Core import TCP_Pose, Matrix_To_Pose
 #   ../Scene/Core — the scene at each gripper opening
 from Scene.Core import Scene_Cls
 #   ../Planner/Core — the planner and the estimates
-from Planner.Core import (Planner_Cls, Planner_Budget_Str, Planner_Error_Cls, Estimate_Duration, Linear_Duration,
-                          Path_Length, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN, CONST_PENALTY_DISTANCE)
+from Planner.Core import (Plan_All, Plan_Request_Str, Make_Pool, Planner_Budget_Str, Planner_Error_Cls, Estimate_Duration,
+                          Linear_Duration, Path_Length, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN, CONST_PENALTY_DISTANCE)
 
 """
 Description:
@@ -151,6 +151,32 @@ def Opening(cfg: Cell_Configuration_Str, state: str) -> float:
         raise Configuration_Error_Cls('Tool.Holding_Openings has no entry for case %d; add {Case: %d, Opening: <m>, '
                                       'Source: <text>} to the configuration.' % (CONST_CASE, CONST_CASE))
     return cfg.Holding_Openings[CONST_CASE][0]
+
+
+def Plan_Requests(cfg: Cell_Configuration_Str, points: tp.Dict, station_q: tp.Sequence[tp.Sequence[float]],
+                  penalty_weight: float) -> tp.List[Plan_Request_Str]:
+    """
+    Description:
+        The planning requests of S1, S2 and S3: each at its gripper opening (CONST_SEGMENT_STATE),
+        between the _q of its ends, with the full budget and its own seed, seed * 1000 + case * 10 + k
+        (k = 0 for S1).
+
+    Args:
+        (1) cfg [Cell_Configuration_Str(object)]: The cell configuration.
+        (2) points [Dict<string, Robot_Point_Str>]: The points the ends are taken from.
+        (3) station_q [List<Vector<float> 1x6>]: The fixed station points (rad).
+        (4) penalty_weight [float]: The clearance penalty weight (s/m).
+
+    Returns:
+        (1) parameter [List<Plan_Request_Str>]: S1, S2, S3.
+    """
+
+    return [Plan_Request_Str('%s (%s -> %s)' % (segment, start, goal),
+                             dataclasses.replace(cfg, Opening=Opening(cfg, CONST_SEGMENT_STATE[segment])),
+                             [np.asarray(q, dtype=float) for q in station_q], penalty_weight, Planner_Budget_Str(),
+                             np.asarray(points[start].Q, dtype=float), np.asarray(points[goal].Q, dtype=float),
+                             CONST_SEED * 1000 + CONST_CASE * 10 + index)
+            for index, (segment, (start, goal)) in enumerate(Segments().items())]
 
 
 def Configuration_Label(scene: Scene_Cls, cfg: Cell_Configuration_Str, q: tp.Sequence[float], kind: str,
@@ -382,14 +408,21 @@ def main():
         SF1_Rotation_17_Sequence.script (home -> ... -> home in program order), and print the report:
         taught vs optimised per segment and the home -> home totals.
 
-            .venv/bin/python Example/plan_rotation.py [--penalty-weight W] [--out DIR]
+            .venv/bin/python Example/plan_rotation.py [--workers N] [--penalty-weight W] [--out DIR]
+
+        --workers N plans S1-S3 at once in N spawned processes (each with its own scene); the output
+        is byte-identical for every N (Plan_All). 1 (default) plans in this process.
     """
 
     parser = argparse.ArgumentParser(description='Plan the transfer segments of the rotation sequence of case 17.')
     parser.add_argument('--config', default=CONST_DEFAULT_CONFIG_FILE, help='the cell configuration (default: %(default)s)')
     parser.add_argument('--penalty-weight', type=float, default=CONST_PENALTY_WEIGHT, help='clearance penalty weight [s/m]')
     parser.add_argument('--out', default=CONST_OUTPUT_DIR, help='output directory (default: %(default)s)')
+    parser.add_argument('--workers', type=int, default=1, help='planning processes; the output does not depend on it (default: 1)')
     args = parser.parse_args()
+    if args.workers < 1:
+        print('[ERROR] --workers must be 1 or more (1 = plan in this process), not %d.' % args.workers)
+        return 1
     print('[WARNING] Simulation passed != safe on the robot. Run every generated path on the real cell at reduced speed first.')
     try:
         cfg = Load_Configuration(args.config)
@@ -404,21 +437,25 @@ def main():
     print('[INFO] Case %d: holding opening %.1f mm (%s), open %.1f mm.'
           % (CONST_CASE, cfg.Holding_Openings[CONST_CASE][0] * 1e3, cfg.Holding_Openings[CONST_CASE][1], CONST_RELEASE_OPENING * 1e3))
     station_q = [points[name].Q for name in CONST_STATION_POINTS]
+    started = time.time()
+    try:
+        requests = Plan_Requests(cfg, points, station_q, args.penalty_weight)
+        if args.workers > 1:
+            with Make_Pool(args.workers) as pool:
+                results = Plan_All(requests, pool)
+        else:
+            results = Plan_All(requests)
+    except Planner_Error_Cls as error:
+        print('[ERROR] %s Nothing is written.' % error)
+        return 1
+    planned = time.time() - started
     scenes = {opening: Scene_Cls(dataclasses.replace(cfg, Opening=opening)) for opening in sorted(set(openings.values()))}
-    budget = Planner_Budget_Str()
     rows, generated = [], {}
-    for index, (segment, (start, goal)) in enumerate(Segments().items()):
+    for (segment, (start, goal)), result in zip(Segments().items(), results):
         scene = scenes[openings[segment]]
-        planner = Planner_Cls(scene, station_q, args.penalty_weight, budget)
-        started = time.time()
-        try:
-            result = planner.Plan(points[start].Q, points[goal].Q, CONST_SEED * 1000 + CONST_CASE * 10 + index)
-        except Planner_Error_Cls as error:
-            print('[ERROR] %s (%s -> %s): %s Nothing is written.' % (segment, start, goal, error))
-            return 1
         taught = [np.asarray(points[n].Q) for n in [start] + CONST_TAUGHT_VIAS[segment] + [goal]]
         generated[segment] = result.Path
-        rows.append((segment, Measure(scene, taught, station_q), Measure(scene, result.Path, station_q), result, time.time() - started))
+        rows.append((segment, Measure(scene, taught, station_q), Measure(scene, result.Path, station_q), result))
     # Outputs: the points and the sequence, written only after every segment is verified.
     Write_Outputs(args.out, cfg, points, lines, generated, args.penalty_weight)
     # Report.
@@ -427,18 +464,20 @@ def main():
     print('[INFO]   "far": outside the 50 mm station neighbourhood, where the penalty counts):')
     print('[INFO]   %-3s %-9s %4s %8s %9s %9s %9s %-25s %10s %-25s %9s %4s %s'
           % ('S', 'path', 'vias', 'T_est/s', 'sum|dq|', 'max-jnt', 'min d/mm', 'robot body', 'far d/mm', 'robot body (far)',
-             'penalty/m', 'viol', 'wall/s'))
+             'penalty/m', 'viol', 'origin'))
     totals = {'taught': 0.0, 'optimised': 0.0}
-    for segment, before, after, result, wall in rows:
+    for segment, before, after, result in rows:
         for label, m in (('taught', before), ('optimised', after)):
             totals[label] += m['duration']
             print('[INFO]   %-3s %-9s %4d %8.2f %9.3f %9.3f %9.1f %-25s %10.1f %-25s %9.3f %4d %s'
                   % (segment, label, m['vias'], m['duration'], m['sum'], m['max'], m['closest'] * 1e3, m['body'] or '-',
                      m['far'] * 1e3, m['far_body'] or '-', m['penalty'], m['violations'],
-                     '%.0f (%s)' % (wall, result.Origin) if label == 'optimised' else ''))
+                     result.Origin if label == 'optimised' else ''))
     fixed = Station_Duration(points)
     print('[INFO]   home -> home: taught %.2f s, optimised %.2f s (S1-S3 + station operations %.2f s; estimate)'
           % (totals['taught'] + fixed, totals['optimised'] + fixed, fixed))
+    print('[INFO] Wall time: planning %.0f s (%d worker%s), report %.0f s.'
+          % (planned, args.workers, '' if args.workers == 1 else 's', time.time() - started - planned))
     print('[INFO] Written to %s. Simulation passed != safe on the robot.' % os.path.relpath(args.out, CONST_PROJECT_ROOT))
     return 0
 

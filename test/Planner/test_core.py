@@ -39,8 +39,9 @@ import pytest
 import mujoco
 # Custom Lib.:
 #   ../src/Planner/Core — the planner and the estimates under test
-from Planner.Core import (Planner_Cls, Planner_Budget_Str, Planner_Error_Cls, Segment_Duration, Estimate_Duration,
-                          Linear_Duration, Profile_Fraction, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN)
+from Planner.Core import (Planner_Cls, Planner_Budget_Str, Planner_Error_Cls, Plan_Request_Str, Plan_All, Make_Pool,
+                          Segment_Duration, Estimate_Duration, Linear_Duration, Profile_Fraction, CONST_MOVEJ_A_TOKEN,
+                          CONST_MOVEJ_V_TOKEN)
 #   ../src/Scene/Core — the scene at each opening
 from Scene.Core import Scene_Cls
 #   ../src/URScript/Core — the committed outputs and the program extracts
@@ -319,6 +320,63 @@ def test_a_reduced_planning_run_is_byte_identical_twice(cfg, program):
                 for k, q in enumerate(result.Path[1:-1], start=1)]
         texts.append(Write_URScript(Make_Document(vias)))
     assert texts[0] == texts[1]
+
+
+def _Requests(cfg, points):
+    station_q = [np.array(points[name].Q) for name in CONST_STATION_POINTS]
+    def Request(label, opening, start, goal, seed):
+        return Plan_Request_Str(label, dataclasses.replace(cfg, Opening=opening), station_q, 0.5, CONST_REDUCED,
+                                np.array(points[start].Q), np.array(points[goal].Q), seed)
+    return [Request('S1', CONST_OPENING['S1'], 'home', 'drop_rotate_1', CONST_REDUCED_SEED),
+            Request('direct', CONST_OPENING['S3'], 'home', 'Waypoint_1', CONST_REDUCED_SEED),
+            Request('S2', CONST_OPENING['S2'], 'Waypoint_5', 'Waypoint_18', CONST_REDUCED_SEED + 1)]
+
+
+def test_plan_all_gives_the_same_paths_with_one_or_two_workers(cfg, program):
+    """
+    Description:
+        Plan_All of three segments at once (S1 and S2 need a search, home -> Waypoint_1 is direct;
+        reduced budget, penalty weight 0.5) gives the same results without a pool (Planner_Cls.Plan
+        in this process) and with two spawned workers, each with its own scenes: every path byte for
+        byte, and the same origin, number of restarts that found a path, duration and penalty.
+    """
+
+    points, _ = program
+    requests = _Requests(cfg, points)
+    sequential = Plan_All(requests)
+    with Make_Pool(2) as pool:
+        parallel = Plan_All(requests, pool)
+    assert [r.Origin for r in sequential][1] == 'direct'
+    assert all(r.Origin.startswith('rrt') for r in (sequential[0], sequential[2]))
+    for a, b in zip(sequential, parallel):
+        assert np.array(a.Path).tobytes() == np.array(b.Path).tobytes()
+        assert (a.Origin, a.Found, a.Duration, a.Penalty) == (b.Origin, b.Found, b.Duration, b.Penalty)
+
+
+@pytest.mark.parametrize('kind', ['no path', 'end breaks the rule'])
+def test_plan_all_names_the_segment_that_fails(cfg, program, kind):
+    """
+    Description:
+        A segment that cannot be planned fails Plan_All with Planner_Error_Cls naming that segment
+        and the reason, in this process and in the pool alike: one restart of one RRT iteration finds
+        no path (decided after the restarts), and a 150 mm environment margin makes the start break
+        the rule (decided in a worker's first step).
+    """
+
+    points, _ = program
+    requests = _Requests(cfg, points)
+    if kind == 'no path':
+        requests[2] = dataclasses.replace(requests[2], Budget=dataclasses.replace(CONST_REDUCED, Restarts=1, RRT_Iterations=1))
+        pattern = r'^S2: RRT-Connect found no path'
+    else:
+        requests[2] = dataclasses.replace(requests[2], Configuration=dataclasses.replace(requests[2].Configuration,
+                                                                                          Clearance_Environment=0.150))
+        pattern = r'^S2: The start configuration breaks the generated rule'
+    with pytest.raises(Planner_Error_Cls, match=pattern):
+        Plan_All(requests)
+    with Make_Pool(2) as pool:
+        with pytest.raises(Planner_Error_Cls, match=pattern):
+            Plan_All(requests, pool)
 
 
 @pytest.mark.parametrize('kind', ['inflated margin', 'no iterations', 'six via points'])

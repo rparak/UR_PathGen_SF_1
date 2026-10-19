@@ -58,7 +58,11 @@ program; run them at reduced speed first:
 
 ```bash
 .venv/bin/python Example/plan_rotation.py
+.venv/bin/python Example/plan_rotation.py --workers 8
 ```
+
+`--workers N` plans S1 – S3 at once in N processes; the output is the same for every N (about 8
+minutes with 8 on an M2 Pro, 15 with 1).
 
 Replay a path in the viewer (macOS: `mjpython`), or write screenshots instead:
 
