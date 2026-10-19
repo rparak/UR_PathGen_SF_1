@@ -43,7 +43,7 @@ import numpy as np
 from Configuration.Core import Load_Configuration, Cell_Configuration_Str, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE, CONST_PROJECT_ROOT
 #   ../URScript/Core — the program extracts and the writers
 from URScript.Core import (Read_Motion_Sequence, Program_Entries, Make_Document, Write_URScript, Write_Motion_Sequence, Replace_Joints,
-                           URScript_Error_Cls)
+                           Motion_Str, URScript_Error_Cls)
 #   ../Kinematics/Core — the proposals' branches and the TCP
 from Kinematics.Core import TCP_Pose, Solve_IK_Analytic, Pose_To_Matrix, Nearest_Representative, Kinematics_Error_Cls
 #   ../Scene/Core — the scene of each gripper state
@@ -230,41 +230,80 @@ def Measure_Variant(folder: str, cfg: Cell_Configuration_Str, scenes: tp.Dict[st
     station_q = [points[name].Q for name in CONST_STATION_POINTS]
     tcps = scenes['holding'].Station_TCPs(station_q)
     floors = Run_Floors(moves, scenes)
-    frame = scenes['holding'].Base_Frame()
     sections = Section_Of(moves)
-    rows = []
-    for section, _ in CONST_SECTIONS:
-        row = {'section': section, 'motion_lines': 0, 'targets': [], 't_est_s': 0.0, 'sum_abs_dq_rad': 0.0, 'max_joint_rad': 0.0,
-               'tcp_length_m': 0.0, 'max_tcp_z_m': -np.inf, 'max_robot_z_m': -np.inf, 'closest': (CONST_REPORT_DISTMAX, ''),
-               'room': (CONST_REPORT_DISTMAX, '', 0.0), 'violating_samples': 0}
-        for index, move in enumerate(moves):
-            if sections[index] != section or move.Kind == 'gripper':
-                continue
-            scene = scenes[move.State]
-            row['motion_lines'] += 1
-            row['targets'].append(move.Target)
-            row['t_est_s'] += move.Duration
-            steps = np.abs(np.diff(np.asarray(move.Configurations), axis=0))
-            row['sum_abs_dq_rad'] += float(steps.sum())
-            row['max_joint_rad'] += float(steps.sum(axis=0).max())
-            last = None
-            for q in Move_Samples(scene, move):
-                tcp = (frame @ TCP_Pose(q, cfg.TCP_Offset))[:3, 3]
-                if last is not None:
-                    row['tcp_length_m'] += float(np.linalg.norm(tcp - last))
-                last = tcp
-                row['max_tcp_z_m'] = max(row['max_tcp_z_m'], float(tcp[2]))
-                row['max_robot_z_m'] = max(row['max_robot_z_m'], scene.Robot_Top(q))
-                closest, pair, room, room_pair, margin = scene.Environment_Clearance(q, move.Rule, tcps, CONST_REPORT_DISTMAX)
-                if closest < row['closest'][0]:
-                    row['closest'] = (closest, pair)
-                if room < row['room'][0]:
-                    row['room'] = (room, room_pair, margin)
-                if scene.Check_Configuration(q, move.Rule, tcps if move.Rule == 'generated' else None, floors.get(index)):
-                    row['violating_samples'] += 1
-        row['distinct_points'] = len(set(row['targets']))
-        row['vias'] = row['motion_lines'] - 1 if section.startswith('S') else ''
-        rows.append(row)
+    rows = [Section_Row(section, [(index, move) for index, move in enumerate(moves) if sections[index] == section], cfg, scenes,
+                        tcps, floors)
+            for section, _ in CONST_SECTIONS]
+    return rows + [Total_Row(rows, operations)]
+
+
+def Section_Row(section: str, moves: tp.Sequence[tp.Tuple[int, Move_Str]], cfg: Cell_Configuration_Str,
+                scenes: tp.Dict[str, Scene_Cls], tcps: np.ndarray, floors: tp.Dict[int, tp.Dict[str, float]]) -> tp.Dict:
+    """
+    Description:
+        The comparison row of one section (Measure_Variant): its moves' counts, estimates and lengths,
+        and the measures over their checked samples.
+
+    Args:
+        (1) section [string]: The section (CONST_SECTIONS).
+        (2) moves [List<Tuple<int, Move_Str>>]: The section's moves with their index among all moves, in order.
+        (3) cfg [Cell_Configuration_Str(object)]: The cell configuration (the TCP).
+        (4) scenes [Dict<string, Scene_Cls>]: The scene of each gripper state.
+        (5) tcps [Matrix<float> Nx3]: The station points' TCPs (Station_TCPs).
+        (6) floors [Dict<int, Dict<string, float>>]: The station-box floors of each generated move (Run_Floors).
+
+    Returns:
+        (1) parameter [Dict]: The row.
+    """
+
+    frame = scenes['holding'].Base_Frame()
+    row = {'section': section, 'motion_lines': 0, 'targets': [], 't_est_s': 0.0, 'sum_abs_dq_rad': 0.0, 'max_joint_rad': 0.0,
+           'tcp_length_m': 0.0, 'max_tcp_z_m': -np.inf, 'max_robot_z_m': -np.inf, 'closest': (CONST_REPORT_DISTMAX, ''),
+           'room': (CONST_REPORT_DISTMAX, '', 0.0), 'violating_samples': 0}
+    for index, move in moves:
+        if move.Kind == 'gripper':
+            continue
+        scene = scenes[move.State]
+        row['motion_lines'] += 1
+        row['targets'].append(move.Target)
+        row['t_est_s'] += move.Duration
+        steps = np.abs(np.diff(np.asarray(move.Configurations), axis=0))
+        row['sum_abs_dq_rad'] += float(steps.sum())
+        row['max_joint_rad'] += float(steps.sum(axis=0).max())
+        last = None
+        for q in Move_Samples(scene, move):
+            tcp = (frame @ TCP_Pose(q, cfg.TCP_Offset))[:3, 3]
+            if last is not None:
+                row['tcp_length_m'] += float(np.linalg.norm(tcp - last))
+            last = tcp
+            row['max_tcp_z_m'] = max(row['max_tcp_z_m'], float(tcp[2]))
+            row['max_robot_z_m'] = max(row['max_robot_z_m'], scene.Robot_Top(q))
+            closest, pair, room, room_pair, margin = scene.Environment_Clearance(q, move.Rule, tcps, CONST_REPORT_DISTMAX)
+            if closest < row['closest'][0]:
+                row['closest'] = (closest, pair)
+            if room < row['room'][0]:
+                row['room'] = (room, room_pair, margin)
+            if scene.Check_Configuration(q, move.Rule, tcps if move.Rule == 'generated' else None, floors.get(index)):
+                row['violating_samples'] += 1
+    row['distinct_points'] = len(set(row['targets']))
+    row['vias'] = row['motion_lines'] - 1 if section.startswith('S') else ''
+    return row
+
+
+def Total_Row(rows: tp.Sequence[tp.Dict], operations: tp.Sequence[Motion_Str]) -> tp.Dict:
+    """
+    Description:
+        The total row of a variant (Measure_Variant): sums and extremes of its section rows; the
+        motion lines include the start, the distinct points are those of the whole sequence.
+
+    Args:
+        (1) rows [List<Dict>]: The section rows (Section_Row).
+        (2) operations [List<Motion_Str>]: The variant's operations.
+
+    Returns:
+        (1) parameter [Dict]: The row.
+    """
+
     total = {'section': 'total', 'motion_lines': sum(r['motion_lines'] for r in rows) + 1,
              'distinct_points': len({o.Target for o in operations if o.Kind != 'gripper'}),
              'vias': sum(r['vias'] for r in rows if r['vias'] != ''),
@@ -274,7 +313,7 @@ def Measure_Variant(folder: str, cfg: Cell_Configuration_Str, scenes: tp.Dict[st
         total[key] = sum(r[key] for r in rows)
     for key in ('max_tcp_z_m', 'max_robot_z_m'):
         total[key] = max(r[key] for r in rows)
-    return rows + [total]
+    return total
 
 
 def Format_Row(variant: str, row: tp.Dict) -> tp.Dict[str, str]:
