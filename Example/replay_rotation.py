@@ -58,8 +58,8 @@ from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP, CONST_GRIPPER_PREFIX, C
 from Planner.Core import Segment_Duration, Linear_Duration, Profile_Fraction
 #   ../Example/plan_rotation — the case, the openings, the outputs and the clearance labels
 from plan_rotation import (CONST_CASE, CONST_TAUGHT_VIAS, CONST_STATION_POINTS, CONST_VARIANT_DIR, CONST_VARIANTS, CONST_FILE_NAMES,
-                           CONST_MACHINE_INTERIOR, CONST_LABEL_CLEAR, CONST_LABEL_VIOLATED, CONST_LABEL_INVALID, Segments,
-                           Opening)
+                           CONST_MACHINE_INTERIOR, CONST_LABEL_CLEAR, CONST_LABEL_VIOLATED, CONST_LABEL_INVALID, CONST_REPORT_DISTMAX,
+                           Segments, Opening)
 
 """
 Description:
@@ -144,19 +144,18 @@ def Catalogue_Text() -> str:
     return '\n'.join('  %d  %s' % (number, entry[1]) for number, entry in sorted(CONST_CATALOGUE.items()))
 
 
-def Load_Variant(variant: str) -> tp.Tuple[tp.List[Motion_Str], tp.Dict]:
+def Load_Variant(folder: str) -> tp.Tuple[tp.List[Motion_Str], tp.Dict]:
     """
     Description:
         The operations of one variant and its points (the variant's own points file).
 
     Args:
-        (1) variant [string]: A variant of CONST_VARIANTS (its directory in CONST_VARIANT_DIR).
+        (1) folder [string]: The variant's directory (CONST_VARIANT_DIR/<variant> for the committed ones).
 
     Returns:
         (1) parameter [Tuple<List<Motion_Str>, Dict<string, Robot_Point_Str>>]: Operations and points.
     """
 
-    folder = os.path.join(CONST_VARIANT_DIR, variant)
     with open(os.path.join(folder, CONST_FILE_NAMES[0]), encoding='utf-8') as handle:
         points = Read_URScript(handle.read()).Points
     with open(os.path.join(folder, CONST_FILE_NAMES[1]), encoding='utf-8') as handle:
@@ -554,8 +553,8 @@ def Write_Screenshots(folder: str, number: int, paths: tp.Dict, scenes: tp.Dict[
     for variant, (_, moves) in paths.items():
         candidates = [(q, move.State) for move in moves if move.Kind != 'gripper' and move.Label != CONST_LABEL_INVALID
                       for q in Move_Samples(scenes[move.State], move) if not scenes[move.State].Near_Station(q, tcps)]
-        worst, state = min(candidates, key=lambda c: scenes[c[1]].Environment_Distance(c[0], 0.2)[0])
-        distance, body = scenes[state].Environment_Distance(worst, 0.2)
+        worst, state = min(candidates, key=lambda c: scenes[c[1]].Environment_Distance(c[0], CONST_REPORT_DISTMAX)[0])
+        distance, body = scenes[state].Environment_Distance(worst, CONST_REPORT_DISTMAX)
         file = os.path.join(folder, 'path%d_%s.png' % (number, variant))
         Screenshot(scenes[state], worst, file)
         print('[INFO] %s: %s at its closest approach outside the station neighbourhood and machine (a) (%.1f mm, %s).'
@@ -673,7 +672,7 @@ def main():
     try:
         cfg = Load_Configuration(args.config)
         openings = {state: Opening(cfg, state) for state in ('holding', 'open')}
-        loaded = {variant: Load_Variant(variant) for variant in variants}
+        loaded = {variant: Load_Variant(os.path.join(CONST_VARIANT_DIR, variant)) for variant in variants}
         paths = {variant: (operations[0].Target, Build_Moves(operations, points, cfg)) for variant, (operations, points) in loaded.items()}
     except (Configuration_Error_Cls, URScript_Error_Cls, Kinematics_Error_Cls, OSError) as error:
         print('[ERROR] %s' % error)

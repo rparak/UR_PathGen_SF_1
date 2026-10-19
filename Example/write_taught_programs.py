@@ -34,23 +34,15 @@ import typing as tp
 # Custom Lib.:
 #   ../Configuration/Core — the project root
 from Configuration.Core import CONST_PROJECT_ROOT
-#   ../URScript/Core — the program extracts and the writers
-from URScript.Core import (Read_URScript, Read_Program_Excerpt, Program_Entries, Program_Line_Str, Make_Document, Write_URScript,
-                           Write_Motion_Sequence, Rotation_Sequence, URScript_Error_Cls)
+#   ../URScript/Core — the writers
+from URScript.Core import Program_Entries, Program_Line_Str, Make_Document, Write_URScript, Write_Motion_Sequence, URScript_Error_Cls
+#   ../Example/plan_rotation — the program extracts (SPEC 10.1) and the case (case 17, home -> ... -> home)
+from plan_rotation import CONST_PROGRAM_DIR, CONST_CASE, Read_Program
 
 """
 Description:
     Initialization of constants.
 """
-# The owner's program extracts (SPEC 10.1); the simplified programs are written next to them.
-#   Unit [string]
-CONST_PROGRAM_DIR = os.path.join(CONST_PROJECT_ROOT, 'Data', 'Programs', 'sf1_plc_v4')
-CONST_POSITIONS = os.path.join(CONST_PROGRAM_DIR, 'sf1_plc_v4_positions.urscript')
-CONST_CASES_FILE = os.path.join(CONST_PROGRAM_DIR, 'sf1_plc_v4_cases_17_18.script')
-# The deliverable (owner, 2026-10-18): the rotation sequence of case 17, home -> ... -> home. The
-# other cases of the extract are ground truth for the model only (SPEC 1).
-#   Unit [int], [string]
-CONST_CASE, CONST_HOME = 17, 'home'
 # The file names of the simplified program: its points and its motion sequence.
 #   Unit [string]
 CONST_POINTS_NAME = 'sf1_plc_v4_case_%d.urscript' % CONST_CASE
@@ -91,10 +83,7 @@ def main():
     parser.add_argument('--out', default=CONST_PROGRAM_DIR, help='output directory (default: %(default)s)')
     args = parser.parse_args()
     try:
-        with open(CONST_POSITIONS, encoding='utf-8') as handle:
-            points = Read_URScript(handle.read()).Points
-        with open(CONST_CASES_FILE, encoding='utf-8') as handle:
-            lines = Rotation_Sequence(Read_Program_Excerpt(handle.read())[CONST_CASE], CONST_HOME)
+        points, lines = Read_Program()
     except (OSError, URScript_Error_Cls) as error:
         print('[ERROR] %s' % error)
         return 1

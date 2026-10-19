@@ -42,8 +42,8 @@ import numpy as np
 #   ../Configuration/Core — the cell configuration
 from Configuration.Core import Load_Configuration, Cell_Configuration_Str, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE, CONST_PROJECT_ROOT
 #   ../URScript/Core — the program extracts and the writers
-from URScript.Core import (Read_URScript, Read_Program_Excerpt, Read_Motion_Sequence, Program_Entries, Make_Document, Write_URScript,
-                           Write_Motion_Sequence, Rotation_Sequence, Replace_Joints, URScript_Error_Cls)
+from URScript.Core import (Read_Motion_Sequence, Program_Entries, Make_Document, Write_URScript, Write_Motion_Sequence, Replace_Joints,
+                           URScript_Error_Cls)
 #   ../Kinematics/Core — the proposals' branches and the TCP
 from Kinematics.Core import TCP_Pose, Solve_IK_Analytic, Pose_To_Matrix, Nearest_Representative, Kinematics_Error_Cls
 #   ../Scene/Core — the scene of each gripper state
@@ -51,11 +51,13 @@ from Scene.Core import Scene_Cls
 #   ../Planner/Core — the planner
 from Planner.Core import Plan_All, Make_Pool, Planner_Error_Cls
 #   ../Example/plan_rotation — the case, its segments, the delivered points and the writer
-from plan_rotation import (CONST_CASE, CONST_POINTS, CONST_STATION_POINTS, CONST_POSITIONS, CONST_CASES_FILE, CONST_PENALTY_WEIGHT,
-                           CONST_VARIANT_DIR, CONST_VARIANTS, CONST_FILE_NAMES, Opening, Plan_Requests, Delivered_Points,
+from plan_rotation import (CONST_CASE, CONST_POINTS, CONST_STATION_POINTS, CONST_PENALTY_WEIGHT, CONST_VARIANT_DIR, CONST_VARIANTS,
+                           CONST_FILE_NAMES, CONST_REPORT_DISTMAX, Opening, Read_Program, Plan_Requests, Delivered_Points,
                            Write_Outputs)
-#   ../Example/replay_rotation — the moves of a variant, as replayed
-from replay_rotation import Build_Moves, Run_Floors, Move_Samples, Move_Str
+#   ../Example/replay_rotation — the variant files and their moves, as replayed
+from replay_rotation import Load_Variant, Build_Moves, Run_Floors, Move_Samples, Move_Str
+#   ../Example/write_taught_programs — the points a case moves to
+from write_taught_programs import Case_Targets
 
 """
 Description:
@@ -73,9 +75,6 @@ CONST_DROP_POINTS = ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5')
 # The sections of home -> home in order, and the target each one ends with.
 #   Unit [Tuple<Tuple<string, string>>]
 CONST_SECTIONS = (('S1', 'drop_rotate_1'), ('drop', 'Waypoint_5'), ('S2', 'Waypoint_18'), ('pick', 'Waypoint_6'), ('S3', 'home'))
-# Cap of the reported robot - environment distance.
-#   Unit [float] (m)
-CONST_DISTMAX = 0.200
 # The comparison table's files.
 #   Unit [string]
 CONST_TABLE_CSV, CONST_TABLE_MD = 'comparison.csv', 'comparison.md'
@@ -148,10 +147,7 @@ def Write_Taught(folder: str, points: tp.Dict, lines: tp.Sequence, status: tp.Se
         (4) status [List<string>]: The status header lines.
     """
 
-    names: tp.List[str] = []
-    for line in lines:
-        if line.Kind in ('movej', 'movel') and line.Target not in names:
-            names.append(line.Target)
+    names = Case_Targets(lines)
     os.makedirs(folder, exist_ok=True)
     header = ['# Case %d of sf1_plc_v4.script as taught, home -> home: the points it moves to, verbatim from' % CONST_CASE,
               '# Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript. Written by Example/write_variants.py.'] + list(status)
@@ -183,10 +179,7 @@ def Variant_Moves(folder: str, cfg: Cell_Configuration_Str) -> tp.Tuple[tp.List[
                                                                                                operations.
     """
 
-    with open(os.path.join(folder, CONST_FILE_NAMES[0]), encoding='utf-8') as handle:
-        points = Read_URScript(handle.read()).Points
-    with open(os.path.join(folder, CONST_FILE_NAMES[1]), encoding='utf-8') as handle:
-        operations = Read_Motion_Sequence(handle.read())
+    operations, points = Load_Variant(folder)
     return Build_Moves(operations, points, cfg), points, operations
 
 
@@ -242,8 +235,8 @@ def Measure_Variant(folder: str, cfg: Cell_Configuration_Str, scenes: tp.Dict[st
     rows = []
     for section, _ in CONST_SECTIONS:
         row = {'section': section, 'motion_lines': 0, 'targets': [], 't_est_s': 0.0, 'sum_abs_dq_rad': 0.0, 'max_joint_rad': 0.0,
-               'tcp_length_m': 0.0, 'max_tcp_z_m': -np.inf, 'max_robot_z_m': -np.inf, 'closest': (CONST_DISTMAX, ''),
-               'room': (CONST_DISTMAX, '', 0.0), 'violating_samples': 0}
+               'tcp_length_m': 0.0, 'max_tcp_z_m': -np.inf, 'max_robot_z_m': -np.inf, 'closest': (CONST_REPORT_DISTMAX, ''),
+               'room': (CONST_REPORT_DISTMAX, '', 0.0), 'violating_samples': 0}
         for index, move in enumerate(moves):
             if sections[index] != section or move.Kind == 'gripper':
                 continue
@@ -262,7 +255,7 @@ def Measure_Variant(folder: str, cfg: Cell_Configuration_Str, scenes: tp.Dict[st
                 last = tcp
                 row['max_tcp_z_m'] = max(row['max_tcp_z_m'], float(tcp[2]))
                 row['max_robot_z_m'] = max(row['max_robot_z_m'], scene.Robot_Top(q))
-                closest, pair, room, room_pair, margin = scene.Environment_Clearance(q, move.Rule, tcps, CONST_DISTMAX)
+                closest, pair, room, room_pair, margin = scene.Environment_Clearance(q, move.Rule, tcps, CONST_REPORT_DISTMAX)
                 if closest < row['closest'][0]:
                     row['closest'] = (closest, pair)
                 if room < row['room'][0]:
@@ -388,7 +381,7 @@ def Table_Markdown(table: tp.Dict[str, tp.List[tp.Dict]], blends: tp.Sequence[tp
             '- **Heights**: world z (the robot base stands at %.4f m); the robot height is its highest collision vertex,' % base_z,
             '  the gripper included.',
             '- **Clearance**: robot - environment, capped at %.0f mm. Each move by the rule of its kind: generated movej by'
-            % (CONST_DISTMAX * 1e3),
+            % (CONST_REPORT_DISTMAX * 1e3),
             '  the generated rule, program lines by the taught rule; the least room is the distance minus that pair\'s',
             '  margin. The station-box floors and the workspace count in the samples breaking the rule only.',
             '- c2 and c3 drop points are the nominal-DH IK of the program\'s `_p`: millimetres from what the robot\'s',
@@ -473,10 +466,7 @@ def main():
     try:
         cfg = Load_Configuration(args.config)
         openings = {state: Opening(cfg, state) for state in ('holding', 'open')}
-        with open(CONST_POSITIONS, encoding='utf-8') as handle:
-            points = Read_URScript(handle.read()).Points
-        with open(CONST_CASES_FILE, encoding='utf-8') as handle:
-            lines = Rotation_Sequence(Read_Program_Excerpt(handle.read())[CONST_CASE], CONST_POINTS['home'])
+        points, lines = Read_Program()
         variant_points = Variant_Points(points, cfg)
     except (Configuration_Error_Cls, URScript_Error_Cls, Kinematics_Error_Cls, OSError) as error:
         print('[ERROR] %s' % error)

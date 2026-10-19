@@ -176,6 +176,23 @@ def Opening(cfg: Cell_Configuration_Str, state: str) -> float:
     return cfg.Holding_Openings[CONST_CASE][0]
 
 
+def Read_Program() -> tp.Tuple[tp.Dict, tp.List[Program_Line_Str]]:
+    """
+    Description:
+        The program's learned points (the positions extract) and the program lines of case 17's
+        rotation sequence, home -> ... -> home (Rotation_Sequence), from the extracts (SPEC 10.1).
+
+    Returns:
+        (1) parameter [Tuple<Dict<string, Robot_Point_Str>, List<Program_Line_Str>>]: The points and the lines.
+    """
+
+    with open(CONST_POSITIONS, encoding='utf-8') as handle:
+        points = Read_URScript(handle.read()).Points
+    with open(CONST_CASES_FILE, encoding='utf-8') as handle:
+        lines = Rotation_Sequence(Read_Program_Excerpt(handle.read())[CONST_CASE], CONST_POINTS['home'])
+    return points, lines
+
+
 def Plan_Requests(cfg: Cell_Configuration_Str, points: tp.Dict, station_q: tp.Sequence[tp.Sequence[float]],
                   penalty_weight: float) -> tp.List[Plan_Request_Str]:
     """
@@ -485,10 +502,7 @@ def main():
     try:
         cfg = Load_Configuration(args.config)
         openings = {segment: Opening(cfg, state) for segment, state in CONST_SEGMENT_STATE.items()}
-        with open(CONST_POSITIONS, encoding='utf-8') as handle:
-            program_points = Read_URScript(handle.read()).Points
-        with open(CONST_CASES_FILE, encoding='utf-8') as handle:
-            lines = Rotation_Sequence(Read_Program_Excerpt(handle.read())[CONST_CASE], CONST_POINTS['home'])
+        program_points, lines = Read_Program()
     except (Configuration_Error_Cls, URScript_Error_Cls, OSError) as error:
         print('[ERROR] %s' % error)
         return 1
