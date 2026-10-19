@@ -727,3 +727,19 @@ def test_the_robot_top_is_its_highest_collision_vertex(scene, cfg, points):
         assert top == pytest.approx(highest, abs=1e-12)
         assert top >= (scene.Base_Frame() @ TCP_Pose(q, cfg.TCP_Offset))[2, 3]
     assert scene.Robot_Top(up) >= cfg.Base_Position[2] + 0.1807 + 0.6127 + 0.57155
+
+
+def test_the_joint_levers_depend_on_the_model_only(scene, points):
+    """
+    Description:
+        The joint levers bound the sampling of every segment (Segment_Samples) and depend on the
+        compiled model only: after the robot moves they are the same, and a caller that changes the
+        returned array changes neither them nor the samples.
+    """
+
+    q_a, q_b = points['home'].Q, points['drop_rotate_1'].Q
+    levers, samples = scene.Joint_Levers(), scene.Segment_Samples(q_a, q_b)
+    scene.Set_Joints(q_b)
+    scene.Joint_Levers()[:] = 0.0
+    assert scene.Joint_Levers().tobytes() == levers.tobytes()
+    assert scene.Segment_Samples(q_a, q_b).tobytes() == samples.tobytes()

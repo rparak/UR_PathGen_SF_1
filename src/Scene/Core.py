@@ -316,6 +316,8 @@ class Scene_Cls(object):
         # The STL component of each environment piece's geom (Components_Within).
         self.__geom_component = {mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, 'env_piece_%d' % i): int(c)
                                  for i, c in enumerate(self.__piece_components)}
+        # The joint levers of Segment_Samples.
+        self.__levers = self.__Model_Levers()
         self.__Set_Gripper()
         self.Set_Joints(np.zeros(6))
         if with_environment:
@@ -825,6 +827,18 @@ class Scene_Cls(object):
         Description:
             For each robot joint, an upper bound on the distance of any downstream collision vertex
             from the joint's body origin.
+
+        Returns:
+            (1) parameter [Vector<float> 1x6]: The levers (m); a copy, the scene's own stay unchanged.
+        """
+
+        return self.__levers.copy()
+
+    def __Model_Levers(self) -> np.ndarray:
+        """
+        Description:
+            Joint_Levers computed from the compiled model, which they depend on alone: once per scene,
+            because the loop visits every geom of the environment as well.
 
         Returns:
             (1) parameter [Vector<float> 1x6]: The levers (m).
