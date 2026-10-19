@@ -1202,25 +1202,6 @@ class Scene_Cls(object):
         tcp = (self.Base_Frame() @ TCP_Pose(q, self.__cfg.TCP_Offset))[:3, 3]
         return bool(np.min(np.linalg.norm(station_tcps - tcp, axis=1)) <= self.__cfg.Station_Zone_Endpoint_Radius)
 
-    def Station_Zone_Active(self, q: tp.Sequence[float], station_q: tp.Sequence[tp.Sequence[float]]) -> bool:
-        """
-        Description:
-            Whether a generated configuration may use the zone margin: its TCP lies within
-            Clearance.Station_Zone.Endpoint_Radius of the TCP of a fixed station point (SPEC 9.7).
-
-        Args:
-            (1) q [Vector<float> 1x6]: Joint angles (rad).
-            (2) station_q [List<Vector<float> 1x6>]: The joints of the fixed station points (rad).
-
-        Returns:
-            (1) parameter [bool]: True inside the neighbourhood of a station point.
-        """
-
-        frame = self.Base_Frame()
-        tcp = (frame @ TCP_Pose(q, self.__cfg.TCP_Offset))[:3, 3]
-        return any(np.linalg.norm(tcp - (frame @ TCP_Pose(p, self.__cfg.TCP_Offset))[:3, 3])
-                   <= self.__cfg.Station_Zone_Endpoint_Radius for p in station_q)
-
     def Check_Segment(self, q_a: tp.Sequence[float], q_b: tp.Sequence[float], kind: str = 'generated',
                       station_q: tp.Sequence[tp.Sequence[float]] = (),
                       box_floors: tp.Optional[tp.Dict[str, float]] = None) -> tp.Tuple[int, tp.List[tp.Tuple[int, Violation_Str]]]:

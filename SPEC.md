@@ -982,7 +982,7 @@ along the path.
   - **taught** (a segment of the robot program): the zone margin on every sample;
   - **generated** (a planner's segment; the default): the global margins everywhere, except on a
     sample whose TCP lies within `Endpoint_Radius` of the TCP of a fixed station point
-    (`Station_Zone_Active`), where the zone margin applies. The station geometry is fitted, not
+    (`Near_Station`), where the zone margin applies. The station geometry is fitted, not
     measured, so a new path may not use it more tightly than the taught program does. In addition,
     every robot collision geom (mesh vertices, primitive box corners) stays inside
     `Clearance.Workspace`: the space outside the STL is not modelled, and the taught program proves

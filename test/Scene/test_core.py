@@ -478,10 +478,11 @@ def test_the_station_zone_applies_within_the_endpoint_radius(robot_scene, cfg, p
     tcp = lambda q: TCP_Pose(q, cfg.TCP_Offset)[:3, 3]
     assert np.linalg.norm(tcp(below) - tcp(drop)) > cfg.Station_Zone_Endpoint_Radius
     t = min(np.linspace(0.0, 1.0, 1001), key=lambda x: abs(np.linalg.norm(tcp(drop + x * (below - drop)) - tcp(drop)) - 0.040))
-    assert robot_scene.Station_Zone_Active(drop + t * (below - drop), [drop])
-    assert not robot_scene.Station_Zone_Active(below, [drop])
-    assert robot_scene.Station_Zone_Active(below, [drop, below])
-    assert not robot_scene.Station_Zone_Active(drop, [])
+    near = lambda q, station_q: robot_scene.Near_Station(q, robot_scene.Station_TCPs(station_q))
+    assert near(drop + t * (below - drop), [drop])
+    assert not near(below, [drop])
+    assert near(below, [drop, below])
+    assert not near(drop, [])
 
 
 def test_a_generated_configuration_above_the_workspace_is_refused(robot_scene, cfg, points):
