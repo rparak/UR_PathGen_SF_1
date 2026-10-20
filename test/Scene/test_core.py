@@ -45,7 +45,7 @@ from scipy.optimize import minimize
 import yaml
 # Custom Lib.:
 #   ../src/Scene/Core — the scene under test
-from Scene.Core import Scene_Cls, Scene_Error_Cls, Clearance_Error_Cls, Check_Learned_Point, Van_Der_Corput_Order
+from Scene.Core import Scene_Cls, Scene_Error_Cls, Clearance_Error_Cls, Check_Learned_Point, Van_Der_Corput_Order, Visual_Mesh_Warning
 #   ../src/Kinematics/Core — the kinematic refusal
 from Kinematics.Core import Kinematics_Error_Cls
 #   ../src/Kinematics/Core — the DH truth
@@ -743,3 +743,17 @@ def test_the_joint_levers_depend_on_the_model_only(scene, points):
     scene.Joint_Levers()[:] = 0.0
     assert scene.Joint_Levers().tobytes() == levers.tobytes()
     assert scene.Segment_Samples(q_a, q_b).tobytes() == samples.tobytes()
+
+
+def test_the_visual_stl_warning_names_every_correction(cfg, stl_warning):
+    """
+    Description:
+        Visual_Mesh_Warning names the STL as the original CAD and every correction of the shipped
+        configuration (assembly overrides with their translation, added boxes); with none configured
+        it says so instead of listing nothing.
+    """
+
+    stl_warning('[WARNING] ' + Visual_Mesh_Warning(cfg), True)
+    bare = dataclasses.replace(cfg, Assembly_Overrides=[], Component_Overrides=[], Added_Boxes=[])
+    assert '(none configured)' in Visual_Mesh_Warning(bare)
+    assert 'CAD/SF1_Environment.stl' in Visual_Mesh_Warning(bare)

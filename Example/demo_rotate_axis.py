@@ -44,7 +44,7 @@ from Configuration.Core import Load_Configuration, Configuration_Error_Cls, CONS
 #   ../URScript/Core — the learned points
 from URScript.Core import Read_URScript
 #   ../Scene/Core — the scene and its clearance check
-from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP
+from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP, Visual_Mesh_Warning
 
 """
 Description:
@@ -151,7 +151,8 @@ def main():
             Tests:  .venv/bin/python Example/demo_rotate_axis.py --headless
 
         The scene is built without the visual STL and the viewer starts with the collision geometry
-        (geom group 3) shown; --with-stl loads the STL (geom group 1) as well.
+        (geom group 3) shown; --with-stl loads the STL (geom group 1) as well, with a [WARNING] that it is
+        the original CAD without the collision model's corrections (Visual_Mesh_Warning).
     """
 
     parser = argparse.ArgumentParser(description='Rotate one joint of the UR10e in the SF1 scene.')
@@ -171,6 +172,9 @@ def main():
         start = Read_URScript(handle.read()).Points[CONST_START].Q
 
     # 1\ The scene (the visual mesh only when asked for and shown).
+    # The visual STL is the original CAD without the collision model's corrections: say so when it is asked for.
+    if args.with_stl:
+        print('[WARNING] %s' % Visual_Mesh_Warning(cfg))
     t0 = time.time()
     with_visual = args.with_stl and not args.headless
     scene = Scene_Cls(cfg, with_environment=True, with_visual=with_visual)

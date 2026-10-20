@@ -127,3 +127,16 @@ def test_a_motion_into_the_side_table_is_labelled_unchecked(root, scene, points)
     assert any(v.Body_1.startswith('env') or v.Body_2.startswith('env') for _, v in violations)
     shipped = demo.Motion_Waypoints(np.array(points['home'].Q), 0, math.radians(45.0))
     assert demo.Check_Motion(scene, shipped)[0] == 'clearance checked'
+
+
+def test_with_stl_warns_that_the_stl_is_not_the_collision_model(root, tmp_path, stl_warning):
+    """
+    Description:
+        --with-stl prints one [WARNING] that the visual STL is the original CAD without the
+        collision model's corrections, naming each of them (headless: the STL itself is not loaded).
+    """
+
+    result = subprocess.run([sys.executable, os.path.join(root, 'Example', 'demo_rotate_axis.py'), '--headless', '--with-stl'],
+                            cwd=str(tmp_path), capture_output=True, text=True, timeout=600)
+    assert result.returncode == 0, result.stdout + result.stderr
+    stl_warning(result.stdout, True)

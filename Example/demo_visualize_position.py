@@ -43,7 +43,7 @@ from URScript.Core import Read_URScript, Robot_Point_Str
 #   ../Kinematics/Core — the refusal of a point outside the FK sanity bound
 from Kinematics.Core import Kinematics_Error_Cls
 #   ../Scene/Core — the scene
-from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP
+from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP, Visual_Mesh_Warning
 #   ../Example/plan_rotation — the program extract, the case, the openings and the clearance label
 from plan_rotation import CONST_POSITIONS, CONST_CASE, Opening, Configuration_Label, Check_Learned
 
@@ -84,7 +84,8 @@ def main():
             Tests:  .venv/bin/python Example/demo_visualize_position.py --pos home --headless
 
         The scene is built without the visual STL and the viewer starts with the collision geometry
-        (geom group 3) shown; --with-stl loads the STL (geom group 1) as well.
+        (geom group 3) shown; --with-stl loads the STL (geom group 1) as well, with a [WARNING] that it is
+        the original CAD without the collision model's corrections (Visual_Mesh_Warning).
     """
 
     parser = argparse.ArgumentParser(description='Show the UR10e static at one learned position.')
@@ -118,6 +119,9 @@ def main():
         print('[ERROR] %s' % error)
         return 1
     source = cfg.Holding_Openings[CONST_CASE][1] if args.opening == 'holding' else 'the full 2F-85 stroke'
+    # The visual STL is the original CAD without the collision model's corrections: say so when it is asked for.
+    if args.with_stl:
+        print('[WARNING] %s' % Visual_Mesh_Warning(cfg))
     t0 = time.time()
     with_visual = args.with_stl and not args.headless
     scene = Scene_Cls(dataclasses.replace(cfg, Opening=opening), with_environment=True, with_visual=with_visual)

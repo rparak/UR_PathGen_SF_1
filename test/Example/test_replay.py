@@ -229,3 +229,15 @@ def test_a_learned_point_outside_the_sanity_bound_is_refused(perturbed_copy, fk_
     assert refusal and refusal.group(1) == 'home', result.stdout
     assert float(refusal.group(2)) > cfg.FK_Sanity_Bound_Position * 1e3
     assert 'Scene built' not in result.stdout
+
+
+def test_with_stl_warns_that_the_stl_is_not_the_collision_model(root, tmp_path, stl_warning):
+    """
+    Description:
+        --with-stl prints one [WARNING] that the visual STL is the original CAD without the
+        collision model's corrections, naming each of them (headless: the STL itself is not loaded).
+    """
+
+    result = _Run(root, tmp_path, '--path', '1', '--headless', '--skip-check', '--with-stl')
+    assert result.returncode == 0, result.stdout + result.stderr
+    stl_warning(result.stdout, True)

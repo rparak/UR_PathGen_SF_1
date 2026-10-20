@@ -143,3 +143,28 @@ def fk_refusal():
 
     return re.compile(r'^\[ERROR\] Point (\w+): DH FK of its _q with the configured TCP is ([0-9.]+) mm / [0-9.]+ deg from '
                       r'its _p; the sanity bound is 10\.00 mm', re.M)
+
+
+@pytest.fixture(scope='session')
+def stl_warning(cfg):
+    """
+    Description:
+        A check of a viewer's output for the visual-STL warning: the lines starting with
+        '[WARNING] The visual STL'. With --with-stl there is exactly one, saying the STL is the
+        original CAD and naming every correction of the shipped configuration (each assembly
+        override with its x translation in mm, each added box); without it there is none.
+    """
+
+    def Check(stdout: str, expected: bool) -> None:
+        lines = [line for line in stdout.splitlines() if line.startswith('[WARNING] The visual STL')]
+        if not expected:
+            assert lines == [], lines
+            return
+        assert len(lines) == 1, stdout
+        assert 'original CAD' in lines[0] and 'does not match the collision geometry' in lines[0]
+        for name, _, translation, _ in cfg.Assembly_Overrides:
+            assert '%s moved by [%.0f,' % (name, translation[0] * 1e3) in lines[0], name
+        for name, _, _, _ in cfg.Added_Boxes:
+            assert 'the box %s added' % name in lines[0], name
+
+    return Check

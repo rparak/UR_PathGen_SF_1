@@ -21,6 +21,8 @@
 # File Name: ../Scene/Core.py
 ## =========================================================================== ##
 
+# OS (Operating system interfaces), for the visual STL's path in the viewer warning
+import os
 # Math (Mathematical functions)
 import math
 # Typing (Support for type hints)
@@ -250,6 +252,42 @@ def Yaw_Quat(angle: float) -> tp.List[float]:
     """
 
     return [math.cos(angle / 2.0), 0.0, 0.0, math.sin(angle / 2.0)]
+
+
+def Visual_Mesh_Warning(cfg: Cell_Configuration_Str) -> str:
+    """
+    Description:
+        The sentence a viewer prints when it loads the visual STL: the STL is the original CAD, placed
+        as it is, while the collision model carries the configured corrections (assembly and
+        component translations, added boxes), so the two do not match where those apply.
+
+    Args:
+        (1) cfg [Cell_Configuration_Str(object)]: The cell configuration.
+
+    Returns:
+        (1) parameter [string]: The sentence.
+    """
+
+    def Millimetres(translation: tp.Sequence[float]) -> str:
+        """
+        Description:
+            A translation in mm, as [x, y, z].
+
+        Args:
+            (1) translation [Vector<float> 1x3]: The translation (m).
+
+        Returns:
+            (1) parameter [string]: The text.
+        """
+
+        return '[%s] mm' % ', '.join('%.0f' % (1e3 * value + 0.0) for value in translation)
+
+    corrections = (['%s moved by %s' % (name, Millimetres(t)) for name, _, t, _ in cfg.Assembly_Overrides]
+                   + ['component %d moved by %s' % (component, Millimetres(t)) for component, t, _ in cfg.Component_Overrides]
+                   + ['the box %s added' % name for name, _, _, _ in cfg.Added_Boxes])
+    return ('The visual STL (%s) is the original CAD without the corrections of the collision model (%s): it does not match '
+            'the collision geometry the clearance is checked against.'
+            % (os.path.relpath(cfg.Visual_Mesh, CONST_PROJECT_ROOT), '; '.join(corrections) if corrections else 'none configured'))
 
 
 class Scene_Cls(object):

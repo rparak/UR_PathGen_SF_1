@@ -53,7 +53,7 @@ from URScript.Core import Read_URScript, Read_Motion_Sequence, Motion_Str, URScr
 #   ../Kinematics/Core — the TCP path of a movel
 from Kinematics.Core import TCP_Pose, Matrix_To_Pose, Linear_Path, Kinematics_Error_Cls
 #   ../Scene/Core — the scenes and the collision geometry group
-from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP, CONST_GRIPPER_PREFIX, CONST_PAD_SPAN_RGBA
+from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP, CONST_GRIPPER_PREFIX, CONST_PAD_SPAN_RGBA, Visual_Mesh_Warning
 #   ../Planner/Core — the duration estimates and their profile
 from Planner.Core import Segment_Duration, Linear_Duration, Profile_Fraction
 #   ../Example/plan_rotation — the case, the openings, the outputs and the clearance labels
@@ -751,7 +751,8 @@ def main():
             Tests:   .venv/bin/python Example/replay_rotation.py --path 3 --headless [--skip-check]
 
         The scene is built without the visual STL and the viewer starts with the collision geometry
-        (geom group 3) shown; --with-stl loads the STL (geom group 1) as well.
+        (geom group 3) shown; --with-stl loads the STL (geom group 1) as well, with a [WARNING] that it is
+        the original CAD without the collision model's corrections (Visual_Mesh_Warning).
     """
 
     parser = argparse.ArgumentParser(description='Replay a variant of the rotation sequence of case 17, or all five.')
@@ -787,6 +788,9 @@ def main():
         return 1
     print('[INFO] Path %d: %s. Gripper: holding %.1f mm (%s), open %.1f mm.'
           % (number, name, openings['holding'] * 1e3, cfg.Holding_Openings[CONST_CASE][1], openings['open'] * 1e3))
+    # The visual STL is the original CAD without the collision model's corrections: say so when it is asked for.
+    if args.with_stl:
+        print('[WARNING] %s' % Visual_Mesh_Warning(cfg))
     t0 = time.time()
     with_visual = args.with_stl and not (args.headless or args.screenshots)
     scenes = Build_Scenes(cfg, openings, with_visual)
