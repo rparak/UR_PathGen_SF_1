@@ -77,6 +77,11 @@ def _Folder(root, *parts):
     return os.path.join(root, 'Data', 'Generated', 'variants', *parts)
 
 
+def _Visible(folder):
+    # The names in a folder without hidden files (.DS_Store, which Finder writes; git ignores it).
+    return sorted(name for name in os.listdir(folder) if not name.startswith('.'))
+
+
 def _Points(root, variant):
     with open(_Folder(root, variant, 'SF1_Rotation_17.urscript'), encoding='utf-8') as handle:
         return Read_URScript(handle.read()).Points
@@ -92,13 +97,14 @@ def test_every_variant_has_its_files_and_its_status(root):
     Description:
         Each of the five variants has its points and its sequence, each file naming the variant's
         status (taught program, previous optimisation, delivered, proposal for re-teaching not
-        verified on the robot) and saying simulation is not safety.
+        verified on the robot) and saying simulation is not safety. Hidden files (a .DS_Store that
+        Finder writes, ignored by git) are not part of the output.
     """
 
-    assert sorted(os.listdir(_Folder(root))) == sorted(list(CONST_TOTALS) + ['comparison.csv', 'comparison.md'])
+    assert _Visible(_Folder(root)) == sorted(list(CONST_TOTALS) + ['comparison.csv', 'comparison.md'])
     for variant, status in CONST_STATUS.items():
-        assert sorted(os.listdir(_Folder(root, variant))) == ['SF1_Rotation_17.urscript', 'SF1_Rotation_17_Sequence.script']
-        for name in os.listdir(_Folder(root, variant)):
+        assert _Visible(_Folder(root, variant)) == ['SF1_Rotation_17.urscript', 'SF1_Rotation_17_Sequence.script']
+        for name in _Visible(_Folder(root, variant)):
             with open(_Folder(root, variant, name), encoding='utf-8') as handle:
                 text = handle.read()
             assert '# Variant %s: ' % variant in text and status in text, (variant, name)
