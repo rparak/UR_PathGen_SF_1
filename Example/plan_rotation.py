@@ -50,9 +50,9 @@ from Configuration.Core import (Load_Configuration, Cell_Configuration_Str, Conf
 from URScript.Core import (Read_URScript, Read_Program_Excerpt, Make_Generated_Point, Make_Document, Write_URScript, Replace_Joints,
                            Write_Motion_Sequence, Rotation_Sequence, Gripper_Comment, Program_Line_Str, URScript_Error_Cls)
 #   ../Kinematics/Core — the informational _p of a via point
-from Kinematics.Core import TCP_Pose, Matrix_To_Pose
-#   ../Scene/Core — the scene at each gripper opening
-from Scene.Core import Scene_Cls
+from Kinematics.Core import TCP_Pose, Matrix_To_Pose, Kinematics_Error_Cls
+#   ../Scene/Core — the scene at each gripper opening and the check of the learned points
+from Scene.Core import Scene_Cls, Check_Learned_Kinematics
 #   ../Planner/Core — the planner and the estimates
 from Planner.Core import (Plan_All, Plan_Request_Str, Make_Pool, Planner_Budget_Str, Planner_Error_Cls, Estimate_Duration,
                           Linear_Duration, Path_Length, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN, CONST_PENALTY_DISTANCE)
@@ -192,6 +192,27 @@ def Read_Program() -> tp.Tuple[tp.Dict, tp.List[Program_Line_Str]]:
     with open(CONST_CASES_FILE, encoding='utf-8') as handle:
         lines = Rotation_Sequence(Read_Program_Excerpt(handle.read())[CONST_CASE], CONST_POINTS['home'])
     return points, lines
+
+
+def Check_Learned(cfg: Cell_Configuration_Str, points: tp.Dict, source: str) -> None:
+    """
+    Description:
+        Check every learned point read against the FK sanity bound before it is used (SPEC 9.4,
+        Check_Learned_Kinematics), the orientation bound from the tool length of a robot-only scene at
+        Tool.Opening, and print the largest residual. Generated via points (via_*) are not learned and
+        are not checked. Raises Kinematics_Error_Cls naming the first point outside, with its numbers.
+
+    Args:
+        (1) cfg [Cell_Configuration_Str(object)]: The cell configuration.
+        (2) points [Dict<string, Robot_Point_Str>]: The points read.
+        (3) source [string]: What they were read from, for the printed line.
+    """
+
+    learned = [point for name, point in points.items() if not name.startswith('via_')]
+    residuals = Check_Learned_Kinematics(Scene_Cls(cfg, with_environment=False), cfg, learned)
+    print('[INFO] FK sanity bound (%.1f mm): the %d learned points of %s within it, the largest residual %.2f mm / %.3f deg.'
+          % (cfg.FK_Sanity_Bound_Position * 1e3, len(residuals), source, max(r[0] for r in residuals.values()) * 1e3,
+             math.degrees(max(r[1] for r in residuals.values()))))
 
 
 def Plan_Requests(cfg: Cell_Configuration_Str, points: tp.Dict, station_q: tp.Sequence[tp.Sequence[float]],
@@ -504,7 +525,8 @@ def main():
         cfg = Load_Configuration(args.config)
         openings = {segment: Opening(cfg, state) for segment, state in CONST_SEGMENT_STATE.items()}
         program_points, lines = Read_Program()
-    except (Configuration_Error_Cls, URScript_Error_Cls, OSError) as error:
+        Check_Learned(cfg, program_points, os.path.basename(CONST_POSITIONS))
+    except (Configuration_Error_Cls, URScript_Error_Cls, Kinematics_Error_Cls, OSError) as error:
         print('[ERROR] %s' % error)
         return 1
     # The delivered station joints (CONST_Q_TURNS); the taught rows of the report keep the program's.

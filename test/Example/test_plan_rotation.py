@@ -125,6 +125,23 @@ def test_a_worker_count_below_one_is_refused(root, tmp_path):
     assert not (tmp_path / 'out').exists()
 
 
+def test_a_learned_point_outside_the_sanity_bound_is_refused(perturbed_copy, fk_refusal, tmp_path, cfg):
+    """
+    Description:
+        Every learned point of the extract is checked against the FK sanity bound before planning
+        (SPEC 9.4): with drop_rotate_1's base joint turned by 0.05 rad (about 25 mm), the run stops with
+        exit 1 and the point's numbers, and nothing is written.
+    """
+
+    copy = perturbed_copy(os.path.join('Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_positions.urscript'), 'drop_rotate_1')
+    result = _Run(copy, tmp_path, '--out', str(tmp_path / 'out'))
+    assert result.returncode == 1, result.stdout + result.stderr
+    refusal = fk_refusal.search(result.stdout)
+    assert refusal and refusal.group(1) == 'drop_rotate_1', result.stdout
+    assert float(refusal.group(2)) > cfg.FK_Sanity_Bound_Position * 1e3
+    assert not (tmp_path / 'out').exists()
+
+
 @pytest.mark.slow
 def test_a_parallel_run_writes_the_committed_output(root, tmp_path):
     """

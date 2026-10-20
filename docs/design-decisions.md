@@ -862,3 +862,30 @@ variant is no longer worth comparing.
 
 Pinned by `test/Example/test_write_variants.py` (the files, the statuses, c1 = the delivered output,
 the proposals' branches, the table against the files) and `test/Kinematics/test_core.py`.
+
+## Every learned point a script reads is checked against the FK sanity bound; the margins are not
+
+**Decision.** `plan_rotation.py`, `write_variants.py`, `replay_rotation.py` and
+`demo_visualize_position.py` check every learned point they read against the FK sanity bound
+(`Check_Learned_Kinematics`, SPEC 9.4) before using it, and stop with `Kinematics_Error_Cls` and its
+numbers when one is outside (owner, 2026-10-20). The clearance part of `Check_Learned_Point` is not
+applied at load.
+
+**Why.** A `_q` that does not reach its `_p` (a typo, another TCP, a point taught on another robot)
+makes every check after it describe the wrong pose; refusing it at load is the cheapest place.
+The margins cannot be applied there: the extract's grasp, load and unload points touch the parts
+and fixtures or lie inside machine (a), and `Check_Learned_Point` refuses 50 of the 78 points at
+50 mm (41 at 85 mm), none of them case 17's. The margins are applied where they mean something: the
+planner refuses an end that breaks its rule, the replay and the position viewer label each point by
+its rule. *Corrects SPEC 9.7, which said a learned point is never accepted inside a margin.*
+
+**Alternatives.** `Check_Learned_Point` on every point: every script would stop today. On case 17's
+points only: a gate on the deliverable that the planner's own end check already is. Only the points
+a script uses: a broken point elsewhere in the extract would pass unnoticed until a case uses it.
+
+**Revisit if** the extract is exported again (its residuals move), the TCP changes, or a case whose
+points sit inside a margin becomes a deliverable.
+
+Pinned by `test_a_learned_point_outside_the_sanity_bound_is_refused` in `test/Example/test_plan_rotation.py`,
+`test_write_variants.py`, `test_replay.py` and `test_visualize_position.py`, and
+`test/Kinematics/test_core.py` (the bound, position and orientation).

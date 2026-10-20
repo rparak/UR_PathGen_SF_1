@@ -52,8 +52,8 @@ from Scene.Core import Scene_Cls
 from Planner.Core import Plan_All, Make_Pool, Planner_Error_Cls
 #   ../Example/plan_rotation — the case, its segments, the delivered points and the writer
 from plan_rotation import (CONST_CASE, CONST_POINTS, CONST_STATION_POINTS, CONST_PENALTY_WEIGHT, CONST_VARIANT_DIR, CONST_VARIANTS,
-                           CONST_FILE_NAMES, CONST_REPORT_DISTMAX, Opening, Read_Program, Plan_Requests, Delivered_Points,
-                           Write_Outputs)
+                           CONST_FILE_NAMES, CONST_REPORT_DISTMAX, CONST_POSITIONS, Opening, Read_Program, Check_Learned, Plan_Requests,
+                           Delivered_Points, Write_Outputs)
 #   ../Example/replay_rotation — the variant files and their moves, as replayed
 from replay_rotation import Load_Variant, Build_Moves, Run_Floors, Move_Samples, Move_Str
 #   ../Example/write_taught_programs — the points a case moves to
@@ -506,6 +506,7 @@ def main():
         cfg = Load_Configuration(args.config)
         openings = {state: Opening(cfg, state) for state in ('holding', 'open')}
         points, lines = Read_Program()
+        Check_Learned(cfg, points, os.path.basename(CONST_POSITIONS))
         variant_points = Variant_Points(points, cfg)
     except (Configuration_Error_Cls, URScript_Error_Cls, Kinematics_Error_Cls, OSError) as error:
         print('[ERROR] %s' % error)

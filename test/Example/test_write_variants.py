@@ -24,6 +24,8 @@
 # System (Default)
 import os
 import sys
+# Subprocess (Running the writer as a person does)
+import subprocess
 # CSV (Comma-separated values)
 import csv
 # Dataclasses (Data Classes)
@@ -186,6 +188,24 @@ def test_the_table_totals_are_the_reported_durations_with_no_rule_broken(root):
     assert [(r['variant'], r['section']) for r in rows] == [(v, s) for v in CONST_TOTALS for s in ('S1', 'drop', 'S2', 'pick', 'S3', 'total')]
     assert {r['variant']: r['t_est_s'] for r in rows if r['section'] == 'total'} == CONST_TOTALS
     assert all(r['violating_samples'] == '0' for r in rows)
+
+
+def test_a_learned_point_outside_the_sanity_bound_is_refused(perturbed_copy, fk_refusal, tmp_path, cfg):
+    """
+    Description:
+        Every learned point of the extract is checked against the FK sanity bound before planning
+        (SPEC 9.4): with drop_rotate_1's base joint turned by 0.05 rad (about 25 mm), the writer stops
+        with exit 1 and the point's numbers, and nothing is written.
+    """
+
+    copy = perturbed_copy(os.path.join('Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_positions.urscript'), 'drop_rotate_1')
+    result = subprocess.run([sys.executable, os.path.join(copy, 'Example', 'write_variants.py'), '--out', str(tmp_path / 'out')],
+                            capture_output=True, text=True, cwd=str(tmp_path), timeout=600)
+    assert result.returncode == 1, result.stdout + result.stderr
+    refusal = fk_refusal.search(result.stdout)
+    assert refusal and refusal.group(1) == 'drop_rotate_1', result.stdout
+    assert float(refusal.group(2)) > cfg.FK_Sanity_Bound_Position * 1e3
+    assert not (tmp_path / 'out').exists()
 
 
 @pytest.mark.slow

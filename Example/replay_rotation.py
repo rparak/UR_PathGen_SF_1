@@ -59,7 +59,7 @@ from Planner.Core import Segment_Duration, Linear_Duration, Profile_Fraction
 #   ../Example/plan_rotation — the case, the openings, the outputs and the clearance labels
 from plan_rotation import (CONST_CASE, CONST_TAUGHT_VIAS, CONST_STATION_POINTS, CONST_VARIANT_DIR, CONST_VARIANTS, CONST_FILE_NAMES,
                            CONST_MACHINE_INTERIOR, CONST_LABEL_CLEAR, CONST_LABEL_VIOLATED, CONST_LABEL_INVALID, CONST_REPORT_DISTMAX,
-                           Segments, Opening)
+                           Segments, Opening, Check_Learned)
 
 """
 Description:
@@ -779,6 +779,8 @@ def main():
         cfg = Load_Configuration(args.config)
         openings = {state: Opening(cfg, state) for state in ('holding', 'open')}
         loaded = {variant: Load_Variant(os.path.join(CONST_VARIANT_DIR, variant)) for variant in variants}
+        for variant, (_, points) in loaded.items():
+            Check_Learned(cfg, points, 'variant %s' % variant)
         paths = {variant: (operations[0].Target, Build_Moves(operations, points, cfg)) for variant, (operations, points) in loaded.items()}
     except (Configuration_Error_Cls, URScript_Error_Cls, Kinematics_Error_Cls, OSError) as error:
         print('[ERROR] %s' % error)

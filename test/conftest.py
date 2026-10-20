@@ -24,6 +24,10 @@
 # System (Default)
 import os
 import sys
+# Regular expressions (Default)
+import re
+# Shell utilities (Default)
+import shutil
 # Pytest (Testing framework) [pip3 install pytest]
 import pytest
 
@@ -94,3 +98,48 @@ def scene(cfg):
 
     from Scene.Core import Scene_Cls
     return Scene_Cls(cfg, with_environment=True)
+
+
+@pytest.fixture
+def perturbed_copy(root, tmp_path):
+    """
+    Description:
+        A copy of the repository in which one learned point does not agree with its pose: src,
+        Example, Configuration and Data copied under tmp_path (models and CAD linked, never
+        changed), and in one points file the base joint of one point's _q turned by 0.05 rad (about
+        25 mm at the TCP, beyond the 10 mm sanity bound). The scripts find the project root from
+        their own path, so a script run from the copy reads the perturbed file.
+    """
+
+    def Make(relative: str, name: str) -> str:
+        copy = str(tmp_path / 'repository')
+        for folder in ('src', 'Example', 'Configuration', 'Data'):
+            shutil.copytree(os.path.join(root, folder), os.path.join(copy, folder), ignore=shutil.ignore_patterns('__pycache__'))
+        for folder in ('models', 'CAD'):
+            os.symlink(os.path.join(root, folder), os.path.join(copy, folder))
+        path = os.path.join(copy, relative)
+        with open(path, encoding='utf-8') as handle:
+            lines = handle.read().split('\n')
+        prefix = 'global %s_q=[' % name
+        index = next(i for i, line in enumerate(lines) if line.lstrip().startswith(prefix))
+        head, tail = lines[index].split(prefix, 1)
+        first, rest = tail.split(',', 1)
+        lines[index] = '%s%s%r,%s' % (head, prefix, float(first) + 0.05, rest)
+        with open(path, 'w', encoding='utf-8') as handle:
+            handle.write('\n'.join(lines))
+        return copy
+
+    return Make
+
+
+@pytest.fixture(scope='session')
+def fk_refusal():
+    """
+    Description:
+        The [ERROR] line of a script that refuses a learned point outside the FK sanity bound
+        (Check_FK_Consistency's sentence, the 10 mm bound typed here): the point and its position
+        residual in mm.
+    """
+
+    return re.compile(r'^\[ERROR\] Point (\w+): DH FK of its _q with the configured TCP is ([0-9.]+) mm / [0-9.]+ deg from '
+                      r'its _p; the sanity bound is 10\.00 mm', re.M)

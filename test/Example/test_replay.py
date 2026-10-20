@@ -212,3 +212,20 @@ def test_each_variant_is_named_with_its_estimate_and_its_status(root, tmp_path):
     result = _Run(root, tmp_path, '--path', '6', '--headless', '--skip-check')
     assert result.returncode == 0, result.stdout + result.stderr
     assert re.findall(r'^\[INFO\] Variant (.+)\.$', result.stdout, re.M) == [CONST_TITLES[v] for v in CONST_VARIANTS]
+
+
+def test_a_learned_point_outside_the_sanity_bound_is_refused(perturbed_copy, fk_refusal, tmp_path, cfg):
+    """
+    Description:
+        Every learned point of each variant read is checked against the FK sanity bound before the
+        replay (SPEC 9.4): with home's base joint turned by 0.05 rad (about 25 mm) in c1's points file,
+        path 3 stops with exit 1 and home's numbers, before the scene is built.
+    """
+
+    copy = perturbed_copy(os.path.join(*CONST_FILES['c1'][:-1], 'SF1_Rotation_17.urscript'), 'home')
+    result = _Run(copy, tmp_path, '--path', '3', '--headless', '--skip-check')
+    assert result.returncode == 1, result.stdout + result.stderr
+    refusal = fk_refusal.search(result.stdout)
+    assert refusal and refusal.group(1) == 'home', result.stdout
+    assert float(refusal.group(2)) > cfg.FK_Sanity_Bound_Position * 1e3
+    assert 'Scene built' not in result.stdout

@@ -40,10 +40,12 @@ import typing as tp
 from Configuration.Core import Load_Configuration, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE
 #   ../URScript/Core — the learned points
 from URScript.Core import Read_URScript, Robot_Point_Str
+#   ../Kinematics/Core — the refusal of a point outside the FK sanity bound
+from Kinematics.Core import Kinematics_Error_Cls
 #   ../Scene/Core — the scene
 from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP
 #   ../Example/plan_rotation — the program extract, the case, the openings and the clearance label
-from plan_rotation import CONST_POSITIONS, CONST_CASE, Opening, Configuration_Label
+from plan_rotation import CONST_POSITIONS, CONST_CASE, Opening, Configuration_Label, Check_Learned
 
 
 def Resolve_Name(name: str, points: tp.Dict[str, Robot_Point_Str]) -> tp.Tuple[str, str]:
@@ -111,7 +113,8 @@ def main():
     try:
         cfg = Load_Configuration(args.config)
         opening = Opening(cfg, args.opening)
-    except Configuration_Error_Cls as error:
+        Check_Learned(cfg, points, os.path.basename(CONST_POSITIONS))
+    except (Configuration_Error_Cls, Kinematics_Error_Cls) as error:
         print('[ERROR] %s' % error)
         return 1
     source = cfg.Holding_Openings[CONST_CASE][1] if args.opening == 'holding' else 'the full 2F-85 stroke'

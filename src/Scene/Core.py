@@ -1378,6 +1378,30 @@ class Scene_Cls(object):
         return best
 
 
+def Check_Learned_Kinematics(scene: Scene_Cls, cfg: Cell_Configuration_Str,
+                             points: tp.Sequence[Robot_Point_Str]) -> tp.Dict[str, tp.Tuple[float, float]]:
+    """
+    Description:
+        Accept learned points only if the _q and _p of each agree within the sanity bound (SPEC 9.4):
+        DH FK of _q with the configured TCP within Kinematics.FK_Sanity_Bound_Position of _p, and
+        within the orientation bound derived from the scene's tool length (Orientation_Sanity_Bound).
+        Raises Kinematics_Error_Cls with the numbers of the first point outside, in the given order.
+
+    Args:
+        (1) scene [Scene_Cls(object)]: Any scene of the cell (the tool length; its joints are set to zero).
+        (2) cfg [Cell_Configuration_Str(object)]: The configuration.
+        (3) points [List<Robot_Point_Str>]: The points.
+
+    Returns:
+        (1) parameter [Dict<string, Tuple<float> 1x2>]: Each point's kinematic residual (m, rad).
+    """
+
+    scene.Set_Joints(np.zeros(6))
+    orientation_bound = Orientation_Sanity_Bound(cfg.FK_Sanity_Bound_Position, scene.Tool_Length())
+    return {point.Name: Check_FK_Consistency(point.Name, point.Q, point.P, cfg.TCP_Offset, cfg.FK_Sanity_Bound_Position,
+                                             orientation_bound) for point in points}
+
+
 def Check_Learned_Point(scene: Scene_Cls, cfg: Cell_Configuration_Str, point: Robot_Point_Str) -> tp.Tuple[float, float]:
     """
     Description:
@@ -1394,10 +1418,7 @@ def Check_Learned_Point(scene: Scene_Cls, cfg: Cell_Configuration_Str, point: Ro
         (1) parameter [Tuple<float> 1x2]: Its kinematic residual (m, rad).
     """
 
-    scene.Set_Joints(np.zeros(6))
-    orientation_bound = Orientation_Sanity_Bound(cfg.FK_Sanity_Bound_Position, scene.Tool_Length())
-    residual = Check_FK_Consistency(point.Name, point.Q, point.P, cfg.TCP_Offset, cfg.FK_Sanity_Bound_Position,
-                                    orientation_bound)
+    residual = Check_Learned_Kinematics(scene, cfg, [point])[point.Name]
     # A learned point is taught: the zone margin applies to the zone pieces.
     violations = scene.Check_Clearance(point.Q, station_zone=True)
     if violations:
