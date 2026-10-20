@@ -130,6 +130,27 @@ def test_c1_is_the_delivered_output(root):
     assert texts[0] == texts[1]
 
 
+def test_the_taught_variant_is_the_taught_program_apart_from_its_header(root):
+    """
+    Description:
+        The taught program is kept twice on purpose: Data/Programs/sf1_plc_v4/ holds it as input,
+        variants/taught as the comparison. Each pair of files (points, sequence) is the same after
+        its header, the leading comment lines, line for line; only the headers differ.
+    """
+
+    pairs = (('sf1_plc_v4_case_17.urscript', 'SF1_Rotation_17.urscript'),
+             ('sf1_plc_v4_case_17_sequence.script', 'SF1_Rotation_17_Sequence.script'))
+    for program, variant in pairs:
+        texts = []
+        for path in (os.path.join(root, 'Data', 'Programs', 'sf1_plc_v4', program), _Folder(root, 'taught', variant)):
+            with open(path, encoding='utf-8') as handle:
+                lines = handle.read().splitlines()
+            header = next(i for i, line in enumerate(lines) if not line.startswith('#'))
+            assert header > 0, path
+            texts.append((lines[:header], lines[header:]))
+        assert texts[0][1] == texts[1][1], program
+        assert texts[0][0] != texts[1][0], program
+
 @pytest.mark.parametrize('variant', sorted(CONST_BRANCHES))
 def test_a_proposal_moves_the_drop_to_its_branch_and_nothing_else(root, points, cfg, variant):
     """
