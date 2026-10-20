@@ -9,5 +9,7 @@ PyYAML==6.0.3
 trimesh==5.1.1
 rtree==1.4.1
 coacd==1.0.14
+# README figures only (Example/make_readme_figures.py); installed 2026-10-20
+matplotlib==3.11.2
 # Tests
 pytest==9.1.1

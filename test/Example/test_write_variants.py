@@ -256,3 +256,22 @@ def test_the_table_is_what_the_variant_files_measure(root, cfg):
         assert writer.Table_CSV(table) == handle.read()
     with open(_Folder(root, 'comparison.md'), encoding='utf-8') as handle:
         assert writer.Table_Markdown(table, writer.Blends(_Folder(root, 'taught')), cfg.Base_Position[2]) == handle.read()
+
+
+def test_the_table_is_read_back_as_written(root, tmp_path):
+    """
+    Description:
+        Read_Table_CSV returns comparison.csv as written, every value as its string, per variant and
+        section (compared with the standard csv reader); a file with other columns is refused.
+    """
+
+    writer = _Writer(root)
+    table = writer.Read_Table_CSV(_Folder(root, 'comparison.csv'))
+    rows = _Rows(root)
+    assert sum(len(sections) for sections in table.values()) == len(rows)
+    for row in rows:
+        assert table[row['variant']][row['section']] == row
+    other = tmp_path / 'comparison.csv'
+    other.write_text('variant,section,t_est_s\ntaught,total,23.37\n', encoding='utf-8')
+    with pytest.raises(ValueError, match='columns of comparison.csv'):
+        writer.Read_Table_CSV(str(other))

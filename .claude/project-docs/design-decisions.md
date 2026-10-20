@@ -889,3 +889,31 @@ points sit inside a margin becomes a deliverable.
 Pinned by `test_a_learned_point_outside_the_sanity_bound_is_refused` in `test/Example/test_plan_rotation.py`,
 `test_write_variants.py`, `test_replay.py` and `test_visualize_position.py`, and
 `test/Kinematics/test_core.py` (the bound, position and orientation).
+
+## The README figures are generated from the repository's data; the graphs are pinned byte for byte, the renders are not
+
+**Decision.** `Example/make_readme_figures.py` writes every image of the README into `Media/`: six
+matplotlib graphs from `comparison.csv` (read by `Read_Table_CSV`, beside its writer) and from the
+variant files as the replay builds and times them, each for GitHub's light and dark page theme
+(the README picks one with `<picture>`), and five offscreen MuJoCo renders of the cell (owner,
+2026-10-20). matplotlib is pinned in `requirements.txt`, not a separate file, so the root holds no
+other file. The script stops when the variant files no longer match `comparison.csv` (TCP path
+length and estimated time, within the table's rounding).
+
+**Why.** A hand-made figure drifts from the data; a generated one is redone with one command. The
+graphs carry no randomness and no Software metadata, so the same data gives the same bytes and a
+test can pin them. The renders depend on the OpenGL driver: reproducible on one machine (two runs
+byte-identical on the M2 Pro, 2026-10-20), not across machines, so only their presence is tested.
+Two images per graph: one image readable on both GitHub themes would need mid-grey ink that is weak
+on both. The renders switch the model's own light off and light the scene by the headlight only,
+so the backdrop behind translucent collision geometry has its exact colour.
+
+**Alternatives.** SVG graphs: font rendering differs by viewer. A `requirements-docs.txt`: one more
+root file. Renders with the default lighting: the backdrop saturates to white. All five TCP paths in
+one plot: unreadable; one panel per variant against the taught path instead.
+
+**Revisit if** the comparison table gains or loses a column the graphs use, matplotlib is upgraded
+(the graphs' bytes change; regenerate and commit them), or the renders are needed on Linux CI.
+
+Pinned by `test/Example/test_make_readme_figures.py` (the graphs against `Media/`, the default
+output) and `test_the_table_is_read_back_as_written` in `test/Example/test_write_variants.py`.

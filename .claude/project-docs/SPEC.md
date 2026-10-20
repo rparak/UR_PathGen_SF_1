@@ -616,7 +616,8 @@ refuses.
   `contype=conaffinity=0` and shell inertia, so MuJoCo stores no hull for it. A test pins this.
 - Pinned versions (installed 2026-10-17, re-checked at implementation): `mujoco==3.16.0`,
   `numpy==2.4.6`, `scipy==1.17.1`, `trimesh==5.1.1`, `coacd==1.0.14`, plus `pyyaml`, `pytest`,
-  `rtree` (exact pins in `requirements.txt`). CoACD and trimesh are used only by the decomposition
+  `rtree` (exact pins in `requirements.txt`); `matplotlib==3.11.2` (2026-10-20) for the README
+  figures only. CoACD and trimesh are used only by the decomposition
   build script, never by the tests.
 
 ## 6. Repository structure
@@ -659,6 +660,8 @@ Example/replay_rotation.py  viewer replay of a numbered catalogue of taught and 
 Data/Generated/             SF1_Rotation_17.urscript (points) and SF1_Rotation_17_Sequence.script (home → home)
 Data/Generated/variants/    taught, b_optimised, c1, c2, c3 in the same two files each, and comparison.csv / .md
 Example/write_variants.py   writes Data/Generated/variants/ and the comparison table (§10.6)
+Example/make_readme_figures.py  writes every README image into Media/ from comparison.csv and the variant files
+Media/                      the README images: graphs (light and dark) and MuJoCo renders, all generated
 Example/write_taught_programs.py  writes the simplified taught program of case 17 home → home (Data/Programs/sf1_plc_v4/)
 Example/build_collision.py  regenerates CAD/Collision/ from the STL (runs CoACD; not in the test suite)
 Example/demo_rotate_axis.py the viewer demo

@@ -30,6 +30,8 @@ if CONST_SRC not in sys.path:
     sys.path.append(CONST_SRC)
 # Argparse (Command-line parsing)
 import argparse
+# CSV (CSV file reading), for reading comparison.csv back
+import csv
 # Dataclasses (Data Classes)
 import dataclasses
 # Time (Time access)
@@ -364,6 +366,30 @@ def Table_CSV(table: tp.Dict[str, tp.List[tp.Dict]]) -> str:
                 raise ValueError('A comparison value holds a comma: %s.' % values)
             out.append(','.join(values[c] for c in CONST_COLUMNS))
     return '\n'.join(out) + '\n'
+
+
+def Read_Table_CSV(path: str) -> tp.Dict[str, tp.Dict[str, tp.Dict[str, str]]]:
+    """
+    Description:
+        Read comparison.csv as Table_CSV writes it: the values as written (strings), per variant and
+        section. A file whose header is not CONST_COLUMNS is refused.
+
+    Args:
+        (1) path [string]: The file.
+
+    Returns:
+        (1) parameter [Dict<string, Dict<string, Dict<string, string>>>]: Variant -> section -> column -> value.
+    """
+
+    with open(path, encoding='utf-8', newline='') as handle:
+        rows = list(csv.reader(handle))
+    if not rows or tuple(rows[0]) != CONST_COLUMNS:
+        raise ValueError('%s does not have the columns of comparison.csv; rewrite it with Example/write_variants.py --table-only.' % path)
+    table: tp.Dict[str, tp.Dict[str, tp.Dict[str, str]]] = {}
+    for row in rows[1:]:
+        values = dict(zip(CONST_COLUMNS, row))
+        table.setdefault(values['variant'], {})[values['section']] = values
+    return table
 
 
 def Table_Markdown(table: tp.Dict[str, tp.List[tp.Dict]], blends: tp.Sequence[tp.Tuple[str, float]], base_z: float) -> str:
