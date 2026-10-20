@@ -1,6 +1,8 @@
 # Case 17 of sf1_plc_v4.script, the rotation sequence home -> home, optimised: the station lines
 # verbatim from the program, the transfer segments S1-S3 generated movej (the program's a and v,
 # r=0). Points: SF1_Rotation_17.urscript.
+# The station lines to pick_rotate_1, Waypoint_6 are the program's text; their points have the program's _p and
+# another _q (SF1_Rotation_17.urscript).
 # Delivered. Waypoint_18, pick_rotate_1, Waypoint_6 use wrist 3 one turn lower than taught (owner, 2026-10-19: q6 representative chosen
 # to avoid an unnecessary wrist-3 turn); same pose, same _p (SPEC 10.5).
 # Simulation passed != safe on the robot: run it at reduced speed first.

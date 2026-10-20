@@ -1,8 +1,9 @@
 # Case 17 of sf1_plc_v4.script, the rotation sequence home -> home, optimised: the station lines
 # verbatim from the program, the transfer segments S1-S3 generated movej (the program's a and v,
 # r=0). Points: SF1_Rotation_17.urscript.
+# The station lines to Waypoint_4, Waypoint_5, pick_rotate_1, Waypoint_6 are the program's text; their points have the program's _p and
+# another _q (SF1_Rotation_17.urscript).
 # Variant c3: proposal for re-teaching, not verified on the robot: the drop on branch S- E- W+ (home's branch).
-# Simulation passed != safe on the robot: run it on the real cell at reduced speed first.
 # Simulation passed != safe on the robot: run it at reduced speed first.
 # Start at home (generated, r=0): the program's line blends (r=0.01) into S1, and a blend into a generated segment is not checked
 movej(home_q, a=1.3962634015954636, v=1.0471975511965976, r=0)

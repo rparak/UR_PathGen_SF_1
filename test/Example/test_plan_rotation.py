@@ -41,7 +41,7 @@ from Kinematics.Core import TCP_Pose
 #   ../Configuration/Core — the error a missing case raises
 from Configuration.Core import Configuration_Error_Cls
 #   ../URScript/Core — the case extract
-from URScript.Core import Read_Program_Excerpt
+from URScript.Core import Read_Program_Excerpt, Read_URScript
 
 """
 Description:
@@ -50,6 +50,13 @@ Description:
     The gripper opening of the deliverable's path comes from the configuration (case 17's
     Tool.Holding_Openings entry), and the open state is the full 2F-85 stroke.
 """
+# The delivered output's learned points by provenance (owner, 2026-10-19, SPEC 10.5): written
+# verbatim from the extract, or the extract's _p with wrist 3 one turn lower (the pick operation);
+# and the station lines among the latter.
+#   Unit [Tuple<string>]
+CONST_VERBATIM = ('home', 'drop_rotate_1', 'Waypoint_4', 'Waypoint_5')
+CONST_OTHER_Q = ('Waypoint_18', 'pick_rotate_1', 'Waypoint_6')
+CONST_STATION_OTHER_Q = ('pick_rotate_1', 'Waypoint_6')
 
 
 def _Plan_Module(root):
@@ -184,3 +191,48 @@ def test_the_delivered_points_turn_only_the_picks_wrist_3(root, points, cfg):
         a, b = TCP_Pose(d.Q, cfg.TCP_Offset), TCP_Pose(point.Q, cfg.TCP_Offset)
         assert np.max(np.abs(a - b)) < 1e-12
     assert {name: list(point.Q_Tokens) for name, point in points.items()} == before
+
+
+def test_the_delivered_headers_state_what_is_verbatim(root, points):
+    """
+    Description:
+        The delivered points file names the learned points written verbatim from the extract (home,
+        the drop's three) and those with the extract's _p and another _q (the pick's three, wrist 3
+        one turn lower), and both claims hold token for token; it claims nothing else verbatim. The
+        sequence file names the station lines whose points have another _q (the pick and the lift).
+    """
+
+    folder = os.path.join(root, 'Data', 'Generated')
+    with open(os.path.join(folder, 'SF1_Rotation_17.urscript'), encoding='utf-8') as handle:
+        text = handle.read()
+    header = [line for line in text.splitlines() if line.startswith('#')]
+    assert ('# Verbatim from Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript (_p and _q): %s.' % ', '.join(CONST_VERBATIM)
+            in header)
+    assert "# The program's _p, another _q: %s." % ', '.join(CONST_OTHER_Q) in header
+    assert [line for line in header if 'verbatim' in line.lower()] == [header[3]]
+    delivered = Read_URScript(text).Points
+    assert [n for n in delivered if not n.startswith('via_')] == ['home', 'drop_rotate_1', 'Waypoint_4', 'Waypoint_5',
+                                                                    'Waypoint_18', 'pick_rotate_1', 'Waypoint_6']
+    for name in CONST_VERBATIM:
+        assert (delivered[name].P_Tokens, delivered[name].Q_Tokens) == (points[name].P_Tokens, points[name].Q_Tokens)
+    for name in CONST_OTHER_Q:
+        assert delivered[name].P_Tokens == points[name].P_Tokens and delivered[name].Q_Tokens != points[name].Q_Tokens
+    with open(os.path.join(folder, 'SF1_Rotation_17_Sequence.script'), encoding='utf-8') as handle:
+        sequence = [line for line in handle.read().splitlines() if line.startswith('#')]
+    assert ("# The station lines to %s are the program's text; their points have the program's _p and" % ', '.join(CONST_STATION_OTHER_Q)
+            in sequence)
+
+
+def test_a_written_point_with_another_pose_is_refused(root, points):
+    """
+    Description:
+        Provenance sorts the learned points written into verbatim and another _q, and refuses one
+        whose _p is not the extract's (it would be another pose under a learned name).
+    """
+
+    plan = _Plan_Module(root)
+    delivered = plan.Delivered_Points(points)
+    assert plan.Provenance(['home', 'pick_rotate_1'], delivered, points) == (['home'], ['pick_rotate_1'])
+    moved = dict(delivered, home=points['drop_rotate_1'])
+    with pytest.raises(plan.Planner_Error_Cls, match='The point home to be written has another _p'):
+        plan.Provenance(['home'], moved, points)

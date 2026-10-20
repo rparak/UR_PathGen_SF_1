@@ -75,6 +75,9 @@ CONST_DROP_POINTS = ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5')
 # The sections of home -> home in order, and the target each one ends with.
 #   Unit [Tuple<Tuple<string, string>>]
 CONST_SECTIONS = (('S1', 'drop_rotate_1'), ('drop', 'Waypoint_5'), ('S2', 'Waypoint_18'), ('pick', 'Waypoint_6'), ('S3', 'home'))
+# The safety line of the taught variant's files (Write_Outputs adds its own to the planned variants').
+#   Unit [string]
+CONST_SAFETY_LINE = '# Simulation passed != safe on the robot: run it on the real cell at reduced speed first.'
 # The comparison table's files.
 #   Unit [string]
 CONST_TABLE_CSV, CONST_TABLE_MD = 'comparison.csv', 'comparison.md'
@@ -150,11 +153,13 @@ def Write_Taught(folder: str, points: tp.Dict, lines: tp.Sequence, status: tp.Se
     names = Case_Targets(lines)
     os.makedirs(folder, exist_ok=True)
     header = ['# Case %d of sf1_plc_v4.script as taught, home -> home: the points it moves to, verbatim from' % CONST_CASE,
-              '# Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript. Written by Example/write_variants.py.'] + list(status)
+              '# Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript. Written by Example/write_variants.py.'] + list(status) + [
+              CONST_SAFETY_LINE]
     with open(os.path.join(folder, CONST_FILE_NAMES[0]), 'w', encoding='utf-8') as handle:
         handle.write(Write_URScript(Make_Document([points[name] for name in names], header)))
     header = ['# Case %d of sf1_plc_v4.script as taught, home -> home: every movej and movel in program order, verbatim' % CONST_CASE,
-              '# (targets, a, v, r), the gripper actions as comments. Points: %s.' % CONST_FILE_NAMES[0]] + list(status)
+              '# (targets, a, v, r), the gripper actions as comments. Points: %s.' % CONST_FILE_NAMES[0]] + list(status) + [
+              CONST_SAFETY_LINE]
     with open(os.path.join(folder, CONST_FILE_NAMES[1]), 'w', encoding='utf-8') as handle:
         handle.write(Write_Motion_Sequence(Program_Entries(lines), header, '', ''))
 
@@ -531,7 +536,7 @@ def main():
         Write_Taught(os.path.join(args.out, 'taught'), points, lines, Status_Lines('taught'))
         for k, (variant, vp) in enumerate(variant_points.items()):
             generated = {s: r.Path for s, r in zip(('S1', 'S2', 'S3'), results[3 * k:3 * k + 3])}
-            Write_Outputs(os.path.join(args.out, variant), cfg, vp, lines, generated, CONST_PENALTY_WEIGHT, Status_Lines(variant))
+            Write_Outputs(os.path.join(args.out, variant), cfg, vp, points, lines, generated, CONST_PENALTY_WEIGHT, Status_Lines(variant))
     scenes = {state: Scene_Cls(dataclasses.replace(cfg, Opening=o)) for state, o in openings.items()}
     measured = time.time()
     table = Write_Table(args.out, cfg, scenes)
@@ -549,7 +554,7 @@ def main():
 def Status_Lines(variant: str) -> tp.List[str]:
     """
     Description:
-        The status header lines of a variant's files.
+        The status header line of a variant's files (the safety line follows from the writer).
 
     Args:
         (1) variant [string]: The variant.
@@ -558,8 +563,7 @@ def Status_Lines(variant: str) -> tp.List[str]:
         (1) parameter [List<string>]: Comment lines.
     """
 
-    return ['# Variant %s: %s.' % (variant, CONST_VARIANTS[variant]),
-            '# Simulation passed != safe on the robot: run it on the real cell at reduced speed first.']
+    return ['# Variant %s: %s.' % (variant, CONST_VARIANTS[variant])]
 
 
 if __name__ == '__main__':

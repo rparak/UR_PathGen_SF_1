@@ -208,6 +208,38 @@ def test_a_learned_point_outside_the_sanity_bound_is_refused(perturbed_copy, fk_
     assert not (tmp_path / 'out').exists()
 
 
+def test_every_variant_header_states_what_is_verbatim(root, points):
+    """
+    Description:
+        In every planned variant (b_optimised, c1, c2, c3) the points file's header names the
+        learned points written verbatim from the extract and those with its _p and another _q, and
+        both claims hold token for token for every learned point; b_optimised has none of the latter,
+        c1 the pick's three, c2 and c3 the drop's three as well. Every file of every variant says
+        once that simulation is not safety.
+    """
+
+    expected = {'b_optimised': (), 'c1': ('Waypoint_18', 'pick_rotate_1', 'Waypoint_6'),
+                'c2': ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5', 'Waypoint_18', 'pick_rotate_1', 'Waypoint_6'),
+                'c3': ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5', 'Waypoint_18', 'pick_rotate_1', 'Waypoint_6')}
+    for variant, other in expected.items():
+        with open(_Folder(root, variant, 'SF1_Rotation_17.urscript'), encoding='utf-8') as handle:
+            header = [line for line in handle.read().splitlines() if line.startswith('#')]
+        learned = [name for name in _Points(root, variant) if not name.startswith('via_')]
+        verbatim = [name for name in learned if name not in other]
+        assert ('# Verbatim from Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript (_p and _q): %s.' % ', '.join(verbatim)
+                in header), variant
+        assert [line for line in header if line.startswith("# The program's _p, another _q:")] == (
+            ["# The program's _p, another _q: %s." % ', '.join(n for n in learned if n in other)] if other else []), variant
+        written = _Points(root, variant)
+        for name in learned:
+            assert written[name].P_Tokens == points[name].P_Tokens, (variant, name)
+            assert (written[name].Q_Tokens == points[name].Q_Tokens) == (name not in other), (variant, name)
+    for variant in CONST_TOTALS:
+        for name in _Visible(_Folder(root, variant)):
+            with open(_Folder(root, variant, name), encoding='utf-8') as handle:
+                assert handle.read().count('# Simulation passed != safe on the robot') == 1, (variant, name)
+
+
 @pytest.mark.slow
 def test_the_table_is_what_the_variant_files_measure(root, cfg):
     """

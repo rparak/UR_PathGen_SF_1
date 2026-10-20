@@ -2,7 +2,6 @@
 # verbatim from the program, the transfer segments S1-S3 generated movej (the program's a and v,
 # r=0). Points: SF1_Rotation_17.urscript.
 # Variant b_optimised: previous optimisation (2026-10-18, 17.50 s), superseded by c1.
-# Simulation passed != safe on the robot: run it on the real cell at reduced speed first.
 # Simulation passed != safe on the robot: run it at reduced speed first.
 # Start at home (generated, r=0): the program's line blends (r=0.01) into S1, and a blend into a generated segment is not checked
 movej(home_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
