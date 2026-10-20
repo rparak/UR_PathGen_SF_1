@@ -41,7 +41,7 @@ Description:
 """
 # The graphs, each written for the light and the dark page theme.
 #   Unit [Tuple<string>]
-CONST_GRAPHS = ('cycle_time', 'path_length', 'max_height', 'clearance', 'joints_taught_vs_c1', 'tcp_paths')
+CONST_GRAPHS = ('cycle_time', 'path_length', 'max_height', 'clearance', 'joints', 'tcp_paths')
 # The MuJoCo renders, each written for the light and the dark page theme.
 #   Unit [Tuple<string>]
 CONST_RENDERS = ('cell_overview', 'robot_home', 'station_collision', 'path_taught_vs_c1', 'path_c3_proposal')

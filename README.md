@@ -157,9 +157,14 @@ The taught program and c1 both swing high above the station (highest robot point
 </picture>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="Media/joints_taught_vs_c1_dark.png">
-  <img src="Media/joints_taught_vs_c1_light.png" alt="The six joint angles over the estimated time, taught against c1">
+  <source media="(prefers-color-scheme: dark)" srcset="Media/joints_dark.png">
+  <img src="Media/joints_light.png" alt="The six joint angles of all five variants over the estimated time, with a timeline of each variant's sections">
 </picture>
+
+The joint graph shows all five variants on the **estimated** timing: every move runs from rest to
+rest (r = 0), so the program's blends are not modelled, and neither is the gripper time. The strip
+above the joints gives each variant's sections, with the taught station operations hatched, and
+where its sequence ends; c2 and c3 are dashed because they are proposals, not verified on the robot.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="Media/tcp_paths_dark.png">

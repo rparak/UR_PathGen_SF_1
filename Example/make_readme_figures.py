@@ -56,7 +56,7 @@ from plan_rotation import CONST_VARIANT_DIR, CONST_VARIANTS, Opening
 #   ../Example/replay_rotation — the moves of a variant, their samples and their timing, as replayed
 from replay_rotation import Load_Variant, Build_Moves, Move_Samples, Frames, Frame_Configuration, Write_PNG
 #   ../Example/write_variants — the comparison table
-from write_variants import CONST_TABLE_CSV, Read_Table_CSV
+from write_variants import CONST_TABLE_CSV, CONST_SECTIONS, Read_Table_CSV, Section_Of
 
 """
 Description:
@@ -147,6 +147,10 @@ class Variant_Data_Str:
     #   Unit [Vector<float> 1xN] (s), [Matrix<float> Nx6] (rad)
     Time: np.ndarray = dataclasses.field(default_factory=lambda: np.zeros(0))
     Joints: np.ndarray = dataclasses.field(default_factory=lambda: np.zeros((0, 6)))
+    # Each section of the sequence (CONST_SECTIONS: S1, drop, S2, pick, S3) with its start and end
+    # on the estimated time.
+    #   Unit [List<Tuple<string, float, float>>] (-, s, s)
+    Sections: tp.List[tp.Tuple[str, float, float]] = dataclasses.field(default_factory=list)
 
 
 def Load_Variant_Data(variant: str, cfg: Cell_Configuration_Str, scenes: tp.Dict[str, Scene_Cls]) -> Variant_Data_Str:
@@ -154,8 +158,9 @@ def Load_Variant_Data(variant: str, cfg: Cell_Configuration_Str, scenes: tp.Dict
     Description:
         The TCP path and the joint timeline of a written variant: its moves as the replay builds them
         (Build_Moves), the TCP of every checked sample (Move_Samples, in the scene of the move's
-        gripper state, as comparison.csv measures it) and the joints of every replay frame at the
-        estimated real time (Frames at speed 1, Frame_Configuration).
+        gripper state, as comparison.csv measures it), the joints of every replay frame at the
+        estimated real time (Frames at speed 1, Frame_Configuration) and the time span of each
+        section (Section_Of, as comparison.csv divides the sequence).
 
     Args:
         (1) variant [string]: The variant (CONST_VARIANTS).
@@ -173,8 +178,11 @@ def Load_Variant_Data(variant: str, cfg: Cell_Configuration_Str, scenes: tp.Dict
     starts = np.cumsum([0.0] + [m.Duration for m in moves])
     timeline = [(starts[k] + t, Frame_Configuration(moves[k], t)) for k, t in Frames(moves, 1.0) if moves[k].Kind != 'gripper']
     q_0 = np.asarray(points[operations[0].Target].Q, dtype=float)
+    of = Section_Of(moves)
+    sections = [(name, float(min(starts[k] for k in range(len(moves)) if of[k] == name)),
+                 float(max(starts[k + 1] for k in range(len(moves)) if of[k] == name))) for name, _ in CONST_SECTIONS]
     return Variant_Data_Str(points, np.asarray(tcp), np.array([0.0] + [t for t, _ in timeline]),
-                            np.array([q_0] + [q for _, q in timeline]))
+                            np.array([q_0] + [q for _, q in timeline]), sections)
 
 
 def Style_Axes(ax: tp.Any, theme: tp.Dict[str, str], grid_axis: str) -> None:
@@ -443,7 +451,10 @@ def Graph_Clearance(table: tp.Dict, mode: str, cfg: Cell_Configuration_Str) -> t
 def Graph_Joints(data: tp.Dict[str, Variant_Data_Str], mode: str) -> tp.Any:
     """
     Description:
-        The six joint angles over the estimated time, taught against c1 (delivered).
+        The six joint angles of all five variants over the estimated time, one panel per joint on a
+        shared time axis, the proposals dashed. A timeline strip above them shows each variant's
+        sections (the taught station operations shaded) and where its sequence ends; a dotted line
+        in the variant's colour carries that end through the joint panels.
 
     Args:
         (1) data [Dict<string, Variant_Data_Str>]: The variants' data.
@@ -454,18 +465,41 @@ def Graph_Joints(data: tp.Dict[str, Variant_Data_Str], mode: str) -> tp.Any:
     """
 
     theme = CONST_THEMES[mode]
-    fig, axes = New_Figure((8.0, 9.0), theme, 'Joint positions over time: taught vs c1 (delivered)',
-                           'Home → home at the estimated timing (every move from rest to rest, r = 0)', 6, 1, sharex=True)
-    for j, ax in enumerate(axes):
-        for v in ('taught', 'c1'):
-            ax.plot(data[v].Time, np.degrees(data[v].Joints[:, j]), color=CONST_VARIANT_COLORS[mode][v], linewidth=2.0,
-                    label='%s (%.2f s)' % (v, data[v].Time[-1]))
+    colors = CONST_VARIANT_COLORS[mode]
+    fig, axes = New_Figure((8.0, 11.0), theme, 'Joint positions over time, all five variants',
+                           'Home → home at the estimated timing: every move from rest to rest (r = 0); blends and gripper time not modelled',
+                           7, 1, sharex=True, gridspec_kw={'height_ratios': [1.25] + [1.0] * 6})
+    timeline, joints = axes[0], axes[1:]
+    end = max(data[v].Time[-1] for v in CONST_ORDER)
+    for row, v in enumerate(CONST_ORDER):
+        y = len(CONST_ORDER) - 1 - row
+        for section, t_0, t_1 in data[v].Sections:
+            station = section in ('drop', 'pick')
+            timeline.barh(y, t_1 - t_0, 0.62, left=t_0, color=theme['grid'] if station else colors[v],
+                          edgecolor=theme['surface'], linewidth=1.0, hatch='////' if station else None)
+            if not station:
+                timeline.text((t_0 + t_1) / 2.0, y, section, ha='center', va='center', fontsize=6.5, color=CONST_THEMES['light']['text'])
+        timeline.text(data[v].Time[-1] + 0.25, y, '%.2f s' % data[v].Time[-1], va='center', fontsize=8, color=theme['text'])
+    timeline.set_yticks(range(len(CONST_ORDER)), list(reversed(CONST_ORDER)))
+    timeline.set_ylim(-0.6, len(CONST_ORDER) - 0.4)
+    timeline.set_title('sections (hatched: taught station operations, drop and re-grip) and the end of each sequence',
+                       fontsize=8.5, color=theme['muted'], loc='left')
+    Style_Axes(timeline, theme, 'x')
+    for j, ax in enumerate(joints):
+        for v in CONST_ORDER:
+            proposal = v in ('c2', 'c3')
+            ax.plot(data[v].Time, np.degrees(data[v].Joints[:, j]), color=colors[v], linewidth=1.5,
+                    linestyle=(0, (4, 2)) if proposal else '-',
+                    label='%s%s (%.2f s)' % (v, ', proposal' if proposal else '', data[v].Time[-1]))
+            ax.axvline(data[v].Time[-1], color=colors[v], linewidth=0.8, linestyle=(0, (1, 2)))
         Style_Axes(ax, theme, 'both')
         ax.set_ylabel('%s [°]' % CONST_JOINTS[j])
-    axes[0].legend(loc='lower left', bbox_to_anchor=(0.0, 1.02), ncol=2, fontsize=9, frameon=False, labelcolor=theme['text'])
-    axes[-1].set_xlabel('estimated time [s]')
-    fig.subplots_adjust(left=0.11, right=0.98, top=0.88, bottom=0.08, hspace=0.12)
-    Footnote(fig, theme, [CONST_ESTIMATE_NOTE])
+    joints[-1].set_xlabel('estimated time [s]')
+    joints[-1].set_xlim(-0.3, end + 2.2)
+    fig.legend(*joints[0].get_legend_handles_labels(), loc='upper left', bbox_to_anchor=(0.09, 0.935), ncol=3, fontsize=8.5,
+               frameon=False, labelcolor=theme['text'])
+    fig.subplots_adjust(left=0.13, right=0.98, top=0.86, bottom=0.075, hspace=0.14)
+    Footnote(fig, theme, [CONST_PROPOSAL_NOTE + ' (dashed).', CONST_ESTIMATE_NOTE])
     return fig
 
 
@@ -671,7 +705,7 @@ def main():
               'path_length': lambda mode: Graph_Path_Length(table, mode),
               'max_height': lambda mode: Graph_Max_Height(table, mode, cfg),
               'clearance': lambda mode: Graph_Clearance(table, mode, cfg),
-              'joints_taught_vs_c1': lambda mode: Graph_Joints(data, mode),
+              'joints': lambda mode: Graph_Joints(data, mode),
               'tcp_paths': lambda mode: Graph_TCP_Paths(data, mode, cfg)}
     written = []
     for name, draw in graphs.items():
