@@ -18,7 +18,7 @@ enforced by a test; 📄 = documentation only. The tests are in `test/Scene/test
 ## Every patch is in code, through MjSpec ✅
 
 What the scene needs that the vendored files do not say is applied in `Scene_Cls` and recorded in
-`docs/design-decisions.md`, never written into `models/`:
+`.claude/project-docs/design-decisions.md`, never written into `models/`:
 
 - **DH offsets.** The Menagerie body offsets are rounded and its flange site sits 16.5 mm inside the
   wrist; the builder overwrites them with the official UR10e DH so MuJoCo FK equals DH FK (within
@@ -82,5 +82,5 @@ build with `mj_geomDistance`; the build fails with the violating pieces if any i
   by ±0.5 mm along their mean face normal before hulling; the result contains the original.
 - Every collision mesh gets shell inertia (the bodies are static). Stand components go to body
   `env_stand`, all others to `env` (SPEC §7.5).
-- Open shells whose hull fills space are listed by the build report and in `KNOWN_ISSUES.md`, never
+- Open shells whose hull fills space are listed by the build report and in `.claude/project-docs/KNOWN_ISSUES.md`, never
   silently accepted (SPEC §7.4).

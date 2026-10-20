@@ -622,15 +622,16 @@ refuses.
 ## 6. Repository structure
 
 ```
-README.md                 install, run, test — nothing else
-SPEC.md                   this file
-CLAUDE.md                 short: links to the skills, test and checker commands
-KNOWN_ISSUES.md           accepted risks and known limitations, only what the skeleton decided
+README.md                 what the project is, results, install, run, test, adapting to another cell
+CLAUDE.md                 short: where the internal docs and the skills are, test and checker commands
 LICENSE                   MIT, Copyright (c) 2026 JIC Smart Factory
 install.sh                macOS + Ubuntu, OS detection
 requirements.txt          pinned
 .gitignore                .venv, __pycache__, _source_skills/, .pytest_cache
 .claude/settings.json
+.claude/project-docs/SPEC.md              this file
+.claude/project-docs/KNOWN_ISSUES.md      accepted risks and known limitations
+.claude/project-docs/design-decisions.md  deliberate choices whose reason is not visible in the code
 .claude/skills/project-style-rpx/   SKILL.md, README.md, references/, assets/, scripts/
 .claude/skills/feature-manager/SKILL.md
 .claude/skills/project-optimize/SKILL.md
@@ -666,7 +667,7 @@ test/<Domain>/test_<module>.py mirroring src/, with further files where a domain
                             (test/Scene/test_station.py, test_margin.py, test_program.py;
                             test/Collision/test_conservativeness.py, test_excess.py); test/Install/test_install.py;
                             test/Example/test_<script>.py for the scripts
-docs/design-decisions.md
+pytest.ini                  import mode and the slow marker; the one configuration file at the root
 ```
 
 `src/` layering: `Configuration`, `URScript`, `Kinematics` and `Collision` import nothing of the
@@ -837,7 +838,7 @@ feature that needs envelope checking. Until then it is not a parameter.
 d = (0.1807, 0, 0, 0.17415, 0.11985, 0.11655) m, a = (0, −0.6127, −0.57155, 0, 0, 0) m,
 α = (π/2, 0, 0, π/2, −π/2, 0). The scene builder overwrites the Menagerie body offsets and the
 flange site through MjSpec so that MuJoCo FK equals DH FK. Vendored files stay byte-identical to
-upstream; the patch is in code and in `docs/design-decisions.md`. The gripper attaches at the
+upstream; the patch is in code and in `design-decisions.md`. The gripper attaches at the
 corrected flange.
 
 **Inverse kinematics** (`src/Kinematics/Core.py`, all on these DH parameters). `Solve_IK_Near`

@@ -1,8 +1,8 @@
 # UR_PathGen_SF_1
 
 Generating and verifying collision-free joint-space paths for the UR10e (Robotiq 2F-85) of workcell
-SF1 in MuJoCo, before they run on the real robot. Specification: [SPEC.md](SPEC.md). Limitations:
-[KNOWN_ISSUES.md](KNOWN_ISSUES.md). **Simulation passed ≠ safe on the robot.**
+SF1 in MuJoCo, before they run on the real robot. Specification: [SPEC.md](.claude/project-docs/SPEC.md). Limitations:
+[KNOWN_ISSUES.md](.claude/project-docs/KNOWN_ISSUES.md). **Simulation passed ≠ safe on the robot.**
 
 ## Install
 
@@ -46,7 +46,7 @@ Show the robot static at one learned position of the program, with its clearance
 ```
 
 `--opening open` shows the gripper open (85 mm). A position inside machine (a) is labelled "model
-not valid here" (see `KNOWN_ISSUES.md`).
+not valid here" (see `.claude/project-docs/KNOWN_ISSUES.md`).
 
 The deliverable is case 17 of the program from home to home: the taught sequence and its optimised
 version. Plan its transfer segments S1 – S3 (about 15 minutes, writes `Data/Generated/` and prints

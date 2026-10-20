@@ -75,7 +75,7 @@ movej(<name>_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
 
 *Corrected 2026-10-19: this section said that `a` and `v` are omitted and that `movel` is never
 written; the owner's decisions of 2026-10-17 (a, v) and 2026-10-18 (station lines verbatim) changed
-both (docs/design-decisions.md, SPEC §10.4).*
+both (.claude/project-docs/design-decisions.md, SPEC §10.4).*
 
 ## Naming 📄
 

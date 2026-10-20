@@ -1,8 +1,9 @@
 # UR_PathGen_SF_1
 
-Collision-free UR10e path generation for workcell SF1, verified in MuJoCo. The specification is
-`SPEC.md`; accepted limitations are in `KNOWN_ISSUES.md`; reasons behind choices are in
-`docs/design-decisions.md`.
+Collision-free UR10e path generation for workcell SF1, verified in MuJoCo. The internal docs are
+in `.claude/project-docs/`: the specification `SPEC.md`, the accepted limitations
+`KNOWN_ISSUES.md` and the reasons behind choices `design-decisions.md`. `README.md` is the public
+page; it does not mention the internal docs or the skills.
 
 Communicate with the owner in English only: reports, questions, summaries, commit messages and
 every file. The owner's notes may be in Czech or Slovak; answer in English anyway.

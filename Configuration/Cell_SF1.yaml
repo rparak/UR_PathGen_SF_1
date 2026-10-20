@@ -90,13 +90,13 @@ Robot:
   # Rotation of the Polyscope base frame about the world z axis (owner, 2026-10-17; confirmed by the
   # taught points of sf1_plc_v4.script and photos of the real cell: at 180 the grasp points land on
   # the pallet and side tables and the machine drops inside machine (a); at 0 none does). An earlier
-  # value of 0 was wrong (docs/design-decisions.md). REQUIRED. [deg]
+  # value of 0 was wrong (.claude/project-docs/design-decisions.md). REQUIRED. [deg]
   Base_Yaw: 180.0
   # Joint position limits in the order base, shoulder, elbow, wrist 1, wrist 2, wrist 3.
   # Hardware range +-360 deg, except the elbow: +-180 deg (Menagerie default, owner). The elbow
   # limit is the precondition for excluding upper_arm_link - forearm_link from self-collision;
   # the loader rejects an elbow limit beyond +-180 deg. The Polyscope safety limits of the cell
-  # may be tighter (KNOWN_ISSUES.md). REQUIRED, both. [deg]
+  # may be tighter (.claude/project-docs/KNOWN_ISSUES.md). REQUIRED, both. [deg]
   Joint_Position_Limits:
     Min: [-360.0, -360.0, -180.0, -360.0, -360.0, -360.0]
     Max: [360.0, 360.0, 180.0, 360.0, 360.0, 360.0]
@@ -144,8 +144,8 @@ Clearance:
   Self_Pair_Overrides:
     - [base, upper_arm_link, 0.0]
   # The station holder, whose geometry is fitted to the taught program, not measured
-  # (KNOWN_ISSUES.md). Environment pieces whose bounding box meets the box [Min, Max] (world frame)
-  # get the margin Environment instead of Clearance.Environment: always for taught segments, and
+  # (.claude/project-docs/KNOWN_ISSUES.md). Environment pieces whose bounding box meets the box
+  # [Min, Max] (world frame) get the margin Environment instead of Clearance.Environment: always for taught segments, and
   # for a generated sample only while its TCP lies within Endpoint_Radius of a fixed station point.
   # Box: the holder's neighbourhood (owner, 2026-10-18; SPEC 4.12): the holder box and the sill
   # frame it sits on (components 181, 1062, 2701, 2702, 2704, which no taught sample comes within
