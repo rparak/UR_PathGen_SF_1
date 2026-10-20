@@ -669,7 +669,8 @@ Example/demo_visualize_position.py  the robot static at one learned position, cl
 test/<Domain>/test_<module>.py mirroring src/, with further files where a domain needs them
                             (test/Scene/test_station.py, test_margin.py, test_program.py;
                             test/Collision/test_conservativeness.py, test_excess.py); test/Install/test_install.py;
-                            test/Example/test_<script>.py for the scripts
+                            test/Example/test_<script>.py for the scripts; test/Docs/test_readme.py (the README
+                            table against comparison.csv, its images, the root)
 pytest.ini                  import mode and the slow marker; the one configuration file at the root
 ```
 

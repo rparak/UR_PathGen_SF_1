@@ -22,8 +22,10 @@ Never use a bare `python3` on this machine: miniforge's numpy is broken. Use `.v
 
 ```bash
 ./install.sh
-.venv/bin/python -m pytest
+.venv/bin/python -m pytest -m "not slow"     # everyday, about 8 min
+.venv/bin/python -m pytest                    # before a commit, about 14 min
 .venv/bin/python .claude/skills/project-style-rpx/scripts/check_style.py src Example test
 .venv/bin/python -m pytest .claude/skills/project-style-rpx/scripts/test_check_style.py
 .venv/bin/mjpython Example/demo_rotate_axis.py
+.venv/bin/python Example/make_readme_figures.py   # after the variants or a figure's input change
 ```
