@@ -114,6 +114,15 @@ def test_the_optimised_sequence_starts_at_home_with_a_generated_move(root):
                      ('movej', 'home')]
 
 
+def _Margin_Lines(cfg):
+    # The machine margin with its source as the report and the headers state it, typed here from the
+    # configuration's Clearance.Environment and Clearance.Machine_Extra.
+    return ['Machine margin: generated segments keep %.1f mm (Clearance.Environment %.1f + Machine_Extra %.1f mm) to %s'
+            % ((cfg.Clearance_Environment + cfg.Machine_Extra_Margin) * 1e3, cfg.Clearance_Environment * 1e3,
+               cfg.Machine_Extra_Margin * 1e3, cfg.Machine_Extra_Assembly),
+            'outside the station zone; source: %s.' % cfg.Machine_Extra_Source]
+
+
 def _Run(root, tmp_path, *args):
     return subprocess.run([sys.executable, os.path.join(root, 'Example', 'plan_rotation.py')] + list(args),
                           capture_output=True, text=True, cwd=str(tmp_path), timeout=3600)
@@ -150,16 +159,18 @@ def test_a_learned_point_outside_the_sanity_bound_is_refused(perturbed_copy, fk_
 
 
 @pytest.mark.slow
-def test_a_parallel_run_writes_the_committed_output(root, tmp_path):
+def test_a_parallel_run_writes_the_committed_output(root, tmp_path, cfg):
     """
     Description:
         The full planning run with 4 spawned workers (S1 - S3 at once, the recorded seed and budget),
         started in a fresh interpreter from an unrelated directory, writes both output files byte for
-        byte as committed in Data/Generated/ (written by the sequential run), and reports its wall time.
+        byte as committed in Data/Generated/ (written by the sequential run), reports the machine
+        margin with its source and its wall time.
     """
 
     result = _Run(root, tmp_path, '--workers', '4', '--out', str(tmp_path / 'out'))
     assert result.returncode == 0, result.stdout + result.stderr
+    assert '\n'.join('[INFO] ' + line for line in _Margin_Lines(cfg)) in result.stdout
     assert '[INFO] Wall time: planning' in result.stdout and '(4 workers)' in result.stdout
     for name in ('SF1_Rotation_17.urscript', 'SF1_Rotation_17_Sequence.script'):
         with open(os.path.join(root, 'Data', 'Generated', name), 'rb') as handle:
@@ -236,3 +247,18 @@ def test_a_written_point_with_another_pose_is_refused(root, points):
     moved = dict(delivered, home=points['drop_rotate_1'])
     with pytest.raises(plan.Planner_Error_Cls, match='The point home to be written has another _p'):
         plan.Provenance(['home'], moved, points)
+
+
+def test_the_delivered_headers_state_the_machine_margin_and_its_source(root, cfg):
+    """
+    Description:
+        Both delivered files state, in their header, the margin generated segments keep to machine (a)
+        outside the station zone (Clearance.Environment + Clearance.Machine_Extra.Margin, 30 mm) and
+        the source of the extra margin, as configured.
+    """
+
+    for name in ('SF1_Rotation_17.urscript', 'SF1_Rotation_17_Sequence.script'):
+        with open(os.path.join(root, 'Data', 'Generated', name), encoding='utf-8') as handle:
+            text = handle.read()
+        assert '\n'.join('# ' + line for line in _Margin_Lines(cfg)) + '\n' in text, name
+    assert cfg.Clearance_Environment + cfg.Machine_Extra_Margin == pytest.approx(0.030)

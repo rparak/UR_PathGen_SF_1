@@ -1,6 +1,8 @@
 # Case 17 of sf1_plc_v4.script, the rotation sequence home -> home, optimised: the station lines
 # verbatim from the program, the transfer segments S1-S3 generated movej (the program's a and v,
 # r=0). Points: SF1_Rotation_17.urscript.
+# Machine margin: generated segments keep 30.0 mm (Clearance.Environment 20.0 + Machine_Extra 10.0 mm) to machine_a
+# outside the station zone; source: owner accuracy estimate of the machine position, 2026-10-18.
 # Variant b_optimised: previous optimisation (2026-10-18, 17.50 s), superseded by c1.
 # Simulation passed != safe on the robot: run it at reduced speed first.
 # Start at home (generated, r=0): the program's line blends (r=0.01) into S1, and a blend into a generated segment is not checked
