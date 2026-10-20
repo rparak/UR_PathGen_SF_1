@@ -97,25 +97,34 @@ CONST_JOINTS = ('base', 'shoulder', 'elbow', 'wrist 1', 'wrist 2', 'wrist 3')
 # Graph size and resolution.
 #   Unit [float] (dots per inch)
 CONST_DPI = 150.0
-# The renders: size, background, headlight, and per image the robot's point, the camera (look-at
-# point in the world frame, distance, azimuth, elevation), the geom groups shown (1 the visual STL,
-# 2 the robot's visual meshes, 3 the collision geometry) and the TCP paths drawn (variant, colour, radius).
-#   Unit [int] (px), [Vector<float> 1x3] (0 - 1), [Dict<string, Tuple>] (m, deg)
+# The renders show the environment as its collision model only (the convex pieces at their corrected
+# positions and the added boxes), never the visual STL: the STL is the original CAD without the
+# corrections (Visual_Mesh_Warning) and would show the robot apparently inside the machine. Size,
+# backdrop per page theme, headlight (the only light; no specular, so every surface is matte), and
+# per image the robot's point, the camera (look-at point in the world frame, distance, azimuth,
+# elevation), the environment's opacity, whether the robot's collision geometry is shown, and the
+# TCP paths drawn (variant, colour or None for the variant's own, radius).
+#   Unit [int] (px), [Vector<float> 1x3] (0 - 1), [Dict<string, Tuple>] (m, deg, 0 - 1, bool)
 CONST_RENDER_SIZE = (1280, 800)
-CONST_RENDER_BACKGROUND = (0.965, 0.965, 0.957)
-CONST_HEADLIGHT = ((0.40, 0.40, 0.40), (0.75, 0.75, 0.75), (0.10, 0.10, 0.10))
+CONST_RENDER_BACKGROUND = {'light': (0.965, 0.965, 0.957), 'dark': (0.086, 0.106, 0.133)}
+CONST_HEADLIGHT = ((0.40, 0.40, 0.40), (0.75, 0.75, 0.75), (0.0, 0.0, 0.0))
 CONST_REFERENCE_PATH = (0.55, 0.55, 0.55)
 CONST_RENDERS = {
-    'cell_overview': ('home', (-0.55, 0.0, 0.85), 3.8, -135.0, -22.0, (1, 2), ()),
-    'robot_home': ('home', (-0.10, 0.0, 1.25), 2.3, -150.0, -15.0, (1, 2), ()),
-    'station_collision': ('Waypoint_5', (-0.69, -0.27, 1.20), 0.8, 160.0, -25.0, (2, CONST_COLLISION_GROUP), ()),
-    'path_taught_vs_c1': ('home', (-0.45, 0.0, 1.45), 3.0, -120.0, -8.0, (1, 2), (('taught', None, 0.008), ('c1', None, 0.008))),
-    'path_c3_proposal': ('home', (-0.45, 0.0, 1.45), 3.0, -120.0, -8.0, (1, 2),
+    'cell_overview': ('home', (-0.55, 0.0, 0.85), 3.8, -135.0, -22.0, 1.0, False, ()),
+    'robot_home': ('home', (-0.10, 0.0, 1.25), 2.3, -150.0, -15.0, 1.0, False, ()),
+    'station_collision': ('Waypoint_5', (-0.69, -0.27, 1.20), 0.8, 160.0, -25.0, 0.35, True, ()),
+    'path_taught_vs_c1': ('home', (-0.40, 0.0, 1.55), 3.1, -150.0, -6.0, 1.0, False,
+                          (('taught', None, 0.008), ('c1', None, 0.008))),
+    'path_c3_proposal': ('home', (-0.40, 0.0, 1.55), 3.1, -150.0, -6.0, 1.0, False,
                          (('taught', CONST_REFERENCE_PATH, 0.005), ('c3', None, 0.008))),
 }
-# The station-zone pieces in the station close-up: orange, so the holder stands out from machine (a).
-#   Unit [Vector<float> 1x4] (0 - 1)
-CONST_ZONE_RGBA = (0.92, 0.41, 0.20, 0.75)
+# The colours of the collision model: the environment one neutral grey, the station-zone pieces
+# (the holder boxes and the CAD pieces that meet the zone) orange, the robot's and gripper's
+# collision hulls red where shown.
+#   Unit [Vector<float> 1x3] (0 - 1), [Vector<float> 1x4] (0 - 1)
+CONST_ENV_RGB = (0.66, 0.68, 0.71)
+CONST_ZONE_RGBA = (0.92, 0.41, 0.20, 1.0)
+CONST_ROBOT_COLLISION_RGBA = (0.85, 0.22, 0.22, 0.45)
 # At most this many capsules per drawn path (the path is thinned evenly).
 #   Unit [int]
 CONST_PATH_CAPSULES = 600
@@ -535,10 +544,10 @@ def Draw_Path(scene: tp.Any, points: np.ndarray, rgba: tp.Sequence[float], radiu
         scene.ngeom += 1
 
 
-def Draw_Backdrop(scene: tp.Any, camera: tp.Any) -> None:
+def Draw_Backdrop(scene: tp.Any, camera: tp.Any, background: tp.Sequence[float]) -> None:
     """
     Description:
-        A large box facing the camera far behind the look-at point, in CONST_RENDER_BACKGROUND: the
+        A large box facing the camera far behind the look-at point, in the theme's background: the
         offscreen renderer clears to black, and translucent collision geometry has to blend with the
         page colour (display only). Its colour is divided by the headlight's ambient + diffuse, the
         only light of the render (Render_Images), which lights it face-on.
@@ -546,6 +555,7 @@ def Draw_Backdrop(scene: tp.Any, camera: tp.Any) -> None:
     Args:
         (1) scene [MjvScene(object)]: The renderer's scene, after update_scene.
         (2) camera [MjvCamera(object)]: The free camera.
+        (3) background [Vector<float> 1x3]: The colour (0 - 1, CONST_RENDER_BACKGROUND).
     """
 
     azimuth, elevation = np.radians(camera.azimuth), np.radians(camera.elevation)
@@ -557,7 +567,7 @@ def Draw_Backdrop(scene: tp.Any, camera: tp.Any) -> None:
     g = scene.geoms[scene.ngeom]
     mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_BOX, np.array([200.0, 200.0, 0.1]), np.asarray(camera.lookat) + 40.0 * forward,
                         np.column_stack([x, np.cross(z, x), z]).flatten(),
-                        np.array(list(np.asarray(CONST_RENDER_BACKGROUND) / light) + [1.0], dtype=np.float32))
+                        np.array(list(np.asarray(background) / light) + [1.0], dtype=np.float32))
     g.specular = 0.0
     scene.ngeom += 1
 
@@ -565,10 +575,12 @@ def Draw_Backdrop(scene: tp.Any, camera: tp.Any) -> None:
 def Render_Images(cfg: Cell_Configuration_Str, data: tp.Dict[str, Variant_Data_Str], out: str) -> tp.List[str]:
     """
     Description:
-        The MuJoCo renders (CONST_RENDERS): the scene with the visual STL at the holding opening,
-        the robot at a point of c1, offscreen, lit by the headlight only (the model's own light is
-        switched off, so the backdrop has its exact colour), the TCP paths drawn as capsules. The
-        station close-up shows the collision geometry with the station-zone pieces in CONST_ZONE_RGBA.
+        The MuJoCo renders (CONST_RENDERS), each for the light and the dark page theme: the scene at
+        the holding opening built without the visual STL, the environment drawn as its collision
+        model in CONST_ENV_RGB with the station-zone pieces in CONST_ZONE_RGBA, the robot by its
+        visual meshes (its collision hulls only where the render asks for them), the robot at a point
+        of c1, offscreen, lit by the headlight only (the model's own light is switched off, so the
+        surfaces are matte and the backdrop has its exact colour), the TCP paths drawn as capsules.
 
     Args:
         (1) cfg [Cell_Configuration_Str(object)]: The cell configuration.
@@ -579,35 +591,41 @@ def Render_Images(cfg: Cell_Configuration_Str, data: tp.Dict[str, Variant_Data_S
         (1) parameter [List<string>]: The files written.
     """
 
-    scene = Scene_Cls(dataclasses.replace(cfg, Opening=Opening(cfg, 'holding')), with_environment=True, with_visual=True)
+    scene = Scene_Cls(dataclasses.replace(cfg, Opening=Opening(cfg, 'holding')), with_environment=True, with_visual=False)
     m = scene.Model
     width, height = CONST_RENDER_SIZE
     m.vis.global_.offwidth, m.vis.global_.offheight = max(m.vis.global_.offwidth, width), max(m.vis.global_.offheight, height)
     m.vis.headlight.ambient[:], m.vis.headlight.diffuse[:], m.vis.headlight.specular[:] = CONST_HEADLIGHT
     m.light_active[:] = 0
     renderer = mujoco.Renderer(m, height, width, max_geom=20000)
-    zone = ['env_piece_%d' % i for i in scene.Zone_Pieces] + [CONST_ADDED_BOX_PREFIX + n for n in scene.Zone_Boxes]
-    original = {n: m.geom_rgba[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, n)].copy() for n in zone}
+    zone = {mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, n)
+            for n in ['env_piece_%d' % i for i in scene.Zone_Pieces] + [CONST_ADDED_BOX_PREFIX + n for n in scene.Zone_Boxes]}
+    names = [mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_GEOM, g) or '' for g in range(m.ngeom)]
+    environment = [g for g in range(m.ngeom) if names[g].startswith('env_')]
+    robot_collision = [g for g in range(m.ngeom) if m.geom_group[g] == CONST_COLLISION_GROUP and not names[g].startswith('env_')]
+    option = mujoco.MjvOption()
+    for group in range(6):
+        option.geomgroup[group] = 1 if group in (2, CONST_COLLISION_GROUP) else 0
     written = []
-    for name, (point, lookat, distance, azimuth, elevation, groups, paths) in CONST_RENDERS.items():
-        for n, rgba in original.items():
-            m.geom_rgba[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, n)] = CONST_ZONE_RGBA if name == 'station_collision' else rgba
+    for name, (point, lookat, distance, azimuth, elevation, opacity, show_robot, paths) in CONST_RENDERS.items():
+        for g in environment:
+            m.geom_rgba[g] = CONST_ZONE_RGBA if g in zone else list(CONST_ENV_RGB) + [opacity]
+        for g in robot_collision:
+            m.geom_rgba[g] = CONST_ROBOT_COLLISION_RGBA if show_robot else (0.0, 0.0, 0.0, 0.0)
         scene.Set_Joints(data['c1'].Points[point].Q)
         camera = mujoco.MjvCamera()
         camera.type = mujoco.mjtCamera.mjCAMERA_FREE
         camera.lookat[:], camera.distance, camera.azimuth, camera.elevation = lookat, distance, azimuth, elevation
-        option = mujoco.MjvOption()
-        for group in range(6):
-            option.geomgroup[group] = 1 if group in groups else 0
-        renderer.update_scene(scene.Data, camera=camera, scene_option=option)
-        for variant, color, radius in paths:
-            hex_color = CONST_VARIANT_COLORS['light'][variant].lstrip('#')
-            rgb = color if color is not None else [int(hex_color[k:k + 2], 16) / 255.0 for k in (0, 2, 4)]
-            Draw_Path(renderer.scene, data[variant].TCP, list(rgb) + [1.0], radius)
-        Draw_Backdrop(renderer.scene, camera)
-        path = os.path.join(out, name + '.png')
-        Write_PNG(renderer.render(), path)
-        written.append(path)
+        for mode, background in CONST_RENDER_BACKGROUND.items():
+            renderer.update_scene(scene.Data, camera=camera, scene_option=option)
+            for variant, color, radius in paths:
+                hex_color = CONST_VARIANT_COLORS[mode][variant].lstrip('#')
+                rgb = color if color is not None else [int(hex_color[k:k + 2], 16) / 255.0 for k in (0, 2, 4)]
+                Draw_Path(renderer.scene, data[variant].TCP, list(rgb) + [1.0], radius)
+            Draw_Backdrop(renderer.scene, camera, background)
+            path = os.path.join(out, '%s_%s.png' % (name, mode))
+            Write_PNG(renderer.render(), path)
+            written.append(path)
     renderer.close()
     return written
 
@@ -618,7 +636,8 @@ def main():
         Write every README image into Media/ from the repository's data: the graphs from
         Data/Generated/variants/comparison.csv and from the variant files (as the replay builds and
         times their moves), each for GitHub's light and dark theme, and the MuJoCo renders of the
-        cell (offscreen; no viewer). Nothing is random: the same data gives the same graphs.
+        cell drawn from its collision model, never the visual STL (offscreen; no viewer). Nothing is
+        random: the same data gives the same graphs.
 
             .venv/bin/python Example/make_readme_figures.py [--out DIR] [--graphs-only]
     """

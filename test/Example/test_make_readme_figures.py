@@ -26,6 +26,8 @@ import os
 import sys
 # Subprocess (Running the script as a person does)
 import subprocess
+# Importlib (Import machinery), for running the script in this process with the STL reader replaced
+import importlib.util
 # Pytest (Testing framework) [pip3 install pytest]
 import pytest
 
@@ -40,6 +42,9 @@ Description:
 # The graphs, each written for the light and the dark page theme.
 #   Unit [Tuple<string>]
 CONST_GRAPHS = ('cycle_time', 'path_length', 'max_height', 'clearance', 'joints_taught_vs_c1', 'tcp_paths')
+# The MuJoCo renders, each written for the light and the dark page theme.
+#   Unit [Tuple<string>]
+CONST_RENDERS = ('cell_overview', 'robot_home', 'station_collision', 'path_taught_vs_c1', 'path_c3_proposal')
 
 
 def _Run(root, cwd, *args):
@@ -78,3 +83,30 @@ def test_the_graphs_are_the_committed_ones(root, tmp_path):
     for name in expected:
         with open(os.path.join(root, 'Media', name), 'rb') as committed, open(os.path.join(out, name), 'rb') as written:
             assert written.read() == committed.read(), name
+
+
+def test_the_renders_never_load_the_visual_stl(root, tmp_path, monkeypatch):
+    """
+    Description:
+        The whole script (graphs and renders) runs with the project's STL reader replaced by one that
+        fails: the renders show the environment as its collision model, never the visual STL, which
+        is the original CAD without the corrections. Every render is written in both themes.
+    """
+
+    import Scene.Core
+
+    def Refuse(path):
+        raise AssertionError('the figure script loaded the visual STL %s' % path)
+
+    for folder in ('Example', 'src'):
+        if os.path.join(root, folder) not in sys.path:
+            monkeypatch.syspath_prepend(os.path.join(root, folder))
+    spec = importlib.util.spec_from_file_location('make_readme_figures', os.path.join(root, 'Example', 'make_readme_figures.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(Scene.Core, 'Read_Binary_STL', Refuse)
+    monkeypatch.setattr(sys, 'argv', ['make_readme_figures.py', '--out', str(tmp_path)])
+    assert module.main() == 0
+    written = set(os.listdir(tmp_path))
+    for name in CONST_RENDERS:
+        assert {'%s_light.png' % name, '%s_dark.png' % name} <= written, name

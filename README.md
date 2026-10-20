@@ -8,7 +8,10 @@ workspace for flexible small-batch production with high process variability.
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 <p align="center">
-  <img src="Media/cell_overview.png" alt="MuJoCo model of the SF1 cell: the UR10e with the Robotiq 2F-85 on its stand, machine (a), the side tables and the operator panel" width="85%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Media/cell_overview_dark.png">
+  <img src="Media/cell_overview_light.png" alt="Collision model of the SF1 cell in MuJoCo: the UR10e with the Robotiq 2F-85 on its stand, machine (a), the side tables, the operator panel and the station boxes in orange" width="85%">
+</picture>
 </p>
 
 > **Simulation passed ≠ safe on the robot.** Every path in this repository is a proposal verified
@@ -84,17 +87,49 @@ them show simulation estimates.
 
 ### The cell in MuJoCo
 
-| The robot at home | The regrasp station with its collision geometry |
-|---|---|
-| ![The UR10e at the home position in front of machine (a)](Media/robot_home.png) | ![Close-up of the regrasp station: machine (a) collision pieces in blue, the station-zone pieces in orange, the robot's collision hulls in red](Media/station_collision.png) |
+The environment in every render is the collision model the planner checks against: the convex
+decomposition of the cell's CAD with the documented corrections (machine (a) moved 150 mm away from
+the robot, the side cabinet 50 mm along −x, the station bracket and stub added as boxes), not the
+original CAD. The environment is grey, the station-zone pieces orange; the robot is shown by its
+visual meshes.
 
-In the station close-up, machine (a)'s collision pieces are blue, the station-zone pieces orange
-(the configured bracket and stub boxes and the CAD pieces that meet the zone), and the robot's and
-gripper's collision hulls red. The robot is at `Waypoint_5`, the retreat after the drop.
+<table>
+  <tr>
+    <th>The robot at home</th>
+    <th>The regrasp station with the robot's collision geometry</th>
+  </tr>
+  <tr>
+    <td><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Media/robot_home_dark.png">
+  <img src="Media/robot_home_light.png" alt="Collision model of the cell with the UR10e at the home position in front of machine (a)">
+</picture></td>
+    <td><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Media/station_collision_dark.png">
+  <img src="Media/station_collision_light.png" alt="Close-up of the regrasp station: machine (a) collision pieces translucent grey, the station-zone pieces orange, the robot and gripper collision hulls red">
+</picture></td>
+  </tr>
+</table>
 
-| Taught (blue) vs c1, delivered (green) | c3, proposal (pink) vs taught (grey) |
-|---|---|
-| ![TCP paths of the taught program and c1 drawn into the cell](Media/path_taught_vs_c1.png) | ![TCP path of the c3 proposal against the taught path](Media/path_c3_proposal.png) |
+In the station close-up, machine (a) is drawn translucent so that the station-zone pieces (orange:
+the configured bracket and stub boxes and the CAD pieces that meet the zone) and the robot's and
+gripper's collision hulls (red) show. The robot is at `Waypoint_5`, the retreat after the drop.
+
+<table>
+  <tr>
+    <th>Taught (blue) vs c1, delivered (green)</th>
+    <th>c3, proposal (pink) vs taught (grey)</th>
+  </tr>
+  <tr>
+    <td><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Media/path_taught_vs_c1_dark.png">
+  <img src="Media/path_taught_vs_c1_light.png" alt="TCP paths of the taught program and c1 drawn into the collision model of the cell">
+</picture></td>
+    <td><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Media/path_c3_proposal_dark.png">
+  <img src="Media/path_c3_proposal_light.png" alt="TCP path of the c3 proposal against the taught path, drawn into the collision model of the cell">
+</picture></td>
+  </tr>
+</table>
 
 The taught program and c1 both swing high above the station (highest robot point 2.322 m and
 2.263 m). The c3 proposal stays low (1.780 m); it is not verified on the robot.
@@ -201,7 +236,9 @@ On macOS the MuJoCo viewer needs `mjpython` (`.venv/bin/mjpython`); on Linux use
 ```
 
 Viewer geom groups (number keys): `1` the cell STL, `2` the robot's visual meshes, `3` the collision
-geometry. `--with-stl` loads the cell STL, which the viewers leave out by default.
+geometry. `--with-stl` also loads the cell STL, which the viewers leave out by default. The STL is
+the original CAD without the collision model's corrections, so it does not match the geometry the
+clearance is checked against; the viewers print a warning naming the corrections.
 
 **Replay the variants** in the viewer, or write screenshots or a step list instead:
 

@@ -894,13 +894,18 @@ Pinned by `test_a_learned_point_outside_the_sanity_bound_is_refused` in `test/Ex
 
 **Decision.** `Example/make_readme_figures.py` writes every image of the README into `Media/`: six
 matplotlib graphs from `comparison.csv` (read by `Read_Table_CSV`, beside its writer) and from the
-variant files as the replay builds and times them, each for GitHub's light and dark page theme
-(the README picks one with `<picture>`), and five offscreen MuJoCo renders of the cell (owner,
-2026-10-20). matplotlib is pinned in `requirements.txt`, not a separate file, so the root holds no
+variant files as the replay builds and times them, and five offscreen MuJoCo renders of the cell,
+each for GitHub's light and dark page theme (the README picks one with `<picture>`) (owner,
+2026-10-20). The renders show the environment as its collision model only (the convex pieces at
+their corrected positions and the added boxes, one matte grey, the station-zone pieces orange),
+never the visual STL. matplotlib is pinned in `requirements.txt`, not a separate file, so the root holds no
 other file. The script stops when the variant files no longer match `comparison.csv` (TCP path
 length and estimated time, within the table's rounding).
 
 **Why.** A hand-made figure drifts from the data; a generated one is redone with one command. The
+visual STL is the original CAD without the corrections (machine (a) -150 mm, side cabinet -50 mm,
+the station boxes): rendered from it, the robot appears to collide with the machine, which misleads
+the reader; the viewers print the same warning with `--with-stl` (`Visual_Mesh_Warning`). The
 graphs carry no randomness and no Software metadata, so the same data gives the same bytes and a
 test can pin them. The renders depend on the OpenGL driver: reproducible on one machine (two runs
 byte-identical on the M2 Pro, 2026-10-20), not across machines, so only their presence is tested.
@@ -908,7 +913,8 @@ Two images per graph: one image readable on both GitHub themes would need mid-gr
 on both. The renders switch the model's own light off and light the scene by the headlight only,
 so the backdrop behind translucent collision geometry has its exact colour.
 
-**Alternatives.** SVG graphs: font rendering differs by viewer. A `requirements-docs.txt`: one more
+**Alternatives.** Renders from the visual STL: the uncorrected CAD (used until 2026-10-20). SVG
+graphs: font rendering differs by viewer. A `requirements-docs.txt`: one more
 root file. Renders with the default lighting: the backdrop saturates to white. All five TCP paths in
 one plot: unreadable; one panel per variant against the taught path instead.
 
@@ -916,4 +922,4 @@ one plot: unreadable; one panel per variant against the taught path instead.
 (the graphs' bytes change; regenerate and commit them), or the renders are needed on Linux CI.
 
 Pinned by `test/Example/test_make_readme_figures.py` (the graphs against `Media/`, the default
-output) and `test_the_table_is_read_back_as_written` in `test/Example/test_write_variants.py`.
+output, the renders without the visual STL), the `--with-stl` warning tests of the three viewers and `test_the_table_is_read_back_as_written` in `test/Example/test_write_variants.py`.
