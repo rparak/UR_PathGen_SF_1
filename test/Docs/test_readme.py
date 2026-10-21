@@ -43,6 +43,9 @@ CONST_VARIANTS = ('taught', 'b_optimised', 'c1', 'c2', 'c3')
 # The transfer segments the clearance columns cover.
 #   Unit [Tuple<string>]
 CONST_TRANSFERS = ('S1', 'S2', 'S3')
+# The fewest words of a figure's alt text: enough to say what it shows, not just name it.
+#   Unit [int]
+CONST_ALT_WORDS = 12
 # What the root may hold (owner, 2026-10-20): the public files, the code and data folders, the
 # README images, pytest's configuration and the hidden .claude/.
 #   Unit [Set<string>]
@@ -119,6 +122,24 @@ def test_every_image_the_readme_shows_exists(root):
         assert os.path.isfile(os.path.join(root, path)), path
     media = {'Media/' + name for name in os.listdir(os.path.join(root, 'Media')) if not name.startswith('.')}
     assert media == shown
+
+
+def test_every_figure_has_an_alt_text_and_a_numbered_caption_below_it(root):
+    """
+    Description:
+        Every image the README shows from Media/ has a descriptive alt text (at least
+        CONST_ALT_WORDS words) and, after it and before the next image, a caption "Figure N:", the
+        figures numbered 1, 2, ... in their order in the README.
+    """
+
+    text = _Readme(root)
+    images = list(re.finditer(r'<img src="Media/[^"]+" alt="([^"]*)"', text))
+    assert images
+    for k, image in enumerate(images):
+        assert len(image.group(1).split()) >= CONST_ALT_WORDS, image.group(0)
+        following = text[image.end():images[k + 1].start() if k + 1 < len(images) else len(text)]
+        caption = re.search(r'(?:\*\*|<b>)Figure (\d+):(?:\*\*|</b>) \S', following)
+        assert caption and int(caption.group(1)) == k + 1, image.group(0)
 
 
 def test_the_root_holds_only_what_the_readme_describes(root):

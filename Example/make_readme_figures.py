@@ -73,7 +73,6 @@ CONST_ORDER = tuple(CONST_VARIANTS)
 CONST_SHORT = {'taught': 'reference', 'b_optimised': 'previous optimisation', 'c1': 'delivered',
                'c2': 'proposal *', 'c3': 'proposal *'}
 CONST_PROPOSAL_NOTE = '* proposal for re-teaching, not verified on the robot'
-CONST_ESTIMATE_NOTE = 'Simulation estimate (MuJoCo, nominal DH; r = 0, gripper time not modelled). Simulation passed ≠ safe on the robot.'
 # The page themes a graph is written for (GitHub's light and dark page colours) and their ink.
 #   Unit [Dict<string, Dict<string, string>>] (hex colour)
 CONST_THEMES = {
@@ -166,11 +165,10 @@ class Render_Str:
     # The TCP paths drawn: (variant, radius), each in the variant's graph colour.
     #   Unit [Tuple<Tuple<string, float>>] (-, m)
     Paths: tp.Tuple = ()
-    # The variant a path render is about ('' for none); a framed render gets a title, a legend and
-    # the estimate note, the others are the bare image.
-    #   Unit [string], [bool]
-    Variant: str = ''
-    Framed: bool = False
+    # Whether the render gets a legend over its top left corner (Legend_Render); the others are the
+    # bare image.
+    #   Unit [bool]
+    Legend: bool = False
 
 
 # The renders, by file name.
@@ -180,13 +178,12 @@ CONST_RENDERS = {
     'robot_home': Render_Str(Camera=((-0.10, 0.0, 1.25), 2.3, -150.0, -15.0)),
     'station_collision': Render_Str(Point='Waypoint_5', Camera=((-0.69, -0.27, 1.20), 0.8, 160.0, -25.0), Opacity=0.35,
                                     Robot_Collision=True),
-    'collision_model': Render_Str(Colouring='groups', Framed=True),
-    'path_taught': Render_Str(Camera=CONST_CAMERA_PATH, Colouring='neutral', Paths=(('taught', CONST_PATH_RADIUS),),
-                              Variant='taught', Framed=True),
+    'collision_model': Render_Str(Colouring='groups', Legend=True),
+    'path_taught': Render_Str(Camera=CONST_CAMERA_PATH, Colouring='neutral', Paths=(('taught', CONST_PATH_RADIUS),), Legend=True),
 }
 CONST_RENDERS.update({'path_%s' % v: Render_Str(Camera=CONST_CAMERA_PATH, Colouring='neutral',
                                                 Paths=(('taught', CONST_REFERENCE_RADIUS), (v, CONST_PATH_RADIUS)),
-                                                Variant=v, Framed=True)
+                                                Legend=True)
                       for v in CONST_ORDER[1:]})
 
 
@@ -270,27 +267,25 @@ def Style_Axes(ax: tp.Any, theme: tp.Dict[str, str], grid_axis: str) -> None:
         ax.set_axisbelow(True)
 
 
-def New_Figure(size: tp.Tuple[float, float], theme: tp.Dict[str, str], title: str, subtitle: str,
-               rows: int = 1, columns: int = 1, **kwargs: tp.Any) -> tp.Tuple[tp.Any, tp.Any]:
+def New_Figure(size: tp.Tuple[float, float], theme: tp.Dict[str, str], rows: int = 1, columns: int = 1,
+               **kwargs: tp.Any) -> tp.Tuple[tp.Any, tp.Any]:
     """
     Description:
-        A figure on the theme's surface with a left-aligned title and subtitle.
+        A figure on the theme's surface. It has no title: the README's numbered caption says what
+        the figure shows; the figure keeps what it needs to be read on its own (axes, units, legend,
+        data labels and the proposal status).
 
     Args:
         (1) size [Tuple<float, float>]: Width and height (inch).
         (2) theme [Dict<string, string>]: The theme (CONST_THEMES).
-        (3) title [string]: The title.
-        (4) subtitle [string]: The line under it.
-        (5) rows, columns [int]: The subplot grid.
-        (6) kwargs [Dict]: Passed to plt.subplots.
+        (3) rows, columns [int]: The subplot grid.
+        (4) kwargs [Dict]: Passed to plt.subplots.
 
     Returns:
         (1) parameter [Tuple<Figure, Axes or Array<Axes>>]: The figure and its axes.
     """
 
     fig, axes = plt.subplots(rows, columns, figsize=size, dpi=CONST_DPI, facecolor=theme['surface'], **kwargs)
-    fig.text(0.015, 0.985, title, ha='left', va='top', fontsize=13, fontweight='bold', color=theme['text'])
-    fig.text(0.015, 0.985 - 0.32 / size[1], subtitle, ha='left', va='top', fontsize=9, color=theme['muted'])
     return fig, axes
 
 
@@ -366,8 +361,7 @@ def Graph_Cycle_Time(table: tp.Dict, mode: str) -> tp.Any:
     """
 
     theme = CONST_THEMES[mode]
-    fig, ax = New_Figure((8.0, 4.8), theme, 'Estimated home → home time per variant',
-                         'Case 17 of the SF1 program, stacked by section')
+    fig, ax = New_Figure((8.0, 4.2), theme)
     x = np.arange(len(CONST_ORDER))
     bottom = np.zeros(len(CONST_ORDER))
     for section, color in zip(CONST_STACK, CONST_STACK_COLORS[mode]):
@@ -390,8 +384,8 @@ def Graph_Cycle_Time(table: tp.Dict, mode: str) -> tp.Any:
     ax.set_ylim(0, taught * 1.22)
     legend = ax.legend(loc='upper right', ncol=2, fontsize=8.5, frameon=False, labelcolor=theme['text'])
     legend.set_title(None)
-    fig.subplots_adjust(left=0.08, right=0.98, top=0.84, bottom=0.2)
-    Footnote(fig, theme, [CONST_PROPOSAL_NOTE, CONST_ESTIMATE_NOTE])
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.97, bottom=0.2)
+    Footnote(fig, theme, [CONST_PROPOSAL_NOTE])
     return fig
 
 
@@ -410,8 +404,7 @@ def Graph_Path_Length(table: tp.Dict, mode: str) -> tp.Any:
     """
 
     theme = CONST_THEMES[mode]
-    fig, axes = New_Figure((8.0, 4.0), theme, 'Joint travel and TCP path length per variant',
-                           'Home → home; the TCP path over the checked samples', 1, 2)
+    fig, axes = New_Figure((8.0, 3.4), theme, 1, 2)
     colors = [CONST_VARIANT_COLORS[mode][v] for v in CONST_ORDER]
     y = np.arange(len(CONST_ORDER))[::-1]
     for ax, column, label, unit in ((axes[0], 'sum_abs_dq_rad', 'joint travel Σ|Δq| [rad]', '%.1f'),
@@ -424,8 +417,8 @@ def Graph_Path_Length(table: tp.Dict, mode: str) -> tp.Any:
         ax.set_xlim(0, max(values) * 1.18)
         ax.set_xlabel(label)
         ax.set_yticks(y, Variant_Labels() if ax is axes[0] else [''] * len(y))
-    fig.subplots_adjust(left=0.2, right=0.97, top=0.82, bottom=0.2, wspace=0.12)
-    Footnote(fig, theme, [CONST_PROPOSAL_NOTE, CONST_ESTIMATE_NOTE])
+    fig.subplots_adjust(left=0.2, right=0.97, top=0.96, bottom=0.22, wspace=0.12)
+    Footnote(fig, theme, [CONST_PROPOSAL_NOTE])
     return fig
 
 
@@ -445,8 +438,7 @@ def Graph_Max_Height(table: tp.Dict, mode: str, cfg: Cell_Configuration_Str) -> 
     """
 
     theme = CONST_THEMES[mode]
-    fig, ax = New_Figure((8.0, 3.9), theme, 'Highest robot point per variant',
-                         'World z of the highest collision vertex of the robot and gripper, home → home')
+    fig, ax = New_Figure((8.0, 3.3), theme)
     y = np.arange(len(CONST_ORDER))[::-1]
     values = [Value(table, v, 'total', 'max_robot_z_m') for v in CONST_ORDER]
     ax.barh(y, values, 0.62, color=[CONST_VARIANT_COLORS[mode][v] for v in CONST_ORDER])
@@ -462,8 +454,8 @@ def Graph_Max_Height(table: tp.Dict, mode: str, cfg: Cell_Configuration_Str) -> 
     ax.set_xlim(0, column + 0.4)
     ax.set_ylim(-0.6, len(y) + 0.1)
     ax.set_xlabel('world z [m]')
-    fig.subplots_adjust(left=0.2, right=0.97, top=0.8, bottom=0.21)
-    Footnote(fig, theme, [CONST_PROPOSAL_NOTE, CONST_ESTIMATE_NOTE])
+    fig.subplots_adjust(left=0.2, right=0.97, top=0.93, bottom=0.22)
+    Footnote(fig, theme, [CONST_PROPOSAL_NOTE])
     return fig
 
 
@@ -483,9 +475,7 @@ def Graph_Clearance(table: tp.Dict, mode: str, cfg: Cell_Configuration_Str) -> t
     """
 
     theme = CONST_THEMES[mode]
-    fig, axes = New_Figure((8.0, 4.4), theme, 'Tightest pair per transfer segment against its margin',
-                           'Bar: distance of the pair with the least room; tick: that pair\'s margin; label: room above it',
-                           1, 3, sharey=True)
+    fig, axes = New_Figure((8.0, 3.8), theme, 1, 3, sharey=True)
     y = np.arange(len(CONST_ORDER))[::-1]
     for ax, section in zip(axes, ('S1', 'S2', 'S3')):
         for yy, v in zip(y, CONST_ORDER):
@@ -498,13 +488,9 @@ def Graph_Clearance(table: tp.Dict, mode: str, cfg: Cell_Configuration_Str) -> t
         ax.set_xlim(0, 62)
         ax.set_xlabel('distance [mm]')
     axes[0].set_yticks(y, Variant_Labels())
-    fig.subplots_adjust(left=0.2, right=0.98, top=0.8, bottom=0.27, wspace=0.08)
-    margins = (cfg.Clearance_Environment * 1e3, (cfg.Clearance_Environment + cfg.Machine_Extra_Margin) * 1e3,
-               cfg.Station_Zone_Environment * 1e3)
-    Footnote(fig, theme, ['Margins: %.0f mm environment, %.0f mm to machine (a) for generated segments outside the station zone, '
-                          '%.0f mm in the station zone;' % margins,
-                          'taught segments by the taught rule, generated ones by the generated rule. ' + CONST_PROPOSAL_NOTE,
-                          CONST_ESTIMATE_NOTE])
+    fig.subplots_adjust(left=0.2, right=0.98, top=0.92, bottom=0.27, wspace=0.08)
+    Footnote(fig, theme, ['Bar: distance of the robot – environment pair with the least room above its margin; tick: that pair\'s '
+                          'margin; label: the room [mm].', CONST_PROPOSAL_NOTE])
     return fig
 
 
@@ -526,9 +512,7 @@ def Graph_Joints(data: tp.Dict[str, Variant_Data_Str], mode: str) -> tp.Any:
 
     theme = CONST_THEMES[mode]
     colors = CONST_VARIANT_COLORS[mode]
-    fig, axes = New_Figure((8.0, 11.0), theme, 'Joint positions over time, all five variants',
-                           'Home → home at the estimated timing: every move from rest to rest (r = 0); blends and gripper time not modelled',
-                           7, 1, sharex=True, gridspec_kw={'height_ratios': [1.25] + [1.0] * 6})
+    fig, axes = New_Figure((8.0, 10.4), theme, 7, 1, sharex=True, gridspec_kw={'height_ratios': [1.25] + [1.0] * 6})
     timeline, joints = axes[0], axes[1:]
     end = max(data[v].Time[-1] for v in CONST_ORDER)
     for row, v in enumerate(CONST_ORDER):
@@ -556,10 +540,10 @@ def Graph_Joints(data: tp.Dict[str, Variant_Data_Str], mode: str) -> tp.Any:
         ax.set_ylabel('%s [°]' % CONST_JOINTS[j])
     joints[-1].set_xlabel('estimated time [s]')
     joints[-1].set_xlim(-0.3, end + 2.2)
-    fig.legend(*joints[0].get_legend_handles_labels(), loc='upper left', bbox_to_anchor=(0.09, 0.935), ncol=3, fontsize=8.5,
+    fig.legend(*joints[0].get_legend_handles_labels(), loc='upper left', bbox_to_anchor=(0.09, 0.995), ncol=3, fontsize=8.5,
                frameon=False, labelcolor=theme['text'])
-    fig.subplots_adjust(left=0.13, right=0.98, top=0.86, bottom=0.075, hspace=0.14)
-    Footnote(fig, theme, [CONST_PROPOSAL_NOTE + ' (dashed).', CONST_ESTIMATE_NOTE])
+    fig.subplots_adjust(left=0.13, right=0.98, top=0.92, bottom=0.07, hspace=0.14)
+    Footnote(fig, theme, [CONST_PROPOSAL_NOTE + ' (dashed).'])
     return fig
 
 
@@ -581,9 +565,7 @@ def Graph_TCP_Paths(data: tp.Dict[str, Variant_Data_Str], mode: str, cfg: Cell_C
 
     theme = CONST_THEMES[mode]
     shown = CONST_ORDER[1:]
-    fig, axes = New_Figure((10.0, 6.4), theme, 'TCP paths, home → home',
-                           'World frame; each variant (colour) against the taught path (grey); top row from above, bottom row from the side',
-                           2, len(shown), sharex=True, sharey='row')
+    fig, axes = New_Figure((10.0, 5.9), theme, 2, len(shown), sharex=True, sharey='row')
     zone_lo, zone_hi = np.asarray(cfg.Station_Zone_Min), np.asarray(cfg.Station_Zone_Max)
     home = data['taught'].TCP[0]
     for column, v in enumerate(shown):
@@ -591,7 +573,7 @@ def Graph_TCP_Paths(data: tp.Dict[str, Variant_Data_Str], mode: str, cfg: Cell_C
             ax = axes[row, column]
             ax.add_patch(plt.Rectangle((zone_lo[i], zone_lo[j]), zone_hi[i] - zone_lo[i], zone_hi[j] - zone_lo[j],
                                        facecolor='none', edgecolor=theme['muted'], linewidth=1.0, linestyle=(0, (3, 2))))
-            ax.plot(data['taught'].TCP[:, i], data['taught'].TCP[:, j], color=theme['axis'], linewidth=1.2)
+            ax.plot(data['taught'].TCP[:, i], data['taught'].TCP[:, j], color=theme['axis'], linewidth=1.2, label='taught (reference)')
             ax.plot(data[v].TCP[:, i], data[v].TCP[:, j], color=CONST_VARIANT_COLORS[mode][v], linewidth=1.8)
             ax.plot(cfg.Base_Position[i], cfg.Base_Position[j], marker='s', markersize=7, color=theme['text'], linestyle='none')
             ax.plot(home[i], home[j], marker='o', markersize=7, color=theme['text'], markerfacecolor=theme['surface'],
@@ -602,7 +584,7 @@ def Graph_TCP_Paths(data: tp.Dict[str, Variant_Data_Str], mode: str, cfg: Cell_C
             else:
                 ax.set_xlabel('x [m]')
             if column == 0:
-                ax.set_ylabel('%s [m]' % 'xyz'[j])
+                ax.set_ylabel('%s, %s [m]' % ('from above' if row == 0 else 'from the side', 'xyz'[j]))
                 ax.text(zone_lo[i], zone_lo[j] - 0.04, 'station\nzone', ha='left', va='top', fontsize=7.5, color=theme['muted'])
                 ax.text(cfg.Base_Position[i], cfg.Base_Position[j] - 0.06, 'base', ha='center', va='top', fontsize=7.5,
                         color=theme['muted'])
@@ -610,8 +592,10 @@ def Graph_TCP_Paths(data: tp.Dict[str, Variant_Data_Str], mode: str, cfg: Cell_C
     axes[0, 0].set_xlim(-0.95, 0.2)
     axes[0, 0].set_ylim(-0.75, 0.5)
     axes[1, 0].set_ylim(0.5, 2.4)
-    fig.subplots_adjust(left=0.07, right=0.99, top=0.83, bottom=0.12, wspace=0.08, hspace=0.12)
-    Footnote(fig, theme, [CONST_PROPOSAL_NOTE + '. ' + CONST_ESTIMATE_NOTE])
+    fig.legend(*axes[0, 0].get_legend_handles_labels(), loc='upper right', bbox_to_anchor=(0.99, 0.995), fontsize=8.5, frameon=False,
+               labelcolor=theme['text'], handlelength=1.5)
+    fig.subplots_adjust(left=0.08, right=0.99, top=0.87, bottom=0.12, wspace=0.08, hspace=0.12)
+    Footnote(fig, theme, [CONST_PROPOSAL_NOTE + '.'])
     return fig
 
 
@@ -711,30 +695,25 @@ def Environment_Groups(scene: Scene_Cls, cfg: Cell_Configuration_Str) -> tp.List
     return groups
 
 
-def Frame_Render(image: np.ndarray, mode: str, title: str, subtitle: str, legend: tp.Sequence[tp.Tuple[str, tp.Any, str]],
-                 notes: tp.Sequence[str]) -> tp.Any:
+def Legend_Render(image: np.ndarray, mode: str, legend: tp.Sequence[tp.Tuple[str, tp.Any, str]]) -> tp.Any:
     """
     Description:
-        A render with a title, a subtitle, a legend over its top left corner and footnotes, on the
-        render's own backdrop colour, so image and frame read as one panel.
+        A render at its own size with a legend over its top left corner, on the render's backdrop
+        colour. No title: the README's numbered caption says what the render shows.
 
     Args:
         (1) image [Matrix<uint8> HxWx3]: The render.
         (2) mode [string]: 'light' or 'dark'.
-        (3 - 4) title, subtitle [string]: The heading.
-        (5) legend [List<Tuple<string, Vector<float> 1x3 or 1x4, string>>]: Label, colour and kind
+        (3) legend [List<Tuple<string, Vector<float> 1x3 or 1x4, string>>]: Label, colour and kind
                                                                            ('line', 'thin' or 'patch').
-        (6) notes [List<string>]: The footnote lines.
 
     Returns:
         (1) parameter [Figure(object)]: The figure.
     """
 
     theme = dict(CONST_THEMES[mode], surface='#%02x%02x%02x' % tuple(int(round(c * 255)) for c in CONST_RENDER_BACKGROUND[mode]))
-    width, height = image.shape[1] / CONST_DPI, image.shape[0] / CONST_DPI
-    top, bottom = 0.62, 0.18 + 0.13 * len(notes)
-    fig, ax = New_Figure((width, height + top + bottom), theme, title, subtitle)
-    ax.set_position([0.0, bottom / (height + top + bottom), 1.0, height / (height + top + bottom)])
+    fig, ax = New_Figure((image.shape[1] / CONST_DPI, image.shape[0] / CONST_DPI), theme)
+    ax.set_position([0.0, 0.0, 1.0, 1.0])
     ax.imshow(image, interpolation='none')
     ax.set_axis_off()
     handles = []
@@ -744,11 +723,10 @@ def Frame_Render(image: np.ndarray, mode: str, title: str, subtitle: str, legend
         else:
             handles.append(matplotlib.lines.Line2D([], [], color=color, linewidth=3.0 if kind == 'line' else 1.5, label=label))
     ax.legend(handles=handles, loc='upper left', fontsize=8.5, frameon=False, labelcolor=theme['text'], handlelength=1.8)
-    Footnote(fig, theme, notes)
     return fig
 
 
-def Render_Images(cfg: Cell_Configuration_Str, data: tp.Dict[str, Variant_Data_Str], table: tp.Dict, out: str) -> tp.List[str]:
+def Render_Images(cfg: Cell_Configuration_Str, data: tp.Dict[str, Variant_Data_Str], out: str) -> tp.List[str]:
     """
     Description:
         The MuJoCo renders (CONST_RENDERS), each for the light and the dark page theme: the scene at
@@ -757,14 +735,12 @@ def Render_Images(cfg: Cell_Configuration_Str, data: tp.Dict[str, Variant_Data_S
         figure, by its collision hulls only, the robot at a point of c1, offscreen, lit by the
         headlight only (the model's own light is switched off, so the surfaces are matte and the
         backdrop has its exact colour), the TCP paths drawn as capsules in the graphs' colours. A
-        framed render gets its title, legend and notes (Frame_Render); a path render's subtitle gives
-        the variant's estimated time and highest robot point from comparison.csv.
+        render with a legend gets it over its top left corner, with no title (Legend_Render).
 
     Args:
         (1) cfg [Cell_Configuration_Str(object)]: The cell configuration.
         (2) data [Dict<string, Variant_Data_Str>]: The variants' data (points and TCP paths).
-        (3) table [Dict<string, Dict<string, Dict<string, string>>>]: The comparison table (Read_Table_CSV).
-        (4) out [string]: The output directory.
+        (3) out [string]: The output directory.
 
     Returns:
         (1) parameter [List<string>]: The files written.
@@ -808,8 +784,9 @@ def Render_Images(cfg: Cell_Configuration_Str, data: tp.Dict[str, Variant_Data_S
                 hex_color = CONST_VARIANT_COLORS[mode][variant]
                 rgb = [int(hex_color[k:k + 2], 16) / 255.0 for k in (1, 3, 5)]
                 Draw_Path(renderer.scene, data[variant].TCP, rgb + [1.0], radius)
-                legend.append(('%s: %s' % (variant, 'taught path, reference' if radius == CONST_REFERENCE_RADIUS else CONST_RENDER_STATUS[variant]),
-                               hex_color, 'thin' if radius == CONST_REFERENCE_RADIUS else 'line'))
+                reference = radius == CONST_REFERENCE_RADIUS
+                legend.append(('taught (reference)' if reference else '%s: %s' % (variant, CONST_RENDER_STATUS[variant]), hex_color,
+                               'thin' if reference else 'line'))
             if render.Colouring == 'groups':
                 g = renderer.scene.geoms[renderer.scene.ngeom]
                 mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_BOX, (zone_hi - zone_lo) / 2.0, (zone_hi + zone_lo) / 2.0, np.eye(3).flatten(),
@@ -818,26 +795,16 @@ def Render_Images(cfg: Cell_Configuration_Str, data: tp.Dict[str, Variant_Data_S
             Draw_Backdrop(renderer.scene, camera, background)
             image = renderer.render()
             path = os.path.join(out, '%s_%s.png' % (name, mode))
-            if not render.Framed:
+            if not render.Legend:
                 Write_PNG(image, path)
-            elif render.Colouring == 'groups':
+                written.append(path)
+                continue
+            if render.Colouring == 'groups':
                 legend = [('robot and gripper collision hulls (%g mm between them)' % (cfg.Clearance_Self * 1e3), CONST_ROBOT_GROUP_RGBA, 'patch')]
                 legend += [(label, rgba, 'patch') for label, rgba, _ in groups]
                 legend.append(('station-zone box: inside it the zone pieces keep %g mm' % (cfg.Station_Zone_Environment * 1e3),
                                CONST_ZONE_RGBA[:3] + (0.35,), 'patch'))
-                Save_Figure(Frame_Render(image, mode, 'The collision model: the cell as the planner sees it',
-                                         'Convex pieces of the cell CAD and the added station boxes; the robot at home by its '
-                                         'collision hulls; each group with its margin',
-                                         legend, ['Not the CAD: machine (a) moved 150 mm away from the robot, the side cabinet 50 mm '
-                                                  'along −x, the station boxes fitted to the taught program.',
-                                                  'The planner checks every sample of a path against these pieces with the '
-                                                  'margins shown. Simulation passed ≠ safe on the robot.']), path)
-            else:
-                v = render.Variant
-                Save_Figure(Frame_Render(image, mode, '%s — %s' % (v, CONST_RENDER_STATUS[v]),
-                                         'TCP path home → home in the collision model; estimated %.2f s, highest robot point %.3f m'
-                                         % (Value(table, v, 'total', 't_est_s'), Value(table, v, 'total', 'max_robot_z_m')),
-                                         legend, [CONST_ESTIMATE_NOTE]), path)
+            Save_Figure(Legend_Render(image, mode, legend), path)
             written.append(path)
     renderer.close()
     return written
@@ -893,7 +860,7 @@ def main():
             Save_Figure(draw(mode), path)
             written.append(path)
     if not args.graphs_only:
-        written += Render_Images(cfg, data, table, args.out)
+        written += Render_Images(cfg, data, args.out)
     for path in written:
         print('[INFO] Wrote %s.' % os.path.relpath(path, CONST_PROJECT_ROOT))
     print('[INFO] %d images. Simulation passed != safe on the robot.' % len(written))
