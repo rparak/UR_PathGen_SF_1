@@ -7,8 +7,8 @@ numbers. **Simulation passed ≠ safe on the robot.**
 |---|---|
 | taught | the taught program (sf1_plc_v4, case 17) |
 | b_optimised | previous optimisation (2026-10-18, 17.50 s), superseded by c1 |
-| c1 | delivered (= Data/Generated/): the pick's wrist 3 one turn lower, same poses |
-| c2 | proposal for re-teaching, not verified on the robot: the drop on branch S- E- W- (wrist flipped in S1) |
+| c1 | previous optimisation (simulation only), = Data/Generated/: the pick's wrist 3 one turn lower, same poses |
+| c2 | delivered - tested on the real cell (owner, 2026-10-21): the drop on branch S- E- W- (wrist flipped in S1) |
 | c3 | proposal for re-teaching, not verified on the robot: the drop on branch S- E- W+ (home's branch) |
 
 How the numbers are made:
@@ -26,7 +26,8 @@ How the numbers are made:
   the generated rule, program lines by the taught rule; the least room is the distance minus that pair's
   margin. The station-box floors and the workspace count in the samples breaking the rule only.
 - c2 and c3 drop points are the nominal-DH IK of the program's `_p`: millimetres from what the robot's
-  calibrated IK returns. They must be re-taught and re-verified on the robot at reduced speed.
+  calibrated IK returns. c2 was delivered and tested on the real cell (owner, 2026-10-21); c3 must be
+  re-taught and re-verified on the robot at reduced speed.
 
 ## Home -> home
 

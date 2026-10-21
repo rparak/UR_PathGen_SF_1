@@ -455,7 +455,8 @@ def Table_Markdown(table: tp.Dict[str, tp.List[tp.Dict]], blends: tp.Sequence[tp
             '  the generated rule, program lines by the taught rule; the least room is the distance minus that pair\'s',
             '  margin. The station-box floors and the workspace count in the samples breaking the rule only.',
             '- c2 and c3 drop points are the nominal-DH IK of the program\'s `_p`: millimetres from what the robot\'s',
-            '  calibrated IK returns. They must be re-taught and re-verified on the robot at reduced speed.', '',
+            '  calibrated IK returns. c2 was delivered and tested on the real cell (owner, 2026-10-21); c3 must be',
+            '  re-taught and re-verified on the robot at reduced speed.', '',
             '## Home -> home', '']
     sections = [s for s, _ in CONST_SECTIONS] + ['total']
     for section in ['total'] + sections[:-1]:
@@ -516,8 +517,9 @@ def main():
         SF1_Rotation_17.urscript and the sequence SF1_Rotation_17_Sequence.script, each with its
         status), then comparison.csv and comparison.md. taught: the program's sequence. b_optimised,
         c1, c2, c3: S1 - S3 planned as Example/plan_rotation.py plans them (the same seeds, budget and
-        penalty weight), on the program's points (b_optimised, as before 2026-10-19), the delivered
-        points (c1, = Data/Generated/) and the proposals for re-teaching (c2, c3). Nothing is written
+        penalty weight), on the program's points (b_optimised, as before 2026-10-19), the points with
+        the pick's wrist 3 one turn lower (c1, = Data/Generated/) and the drop on another IK branch (c2,
+        delivered and tested on the real cell; c3, a proposal for re-teaching). Nothing is written
         unless every segment is planned and verified.
 
             .venv/bin/python Example/write_variants.py [--workers N] [--out DIR]
@@ -532,7 +534,7 @@ def main():
     if args.workers < 1:
         print('[ERROR] --workers must be 1 or more (1 = plan in this process), not %d.' % args.workers)
         return 1
-    print('[WARNING] Simulation passed != safe on the robot. c2 and c3 are proposals for re-teaching, not verified on the robot.')
+    print('[WARNING] Simulation passed != safe on the robot. c3 is a proposal for re-teaching, not verified on the robot.')
     try:
         cfg = Load_Configuration(args.config)
         openings = {state: Opening(cfg, state) for state in ('holding', 'open')}

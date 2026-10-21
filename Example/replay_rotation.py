@@ -72,14 +72,14 @@ Description:
 CONST_CATALOGUE = {
     1: (('taught',), 'case 17 taught (home -> home)'),
     2: (('b_optimised',), 'case 17 previous optimisation, 2026-10-18 (home -> home)'),
-    3: (('c1',), 'case 17 delivered, c1 (home -> home)'),
-    4: (('c2',), 'case 17 c2, proposal - not verified on the robot (home -> home)'),
+    3: (('c1',), 'case 17 c1, previous optimisation (simulation only) (home -> home)'),
+    4: (('c2',), 'case 17 c2, delivered - tested on the real cell (owner, 2026-10-21) (home -> home)'),
     5: (('c3',), 'case 17 c3, proposal - not verified on the robot (home -> home)'),
     6: (tuple(CONST_VARIANTS), 'case 17 all five variants one after another (home -> home), with the strict comparison'),
 }
-# The note shown with a variant that has not run on the robot.
+# The note shown with a proposal that has not run on the robot.
 #   Unit [Dict<string, string>]
-CONST_NOTES = {'c2': 'proposal - not verified on the robot', 'c3': 'proposal - not verified on the robot'}
+CONST_NOTES = {'c3': 'proposal - not verified on the robot'}
 # The gripper state at home: holding the part. Owner, 2026-10-18: the robot holds the part from the
 # start of the case, places it into the magazine and releases it, picks it up again and returns home
 # holding it; the gripper is open only between the release and the re-pick (S2).
@@ -742,7 +742,7 @@ def main():
         rule of its kind (taught lines: taught rule; generated movej: generated rule); a move inside
         machine (a) is labelled "model not valid here" (KNOWN_ISSUES). The variants are read from
         Data/Generated/variants/ (Example/write_variants.py); the overlay names each with its
-        estimated time, c2 and c3 as proposals not verified on the robot. Entry 6 plays all five and
+        estimated time, c3 as a proposal not verified on the robot. Entry 6 plays all five and
         prints the strict comparison: S1 - S3 of every variant judged by the generated rule.
 
             macOS:   .venv/bin/mjpython Example/replay_rotation.py --path 3

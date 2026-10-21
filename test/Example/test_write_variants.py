@@ -59,10 +59,13 @@ CONST_TOTALS = {'taught': '23.37', 'b_optimised': '17.50', 'c1': '14.66', 'c2': 
 #   Unit [Dict<string, string>], [Tuple<string>]
 CONST_BRANCHES = {'c2': 'S- E- W-', 'c3': 'S- E- W+'}
 CONST_DROP = ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5')
-# The status words each variant's files must carry.
-#   Unit [Dict<string, string>]
-CONST_STATUS = {'taught': 'taught program', 'b_optimised': 'previous optimisation', 'c1': 'delivered',
-                'c2': 'proposal for re-teaching, not verified on the robot', 'c3': 'proposal for re-teaching, not verified on the robot'}
+# The status words each variant's files must carry, and those they must not (owner, 2026-10-21: c2
+# delivered and tested on the real cell, c1 the previous optimisation).
+#   Unit [Dict<string, string>], [Dict<string, Tuple<string>>]
+CONST_STATUS = {'taught': 'taught program', 'b_optimised': 'previous optimisation',
+                'c1': 'previous optimisation (simulation only)', 'c2': 'delivered - tested on the real cell (owner, 2026-10-21)',
+                'c3': 'proposal for re-teaching, not verified on the robot'}
+CONST_NOT_STATUS = {'c1': ('delivered',), 'c2': ('proposal', 'not verified')}
 
 
 def _Writer(root):
@@ -98,9 +101,9 @@ def test_every_variant_has_its_files_and_its_status(root):
     """
     Description:
         Each of the five variants has its points and its sequence, each file naming the variant's
-        status (taught program, previous optimisation, delivered, proposal for re-teaching not
-        verified on the robot) and saying simulation is not safety. Hidden files (a .DS_Store that
-        Finder writes, ignored by git) are not part of the output.
+        status (CONST_STATUS), never another one (CONST_NOT_STATUS: c1 is not called delivered, c2 not
+        a proposal), and saying simulation is not safety. Hidden files (a .DS_Store that Finder
+        writes, ignored by git) are not part of the output.
     """
 
     assert _Visible(_Folder(root)) == sorted(list(CONST_TOTALS) + ['comparison.csv', 'comparison.md'])
@@ -110,14 +113,15 @@ def test_every_variant_has_its_files_and_its_status(root):
             with open(_Folder(root, variant, name), encoding='utf-8') as handle:
                 text = handle.read()
             assert '# Variant %s: ' % variant in text and status in text, (variant, name)
+            assert not any(word in text for word in CONST_NOT_STATUS.get(variant, ())), (variant, name)
             assert 'Simulation passed != safe on the robot' in text
 
 
-def test_c1_is_the_delivered_output(root):
+def test_c1_is_the_output_of_data_generated(root):
     """
     Description:
-        The c1 variant is the delivered output of Data/Generated/: the same points token for token
-        and the same motion lines; only the status comments differ.
+        The c1 variant is the output of Data/Generated/ (Example/plan_rotation.py): the same points
+        token for token and the same motion lines; only the status comments differ.
     """
 
     with open(os.path.join(root, 'Data', 'Generated', 'SF1_Rotation_17.urscript'), encoding='utf-8') as handle:

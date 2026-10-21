@@ -5,7 +5,7 @@
 # The program's _p, another _q: drop_rotate_1, Waypoint_4, Waypoint_5, Waypoint_18, pick_rotate_1, Waypoint_6.
 # Machine margin: generated segments keep 30.0 mm (Clearance.Environment 20.0 + Machine_Extra 10.0 mm) to machine_a
 # outside the station zone; source: owner accuracy estimate of the machine position, 2026-10-18.
-# Variant c2: proposal for re-teaching, not verified on the robot: the drop on branch S- E- W- (wrist flipped in S1).
+# Variant c2: delivered - tested on the real cell (owner, 2026-10-21): the drop on branch S- E- W- (wrist flipped in S1).
 # Simulation passed != safe on the robot: run it on the real cell at reduced speed first.
 global home_p=p[.238739153619, -.175248184859, .472678665244, 2.218804439569, -2.220766336909, .005958014905]
 global home_q=[2.4439792468911037E-5, -0.785396472816803, -2.094330072402954, -1.8325640163817347, 1.5708248615264893, 1.098817665479146E-5]

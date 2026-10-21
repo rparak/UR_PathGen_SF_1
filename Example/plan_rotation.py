@@ -72,13 +72,15 @@ CONST_OUTPUT_DIR = os.path.join(CONST_PROJECT_ROOT, 'Data', 'Generated')
 #   Unit [Tuple<string, string>]
 CONST_FILE_NAMES = ('SF1_Rotation_17.urscript', 'SF1_Rotation_17_Sequence.script')
 # The variants kept for comparison (owner, 2026-10-19; Example/write_variants.py), each in its own
-# directory, with its status: what it is and whether it may run on the robot.
+# directory, with its status: what it is and whether it may run on the robot. c2 was delivered and
+# tested on the real cell, c1 is the previous optimisation (owner, 2026-10-21). ASCII only: the
+# status is written into the variant files' headers.
 #   Unit [string], [Dict<string, string>]
 CONST_VARIANT_DIR = os.path.join(CONST_OUTPUT_DIR, 'variants')
 CONST_VARIANTS = {'taught': 'the taught program (sf1_plc_v4, case 17)',
                   'b_optimised': 'previous optimisation (2026-10-18, 17.50 s), superseded by c1',
-                  'c1': 'delivered (= Data/Generated/): the pick\'s wrist 3 one turn lower, same poses',
-                  'c2': 'proposal for re-teaching, not verified on the robot: the drop on branch S- E- W- (wrist flipped in S1)',
+                  'c1': 'previous optimisation (simulation only), = Data/Generated/: the pick\'s wrist 3 one turn lower, same poses',
+                  'c2': 'delivered - tested on the real cell (owner, 2026-10-21): the drop on branch S- E- W- (wrist flipped in S1)',
                   'c3': 'proposal for re-teaching, not verified on the robot: the drop on branch S- E- W+ (home\'s branch)'}
 # The deliverable (owner, 2026-10-18): case 17 of the program, home -> ... -> home. The other cases
 # of the extract are ground truth for the model only (SPEC 1).

@@ -46,10 +46,11 @@ CONST_CATALOGUE = {1: ('taught',), 2: ('b_optimised',), 3: ('c1',), 4: ('c2',), 
 #   Unit [Dict<string, Tuple<string>>]
 CONST_FILES = {v: ('Data', 'Generated', 'variants', v, 'SF1_Rotation_17_Sequence.script') for v in CONST_VARIANTS}
 # The title line of each variant: its estimated home -> home time (comparison.csv) and, for the
-# proposals, the note that they are not verified on the robot.
+# proposal c3, the note that it is not verified on the robot (c2 was tested on the real cell, owner,
+# 2026-10-21).
 #   Unit [Dict<string, string>]
 CONST_TITLES = {'taught': 'taught, estimated 23.37 s', 'b_optimised': 'b_optimised, estimated 17.50 s',
-                'c1': 'c1, estimated 14.66 s', 'c2': 'c2 (proposal - not verified on the robot), estimated 12.05 s',
+                'c1': 'c1, estimated 14.66 s', 'c2': 'c2, estimated 12.05 s',
                 'c3': 'c3 (proposal - not verified on the robot), estimated 13.86 s'}
 # A move or a gripper action in a sequence file, and in the replay's step lines.
 #   Unit [Pattern]
@@ -205,7 +206,7 @@ def test_each_variant_is_named_with_its_estimate_and_its_status(root, tmp_path):
     """
     Description:
         Path 6 plays the five variants one after another (headless, --skip-check); each is named with
-        its estimated home -> home time, the time comparison.csv holds, and c2 and c3 as proposals not
+        its estimated home -> home time, the time comparison.csv holds, and c3 as a proposal not
         verified on the robot - the title the viewer's overlay shows.
     """
 
