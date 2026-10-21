@@ -829,7 +829,8 @@ drop on another IK branch (c2, c3), which means re-teaching on a robot that is n
 **Alternatives.** Turning wrist 3 inside S3 (a generated via point): the joint still travels
 4.7 rad. Wrapping every joint into [−π, π]: changes taught configurations everywhere and hides the
 branch (SPEC §10.5). Re-teaching the drop (c2, 12.06 s; c3, 13.86 s): kept as proposals in
-`Data/Generated/variants/` until a robot is available.
+`Data/Generated/variants/` until a robot is available. *Owner, 2026-10-21: c2 was delivered and
+tested on the real cell; c3 stays a proposal.*
 
 **Revisit if** the first run on the robot shows the controller choosing the other solution, the
 gripper cable or a wrist-3 safety limit objects, or the pick is re-taught.
@@ -860,7 +861,11 @@ program: they were never taught.
 **Revisit if** the drop is re-taught on another branch (the export then replaces the proposal), or a
 variant is no longer worth comparing.
 
-Pinned by `test/Example/test_write_variants.py` (the files, the statuses, c1 = the delivered output,
+*Owner, 2026-10-21: c2 was delivered and tested on the real cell (no further details recorded) and
+c1 is the previous optimisation, simulation only; c3 stays a proposal. Only the status lines
+changed; the points and motion lines of every variant are as before.*
+
+Pinned by `test/Example/test_write_variants.py` (the files, the statuses, c1 = `Data/Generated/`,
 the proposals' branches, the table against the files) and `test/Kinematics/test_core.py`.
 
 ## Every learned point a script reads is checked against the FK sanity bound; the margins are not
