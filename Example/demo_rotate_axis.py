@@ -40,19 +40,20 @@ import typing as tp
 import numpy as np
 # Custom Lib.:
 #   ../Configuration/Core — the cell configuration
-from Configuration.Core import Load_Configuration, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE, CONST_PROJECT_ROOT
+from Configuration.Core import Load_Configuration, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE
 #   ../URScript/Core — the learned points
 from URScript.Core import Read_URScript
 #   ../Scene/Core — the scene and its clearance check
 from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP, Visual_Mesh_Warning
+#   ../Example/plan_rotation — the program extract of the learned points
+from plan_rotation import CONST_POSITIONS
 
 """
 Description:
     Initialization of constants.
 """
-# The learned points (the program extract, SPEC 10.1) and the one the motion starts from.
+# The learned point the motion starts from (read from plan_rotation's CONST_POSITIONS, SPEC 10.1).
 #   Unit [string]
-CONST_POSITIONS = os.path.join(CONST_PROJECT_ROOT, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_positions.urscript')
 CONST_START = 'home'
 # The rotated joint (0 = base, shoulder_pan) and the amplitude around the start (owner, Q5).
 #   Unit [int], [float] (deg)

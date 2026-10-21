@@ -30,6 +30,8 @@ import subprocess
 import importlib.util
 # Math (Mathematical functions)
 import math
+# AST (Abstract syntax trees), for the scripts' string literals
+import ast
 # Numpy (Array computing) [pip3 install numpy]
 import numpy as np
 
@@ -46,6 +48,8 @@ CONST_SHIPPED_LABEL = 'clearance checked'
 
 
 def _Demo_Module(root):
+    if os.path.join(root, 'Example') not in sys.path:
+        sys.path.append(os.path.join(root, 'Example'))
     spec = importlib.util.spec_from_file_location('demo_rotate_axis', os.path.join(root, 'Example', 'demo_rotate_axis.py'))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -140,3 +144,25 @@ def test_with_stl_warns_that_the_stl_is_not_the_collision_model(root, tmp_path, 
                             cwd=str(tmp_path), capture_output=True, text=True, timeout=600)
     assert result.returncode == 0, result.stdout + result.stderr
     stl_warning(result.stdout, True)
+
+
+def test_every_script_takes_the_positions_path_from_plan_rotation(root):
+    """
+    Description:
+        The program extract of the learned points has one definition, plan_rotation's
+        CONST_POSITIONS: the demo uses it, and no other script in Example/ builds a path from the
+        file's name (a string literal that is the name alone; the headers that quote it in a
+        sentence are text, not a path).
+    """
+
+    demo = _Demo_Module(root)
+    import plan_rotation
+    assert demo.CONST_POSITIONS == plan_rotation.CONST_POSITIONS
+    folder = os.path.join(root, 'Example')
+    defining = []
+    for name in sorted(n for n in os.listdir(folder) if n.endswith('.py')):
+        with open(os.path.join(folder, name), encoding='utf-8') as handle:
+            tree = ast.parse(handle.read())
+        if any(isinstance(node, ast.Constant) and node.value == 'sf1_plc_v4_positions.urscript' for node in ast.walk(tree)):
+            defining.append(name)
+    assert defining == ['plan_rotation.py']
