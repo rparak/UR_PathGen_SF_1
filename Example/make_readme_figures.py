@@ -67,12 +67,19 @@ Description:
 # The README's image folder.
 #   Unit [string]
 CONST_MEDIA_DIR = os.path.join(CONST_PROJECT_ROOT, 'Media')
-# The variants in the order of the comparison table, and the short status shown under each name.
-#   Unit [Tuple<string>], [Dict<string, string>]
+# The variants in the order of the comparison table, the short status shown under each name, and
+# the footnote that spells out the marked ones (owner, 2026-10-21: c2 delivered and tested on the
+# real cell, c1 the previous optimisation, c3 a proposal).
+#   Unit [Tuple<string>], [Dict<string, string>], [string]
 CONST_ORDER = tuple(CONST_VARIANTS)
-CONST_SHORT = {'taught': 'reference', 'b_optimised': 'previous optimisation', 'c1': 'delivered',
-               'c2': 'proposal *', 'c3': 'proposal *'}
+CONST_SHORT = {'taught': 'reference', 'b_optimised': 'previous optimisation', 'c1': 'previous optimisation\n(simulation only)',
+               'c2': 'delivered †', 'c3': 'proposal *'}
 CONST_PROPOSAL_NOTE = '* proposal for re-teaching, not verified on the robot'
+CONST_DELIVERED_NOTE = '† delivered — tested on the real cell (owner, 2026-10-21)'
+CONST_STATUS_NOTE = '%s · %s' % (CONST_PROPOSAL_NOTE, CONST_DELIVERED_NOTE)
+# The variant drawn dashed in the joint graph: the proposal.
+#   Unit [Tuple<string>]
+CONST_DASHED = ('c3',)
 # The footnote of the graphs that show times (owner, 2026-10-21): their timing is the duration estimate.
 #   Unit [string]
 CONST_ESTIMATE_NOTE = 'Simulation estimate — blends and gripper time not modelled.'
@@ -134,7 +141,8 @@ CONST_ASSEMBLY_GROUPS = {'machine_a': ('machine (a)', (0.52, 0.64, 0.80)),
 # The status in the title of a path render.
 #   Unit [Dict<string, string>]
 CONST_RENDER_STATUS = {'taught': 'the taught program (reference)', 'b_optimised': 'previous optimisation, superseded by c1',
-                       'c1': 'delivered', 'c2': 'proposal — not verified on the robot',
+                       'c1': 'previous optimisation (simulation only)',
+                       'c2': 'delivered — tested on the real cell (owner, 2026-10-21)',
                        'c3': 'proposal — not verified on the robot'}
 # At most this many capsules per drawn path (the path is thinned evenly).
 #   Unit [int]
@@ -364,7 +372,7 @@ def Graph_Cycle_Time(table: tp.Dict, mode: str) -> tp.Any:
     """
 
     theme = CONST_THEMES[mode]
-    fig, ax = New_Figure((8.0, 4.4), theme)
+    fig, ax = New_Figure((9.0, 4.4), theme)
     x = np.arange(len(CONST_ORDER))
     bottom = np.zeros(len(CONST_ORDER))
     for section, color in zip(CONST_STACK, CONST_STACK_COLORS[mode]):
@@ -387,8 +395,8 @@ def Graph_Cycle_Time(table: tp.Dict, mode: str) -> tp.Any:
     ax.set_ylim(0, taught * 1.22)
     legend = ax.legend(loc='upper right', ncol=2, fontsize=8.5, frameon=False, labelcolor=theme['text'])
     legend.set_title(None)
-    fig.subplots_adjust(left=0.08, right=0.98, top=0.97, bottom=0.227)
-    Footnote(fig, theme, [CONST_PROPOSAL_NOTE, CONST_ESTIMATE_NOTE])
+    fig.subplots_adjust(left=0.071, right=0.982, top=0.97, bottom=0.227)
+    Footnote(fig, theme, [CONST_STATUS_NOTE, CONST_ESTIMATE_NOTE])
     return fig
 
 
@@ -421,7 +429,7 @@ def Graph_Path_Length(table: tp.Dict, mode: str) -> tp.Any:
         ax.set_xlabel(label)
         ax.set_yticks(y, Variant_Labels() if ax is axes[0] else [''] * len(y))
     fig.subplots_adjust(left=0.2, right=0.97, top=0.96, bottom=0.22, wspace=0.12)
-    Footnote(fig, theme, [CONST_PROPOSAL_NOTE])
+    Footnote(fig, theme, [CONST_STATUS_NOTE])
     return fig
 
 
@@ -441,7 +449,7 @@ def Graph_Max_Height(table: tp.Dict, mode: str, cfg: Cell_Configuration_Str) -> 
     """
 
     theme = CONST_THEMES[mode]
-    fig, ax = New_Figure((8.0, 3.3), theme)
+    fig, ax = New_Figure((8.0, 3.6), theme)
     y = np.arange(len(CONST_ORDER))[::-1]
     values = [Value(table, v, 'total', 'max_robot_z_m') for v in CONST_ORDER]
     ax.barh(y, values, 0.62, color=[CONST_VARIANT_COLORS[mode][v] for v in CONST_ORDER])
@@ -457,8 +465,8 @@ def Graph_Max_Height(table: tp.Dict, mode: str, cfg: Cell_Configuration_Str) -> 
     ax.set_xlim(0, column + 0.4)
     ax.set_ylim(-0.6, len(y) + 0.1)
     ax.set_xlabel('world z [m]')
-    fig.subplots_adjust(left=0.2, right=0.97, top=0.93, bottom=0.22)
-    Footnote(fig, theme, [CONST_PROPOSAL_NOTE])
+    fig.subplots_adjust(left=0.2, right=0.97, top=0.936, bottom=0.2)
+    Footnote(fig, theme, [CONST_STATUS_NOTE])
     return fig
 
 
@@ -493,7 +501,7 @@ def Graph_Clearance(table: tp.Dict, mode: str, cfg: Cell_Configuration_Str) -> t
     axes[0].set_yticks(y, Variant_Labels())
     fig.subplots_adjust(left=0.2, right=0.98, top=0.92, bottom=0.27, wspace=0.08)
     Footnote(fig, theme, ['Bar: distance of the robot – environment pair with the least room above its margin; tick: that pair\'s '
-                          'margin; label: the room [mm].', CONST_PROPOSAL_NOTE])
+                          'margin; label: the room [mm].', CONST_STATUS_NOTE])
     return fig
 
 
@@ -501,7 +509,7 @@ def Graph_Joints(data: tp.Dict[str, Variant_Data_Str], mode: str) -> tp.Any:
     """
     Description:
         The six joint angles of all five variants over the estimated time, one panel per joint on a
-        shared time axis, the proposals dashed. A timeline strip above them shows each variant's
+        shared time axis, the proposal (CONST_DASHED) dashed. A timeline strip above them shows each variant's
         sections (the taught station operations shaded) and where its sequence ends; a dotted line
         in the variant's colour carries that end through the joint panels.
 
@@ -534,7 +542,7 @@ def Graph_Joints(data: tp.Dict[str, Variant_Data_Str], mode: str) -> tp.Any:
     Style_Axes(timeline, theme, 'x')
     for j, ax in enumerate(joints):
         for v in CONST_ORDER:
-            proposal = v in ('c2', 'c3')
+            proposal = v in CONST_DASHED
             ax.plot(data[v].Time, np.degrees(data[v].Joints[:, j]), color=colors[v], linewidth=1.5,
                     linestyle=(0, (4, 2)) if proposal else '-',
                     label='%s%s (%.2f s)' % (v, ', proposal' if proposal else '', data[v].Time[-1]))
@@ -546,7 +554,7 @@ def Graph_Joints(data: tp.Dict[str, Variant_Data_Str], mode: str) -> tp.Any:
     fig.legend(*joints[0].get_legend_handles_labels(), loc='upper left', bbox_to_anchor=(0.09, 0.995), ncol=3, fontsize=8.5,
                frameon=False, labelcolor=theme['text'])
     fig.subplots_adjust(left=0.13, right=0.98, top=0.922, bottom=0.084, hspace=0.14)
-    Footnote(fig, theme, [CONST_PROPOSAL_NOTE + ' (dashed).', CONST_ESTIMATE_NOTE])
+    Footnote(fig, theme, ['%s (dashed) · %s.' % (CONST_PROPOSAL_NOTE, CONST_DELIVERED_NOTE), CONST_ESTIMATE_NOTE])
     return fig
 
 
@@ -598,7 +606,7 @@ def Graph_TCP_Paths(data: tp.Dict[str, Variant_Data_Str], mode: str, cfg: Cell_C
     fig.legend(*axes[0, 0].get_legend_handles_labels(), loc='upper right', bbox_to_anchor=(0.99, 0.995), fontsize=8.5, frameon=False,
                labelcolor=theme['text'], handlelength=1.5)
     fig.subplots_adjust(left=0.08, right=0.99, top=0.87, bottom=0.12, wspace=0.08, hspace=0.12)
-    Footnote(fig, theme, [CONST_PROPOSAL_NOTE + '.'])
+    Footnote(fig, theme, [CONST_STATUS_NOTE + '.'])
     return fig
 
 
