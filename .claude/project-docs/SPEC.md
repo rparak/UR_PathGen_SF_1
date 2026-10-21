@@ -663,6 +663,7 @@ Example/write_variants.py   writes Data/Generated/variants/ and the comparison t
 Example/make_readme_figures.py  writes every README image into Media/ from comparison.csv and the variant files
 Media/                      the README images: graphs (light and dark) and MuJoCo renders, all generated
 Example/write_taught_programs.py  writes the simplified taught program of case 17 home → home (Data/Programs/sf1_plc_v4/)
+Example/extract_program.py  cuts the positions and cases extracts from a robot program (§10.1)
 Example/build_collision.py  regenerates CAD/Collision/ from the STL (runs CoACD; not in the test suite)
 Example/demo_rotate_axis.py the viewer demo
 Example/demo_visualize_position.py  the robot static at one learned position, clearance by the taught rule (§10.7)
@@ -1097,15 +1098,29 @@ global <name>_q=[j0, j1, j2, j3, j4, j5]      # rad: base, shoulder, elbow, wris
 
 **Program excerpt** (`Data/Programs/sf1_plc_v4/sf1_plc_v4_cases_17_18.script`, read by
 `Read_Program_Excerpt` only): lines of the robot program kept verbatim, indentation included: the
-whole body of each case's branch `elif (n == switch_1):` (case 17 lines 3397 – 3478, case 18
+whole body of each case's branch `elif (<n> == switch_1):` (case 17 lines 3397 – 3478, case 18
 3480 – 3561), out of machine (a), the rotation sequence home → … → home, back into machine (a).
 *Corrected 2026-10-18: it held only the rotation sequence.* Column-0
 `#` lines before the first block are the header (source, sha256); a column-0 `# case <n>:` line opens
 a case. Each program line is classified as a movej to a learned point
 (`movej(get_inverse_kin(<name>_p, qnear=<name>_q), …)`), a movel to a learned pose, a gripper
 action (`rq_set_pos_spd_for(0 | 255, …)`: open / close) or other (URCap boilerplate, Polyscope
-markers). Strict: an unknown gripper position, a repeated or empty case is an error. The extracts are
-compared with the program, byte for byte, when `SF1_PLC_V4_SCRIPT` names it; otherwise that test is
+markers). Strict: an unknown gripper position, a repeated or empty case is an error.
+
+**Making the extracts** (`Example/extract_program.py --program PATH --cases N [N ...] --out
+Data/Programs/<name>/`, owner 2026-10-21; writers `Extract_Positions` and `Extract_Cases` in
+`src/URScript/Core.py`). It writes `<name>_positions.urscript`, every `global <name>_p` / `_q` line of
+the program verbatim in program order, and `<name>_cases_<n>_<m>.script`, each case the whole body
+of its switch branch `(el)if (<n> == <variable>):` up to the next line indented no deeper
+(`Program_Cases`), verbatim. Both headers name the program, its line ranges and its sha256
+(`Read_Extract_Source` reads the name and the hash back). Refused, with nothing written: a case the
+program does not have, a point with only one of `_p` and `_q`, a name defined twice, a case already
+held by another cases file of the folder, a cases file of the folder from another sha256. The
+positions extract it writes is the committed one byte for byte; the cases extract's header was
+rewritten once to the general template (2026-10-21: the old one carried case-17 prose and quoted the
+branch as `n == switch_1`; its program lines, ranges and sha256 are unchanged). With
+`SF1_PLC_V4_SCRIPT` naming the program, the tests compare the extracts with the program, byte for
+byte, and re-extracting cases 17 and 18 reproduces both committed files; otherwise those tests are
 skipped.
 
 ### 10.2 Encoder noise
@@ -1349,6 +1364,7 @@ replayed home → home paths stay far from it; the position viewer shows the lab
 | `test/Collision/test_excess.py` | `Surface_Distance` (pruned by a k-d tree) equals the distance to every triangle, also when the vertex array holds the whole STL; for the largest-excess pieces (incl. the 235 mm fallback hull) the recomputed excess equals the recorded one within half the sum of both sample spacings, and the flag above 10 mm matches |
 | `test/Example/test_demo.py` | headless demo runs N steps without exception; only the chosen joint changes, monotonically between turning points; it stays within `Joint_Position_Limits`; the pre-check runs on the dense segment samples of §9.7; the label equals the check result ("clearance checked" iff no violation, otherwise "VISUAL ONLY — UNCHECKED"); the shipped motion's label is pinned |
 | `test/Example/test_write_variants.py` | the five variants each have their two files (hidden files such as `.DS_Store` ignored), each naming its status and the safety sentence; a learned point of the extract outside the FK sanity bound stops the writer with its numbers, nothing written; in every planned variant the header's verbatim and other-`_q` points are true token for token, and every file says once that simulation is not safety; the taught variant is the simplified taught program of `Data/Programs/` line for line after the header (kept twice on purpose: input and comparison); c1 is the output of `Data/Generated/` (points token for token, the same motion lines); a proposal's drop points keep the program's `_p`, lie on the proposal's branch and reach that pose (1e-9), every other point c1's; `comparison.csv` lists every variant's sections and total in order, the totals the planner reported (23.37 / 17.50 / 14.66 s) and the writer measured (12.05 / 13.86 s), no sample breaking its rule; *slow*: measured again from the files, the table is `comparison.csv` and `comparison.md` byte for byte |
+| `test/Example/test_extract_program.py` | the script, run from an unrelated directory, writes a synthetic program's two extracts exactly as typed in the test (two line ranges, the sha256, each case the whole body of its branch, a nested `if` included); it refuses, writing nothing, a case the program does not have, a point with only its `_p`, a name defined twice, and a case already held by another cases file of the folder; with `SF1_PLC_V4_SCRIPT` set, re-extracting cases 17 and 18 reproduces both committed extracts byte for byte (skipped otherwise) |
 | `test/Example/test_write_taught_programs.py` | the simplified program is, after its header, exactly case 17 home → home as the owner states it (§1, typed in the test) and one contiguous run of the program: each movej/movel the program's line without indentation (home `r=0.01`), a gripper comment naming the program line at each gripper action, nothing else; its points file holds exactly those targets in first-use order with the extract's tokens; the script writes exactly the committed two files, byte for byte |
 | `test/Example/test_plan_rotation.py` | `--workers 0` is refused before anything is written; a learned point of the extract outside the FK sanity bound (drop_rotate_1's base joint +0.05 rad, in a copy of the repository) is refused with its numbers and nothing written; the delivered headers name the points written verbatim (home, the drop's three) and those with the extract's `_p` and another `_q` (the pick's three), both true token for token, and the station lines to the latter; `Provenance` refuses a written point with another `_p`; both delivered headers and the report of the full run state the machine margin (30 mm) with the configured source; *slow*: the full run with 4 workers, from an unrelated directory, writes both files byte for byte as committed (written by the sequential run); the holding opening is case 17's configured `Tool.Holding_Openings` value (not another entry's, not `Tool.Opening`), open is 85 mm; a configuration without case 17 is refused; `Rotation_Entries` is home → … → home only: a generated start at home (the program blends, r=0.01), S1 – S3 generated, the station lines verbatim, no loading move; `Delivered_Points` turns only wrist 3 of the pick's three points one turn lower, the same pose (DH TCP equal to 1e-12), every other token the program's |
 | `test/Example/test_visualize_position.py` | headless: a learned point of the extract outside the FK sanity bound is refused with its numbers before a scene is built, whichever point is shown; `home_q` reports "clearance kept (taught rule)" and `load3` "model not valid here", each at case 17's configured 50 mm with its source; `home_p` and an unknown name are refused (exit 1, no scene built); `--list` prints every position of the extract in order |

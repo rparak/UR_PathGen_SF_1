@@ -1,6 +1,6 @@
-# Lines of the owner's robot program sf1_plc_v4.script, verbatim: the whole cases 17 and 18 (the body of
-# 'elif (n == switch_1):'), the rotation sequence home -> ... -> home inside. Source sha256:
-# ecec8e53007d93acd5cf3da5b545f588a02dbc1b9c26497c82282c37bcfb8eae
+# Lines of the owner's robot program sf1_plc_v4.script, verbatim: cases 17, 18.
+# Each case is the whole body of its branch '(<n> == switch_1):' of the program's switch.
+# Source sha256: ecec8e53007d93acd5cf3da5b545f588a02dbc1b9c26497c82282c37bcfb8eae
 # An extract only: the program itself (Robotiq URCap code, network settings) is not committed.
 # A line starting with '# case <n>:' at column 0 opens the lines of that case; program lines keep their indentation.
 # case 17: lines 3397-3478

@@ -486,11 +486,18 @@ The other inputs are `Configuration/Cell_SF1.yaml`, the collision set in `CAD/Co
 `CAD/SF1_Environment.stl` by `build_collision.py`) and the vendored robot and gripper models in
 `models/`.
 
-**How the extracts were made.** Each is a range of lines of `sf1_plc_v4.script`, copied verbatim.
-Its header records the range and the sha256 of the program. With `SF1_PLC_V4_SCRIPT` set to the
-program's path, the tests check that hash and compare every line of the extracts with the program,
-byte for byte; without it, those tests are skipped. A new export of the program is extracted the
-same way, by hand: no script in this repository makes the extracts.
+**How the extracts were made.** With `Example/extract_program.py`, which cuts them from the
+program, verbatim:
+
+```bash
+.venv/bin/python Example/extract_program.py --program PATH/sf1_plc_v4.script --cases 17 18 --out Data/Programs/sf1_plc_v4/
+```
+
+Each header records the program's line ranges and its sha256. A case is the whole body of its branch
+of the program's switch. The script refuses a case the program does not have, a point with only one
+of `_p` and `_q`, and a duplicate name. With `SF1_PLC_V4_SCRIPT` set to the program's path, the
+tests check the hash, compare every line of the extracts with the program, and re-extract both files
+byte for byte; without it, those tests are skipped.
 
 **Two file formats.**
 
@@ -573,9 +580,8 @@ constants above, then validating the result again. Follow the case that matches.
 
 **A new export of the same program** (for example after re-teaching the c2 or c3 drop):
 
-1. Copy the `global` lines and the cases' lines into the two extracts, verbatim, and update the
-   line ranges and the sha256 in their headers. The tests that compare the extracts with the
-   program record the same range and hash; update them too. The point names must stay the same.
+1. Re-extract it with `Example/extract_program.py` (above). The tests that compare the extracts
+   with the program record the line ranges and the hash; update them too. The point names must stay the same.
 2. Run `write_taught_programs.py`, then `plan_rotation.py`, then `write_variants.py` and
    `make_readme_figures.py`.
 3. Re-validate (below). The station boxes and the zone are fitted to the old taught points; check
@@ -630,11 +636,9 @@ are measured again, not copied.
 - One case and one program per run, chosen by editing code.
 - Exactly three transfer segments around one drop and one pick.
 - The variants, the replay catalogue and the README figures are written for case 17.
-- The extracts are made by hand.
 
-A job file (program, case, segments and gripper states as validated configuration) and a script
-that cuts the extracts from a program export would remove most of these limits. Neither exists
-today.
+A job file (program, case, segments and gripper states as validated configuration) would remove
+most of these limits. It does not exist yet; the extracts are already cut by a script (above).
 
 </details>
 

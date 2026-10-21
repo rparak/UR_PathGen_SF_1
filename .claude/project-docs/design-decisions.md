@@ -928,3 +928,29 @@ one plot: unreadable; one panel per variant against the taught path instead.
 
 Pinned by `test/Example/test_make_readme_figures.py` (the graphs against `Media/`, the default
 output, the renders without the visual STL), the `--with-stl` warning tests of the three viewers and `test_the_table_is_read_back_as_written` in `test/Example/test_write_variants.py`.
+
+## The extracts are cut by a script; the cases header was rewritten once to a general template
+
+**Decision.** `Example/extract_program.py` writes both extracts of a robot program (owner,
+2026-10-21): every `global <name>_p` / `_q` line, and each case as the whole body of its switch
+branch, verbatim, with the line ranges and the sha256 in the headers. The writers live in
+`src/URScript/Core.py`, beside the readers of the same files. The committed cases extract's header
+was rewritten once to the script's template; its program lines, ranges and sha256 did not change
+(owner, 2026-10-21, option (a)).
+
+**Why.** Extracts copied by hand and headers edited by hand drift from the program, and every new
+export repeats the work. The old cases header carried prose a general script cannot derive ("the
+rotation sequence home -> ... -> home inside") and quoted the branch as `n == switch_1` where the
+program writes `17 == switch_1`. The positions header was already general and is reproduced
+byte for byte.
+
+**Alternatives.** Building the case-17 clause into the template (option (b)) was rejected: it
+would put case-17 prose into the extract of every other case and program. A case found by its
+Polyscope marker (`$ 288 "Case 17"`) instead of its branch was rejected: the branch line is what
+the controller executes.
+
+**Revisit if** a program writes its cases other than as `(el)if (<n> == <variable>):` branches (a
+nested switch, a default case).
+
+Pinned by `test/Example/test_extract_program.py` (the synthetic program, the refusals, and, with
+`SF1_PLC_V4_SCRIPT` set, the re-extraction of the committed files).

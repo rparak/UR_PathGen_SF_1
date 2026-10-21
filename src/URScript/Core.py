@@ -41,9 +41,10 @@ Description:
     read (encoder noise such as 2.44E-5 included). Joint values are never wrapped: UR joints span
     +-2*pi and movej goes to the exact value. Generated points get a fixed precision.
 
-    Also the only reader of a program excerpt (lines of a robot program kept verbatim, opened per
-    case by a '# case <n>:' line at column 0) and the only writer of a motion sequence (movej lines
-    of generated points, program lines copied verbatim, comments).
+    Also the only reader and writer of a program excerpt (lines of a robot program kept verbatim,
+    opened per case by a '# case <n>:' line at column 0) and of the positions extract (the program's
+    global _p / _q lines verbatim), and the only writer of a motion sequence (movej lines of
+    generated points, program lines copied verbatim, comments).
 """
 # A number as Polyscope writes it: '.238...', '-.175...', '2.44E-5', '-0.785...'.
 #   Unit [string]
@@ -69,6 +70,19 @@ CONST_SEQUENCE_MOVEJ = re.compile(r'^movej\(get_inverse_kin\(([A-Za-z_]\w*)_p, q
 CONST_SEQUENCE_JOINT = re.compile(r'^movej\(([A-Za-z_]\w*)_q, a=([^,()]+), v=([^,()]+), r=([^,()]+)\)$')
 CONST_SEQUENCE_MOVEL = re.compile(r'^movel\(([A-Za-z_]\w*)_p, a=([^,()]+), v=([^,()]+)(?:, r=([^,()]+))?\)$')
 CONST_SEQUENCE_GRIPPER = re.compile(r'^# Gripper (open|close): ')
+# Lines of a robot program the extracts are cut from: a global _p / _q variable (Polyscope writes
+# the learned points so), and a branch of a Polyscope switch ('if (17 == switch_1):', 'elif (...)'),
+# whose body is the case.
+#   Unit [Pattern]
+CONST_PROGRAM_GLOBAL = re.compile(r'^\s*global\s+([A-Za-z_][A-Za-z0-9_]*)_(p|q)\s*=')
+CONST_PROGRAM_BRANCH = re.compile(r'^(\s*)(?:if|elif) \((\d+) == ([A-Za-z_]\w*)\):\s*$')
+# The header lines of an extract naming its source (Extract_Positions, Extract_Cases).
+#   Unit [Pattern]
+CONST_EXTRACT_PROGRAM = re.compile(r"^# .* of the owner's robot program (\S+), verbatim")
+CONST_EXTRACT_SHA256 = re.compile(r'^# Source sha256: ([0-9a-f]{64})$')
+# What an extract leaves out, in its header.
+#   Unit [string]
+CONST_EXTRACT_NOTE = '# An extract only: the program itself (Robotiq URCap code, network settings) is not committed.'
 # Decimal places of a generated value: 1e-12 m / rad, far below anything the robot resolves.
 #   Unit [int]
 CONST_GENERATED_DECIMALS = 12
@@ -283,6 +297,166 @@ def Read_Program_Excerpt(text: str) -> tp.Dict[int, tp.List[Program_Line_Str]]:
         if not lines:
             raise URScript_Error_Cls('Case %d has no lines.' % case)
     return cases
+
+
+def Line_Ranges(numbers: tp.Sequence[int]) -> str:
+    """
+    Description:
+        Line numbers as ranges of consecutive lines: [1, 2, 3, 7] -> '1-3, 7'.
+
+    Args:
+        (1) numbers [List<int>]: Line numbers, ascending.
+
+    Returns:
+        (1) parameter [string]: The ranges.
+    """
+
+    ranges: tp.List[tp.List[int]] = []
+    for number in numbers:
+        if ranges and number == ranges[-1][1] + 1:
+            ranges[-1][1] = number
+        else:
+            ranges.append([number, number])
+    return ', '.join('%d-%d' % (a, b) if a != b else '%d' % a for a, b in ranges)
+
+
+def Extract_Positions(lines: tp.Sequence[str], program: str, sha256: str) -> str:
+    """
+    Description:
+        The positions extract of a robot program: every global <name>_p / <name>_q line, verbatim and
+        in program order, after a header naming the program, its line ranges and its sha256. Strict:
+        a malformed vector, a duplicate name or a name with only one of _p and _q is an error naming
+        the program line.
+
+    Args:
+        (1) lines [List<string>]: The program's lines, without their newline.
+        (2) program [string]: The program's file name.
+        (3) sha256 [string]: The sha256 of the program file (hex).
+
+    Returns:
+        (1) parameter [string]: The extract, newline-terminated.
+    """
+
+    seen: tp.Dict[tp.Tuple[str, str], int] = {}
+    numbers = []
+    for number, raw in enumerate(lines, start=1):
+        found = CONST_PROGRAM_GLOBAL.match(raw)
+        if found is None:
+            continue
+        name, kind = found.group(1), found.group(2)
+        match = (CONST_POSE_LINE if kind == 'p' else CONST_JOINT_LINE).match(raw.strip())
+        if match is None or len(Parse_Numbers(match.group(2), number)) != 6:
+            raise URScript_Error_Cls('Program line %d is not a 6-value %s_%s line: %s' % (number, name, kind, raw.strip()))
+        if (name, kind) in seen:
+            raise URScript_Error_Cls('Program line %d defines %s_%s again (first on line %d); the program has a duplicate name.'
+                                     % (number, name, kind, seen[(name, kind)]))
+        seen[(name, kind)] = number
+        numbers.append(number)
+    if not numbers:
+        raise URScript_Error_Cls('%s has no global <name>_p / <name>_q lines.' % program)
+    for name, kind in seen:
+        other = 'q' if kind == 'p' else 'p'
+        if (name, other) not in seen:
+            raise URScript_Error_Cls('Program line %d defines %s_%s, but the program has no %s_%s. Every point needs both.'
+                                     % (seen[(name, kind)], name, kind, name, other))
+    header = ['# Global _p/_q lines of the owner\'s robot program %s, verbatim, lines %s.' % (program, Line_Ranges(numbers)),
+              '# Source sha256: %s' % sha256, CONST_EXTRACT_NOTE,
+              '# _p: TCP pose [m, rad rotation vector] in the Polyscope base frame; _q: joints [rad], base to wrist 3.']
+    return '\n'.join(header + [lines[n - 1] for n in numbers]) + '\n'
+
+
+def Program_Cases(lines: tp.Sequence[str]) -> tp.Dict[int, tp.Tuple[int, int, str]]:
+    """
+    Description:
+        The cases of a robot program's switches: each the whole body of its branch
+        '(el)if (<n> == <variable>):', up to the next line indented no deeper than the branch (the
+        next branch or the switch's end). A case number in two branches is an error.
+
+    Args:
+        (1) lines [List<string>]: The program's lines, without their newline.
+
+    Returns:
+        (1) parameter [Dict<int, Tuple<int, int, string>>]: Case -> its first and last line (1-based,
+                                                            inclusive) and the branch line, stripped.
+    """
+
+    cases: tp.Dict[int, tp.Tuple[int, int, str]] = {}
+    for number, raw in enumerate(lines, start=1):
+        branch = CONST_PROGRAM_BRANCH.match(raw)
+        if branch is None:
+            continue
+        case, depth = int(branch.group(2)), len(branch.group(1))
+        if case in cases:
+            raise URScript_Error_Cls('Program lines %d and %d both open case %d; the case is ambiguous.'
+                                     % (cases[case][0] - 1, number, case))
+        last = number
+        while last < len(lines) and (not lines[last].strip() or len(lines[last]) - len(lines[last].lstrip()) > depth):
+            last += 1
+        if last == number:
+            raise URScript_Error_Cls('Program line %d opens case %d, which has no lines.' % (number, case))
+        cases[case] = (number + 1, last, raw.strip())
+    return cases
+
+
+def Extract_Cases(lines: tp.Sequence[str], cases: tp.Sequence[int], program: str, sha256: str) -> str:
+    """
+    Description:
+        The case extract of a robot program (read by Read_Program_Excerpt): a header naming the
+        program and its sha256, then per case, ascending, a '# case <n>: lines <a>-<b>' line and the
+        whole body of its branch (Program_Cases), verbatim. A case the program does not have, or one
+        asked for twice, is an error.
+
+    Args:
+        (1) lines [List<string>]: The program's lines, without their newline.
+        (2) cases [List<int>]: The cases.
+        (3) program [string]: The program's file name.
+        (4) sha256 [string]: The sha256 of the program file (hex).
+
+    Returns:
+        (1) parameter [string]: The extract, newline-terminated.
+    """
+
+    found = Program_Cases(lines)
+    if len(set(cases)) != len(cases):
+        raise URScript_Error_Cls('A case is asked for twice: %s.' % ', '.join(str(c) for c in cases))
+    missing = [case for case in cases if case not in found]
+    if missing:
+        raise URScript_Error_Cls('%s has no case %s (its cases: %s).'
+                                 % (program, ', '.join(str(c) for c in missing), ', '.join(str(c) for c in sorted(found)) or 'none'))
+    variables = sorted({CONST_PROGRAM_BRANCH.match(found[case][2]).group(3) for case in cases})
+    out = ['# Lines of the owner\'s robot program %s, verbatim: cases %s.' % (program, ', '.join(str(c) for c in sorted(cases))),
+           '# Each case is the whole body of its branch \'(<n> == %s):\' of the program\'s switch.' % ' / '.join(variables),
+           '# Source sha256: %s' % sha256, CONST_EXTRACT_NOTE,
+           '# A line starting with \'# case <n>:\' at column 0 opens the lines of that case; program lines keep their indentation.']
+    for case in sorted(cases):
+        first, last, _ = found[case]
+        out += ['# case %d: lines %d-%d' % (case, first, last)] + list(lines[first - 1:last])
+    return '\n'.join(out) + '\n'
+
+
+def Read_Extract_Source(text: str) -> tp.Tuple[str, str]:
+    """
+    Description:
+        The source an extract names in its header (Extract_Positions, Extract_Cases): the program's
+        file name and its sha256.
+
+    Args:
+        (1) text [string]: The extract's content.
+
+    Returns:
+        (1) parameter [Tuple<string, string>]: The file name and the sha256 (hex).
+    """
+
+    program = sha256 = ''
+    for raw in text.split('\n'):
+        if not raw.startswith('#'):
+            break
+        name, digest = CONST_EXTRACT_PROGRAM.match(raw), CONST_EXTRACT_SHA256.match(raw)
+        program = name.group(1) if name is not None else program
+        sha256 = digest.group(1) if digest is not None else sha256
+    if not program or not sha256:
+        raise URScript_Error_Cls('The extract\'s header does not name its program and sha256; write it with Example/extract_program.py.')
+    return program, sha256
 
 
 def Format_Generated(value: float) -> str:
