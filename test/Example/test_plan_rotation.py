@@ -35,6 +35,8 @@ import pytest
 import math
 # Numpy (Array computing) [pip3 install numpy]
 import numpy as np
+# PyYAML (YAML parser and emitter) [pip3 install pyyaml]
+import yaml
 # Custom Lib.:
 #   ../Kinematics/Core — the pose of a point
 from Kinematics.Core import TCP_Pose
@@ -42,6 +44,8 @@ from Kinematics.Core import TCP_Pose
 from Planner.Core import Estimate_Duration, Linear_Duration
 #   ../Configuration/Core — the error a missing case raises
 from Configuration.Core import Configuration_Error_Cls
+#   ../Scene/Core — the scene of each gripper state
+from Scene.Core import Scene_Cls
 #   ../URScript/Core — the case extract
 from URScript.Core import Read_Program_Excerpt, Read_URScript
 
@@ -370,3 +374,74 @@ def test_each_case_17_job_reproduces_its_committed_variant(root, tmp_path, job):
     assert result.returncode == 0, result.stdout + result.stderr
     for name in ('SF1_Rotation_17.urscript', 'SF1_Rotation_17_Sequence.script'):
         assert _Body(str(tmp_path / 'out' / name)) == _Body(os.path.join(root, 'Data', 'Generated', 'variants', CONST_JOB_VARIANTS[job], name))
+
+
+def test_the_taught_moves_of_case_17_pass_the_model(root, cfg):
+    """
+    Description:
+        Replayed against the model under the taught rule, the 15 moves of case 17 home -> home (the
+        program's joints, each in its gripper state) pass through no modelled geometry, keep their
+        taught margins and stay below the workspace top (measured 2026-10-21: 8866 samples, no error,
+        no warning): the fitted geometry is valid where case 17 ran.
+    """
+
+    plan = _Plan_Module(root)
+    job = _Job(plan)
+    scenes = {state: Scene_Cls(dataclasses.replace(cfg, Opening=plan.Opening(cfg, state, job))) for state in ('holding', 'open')}
+    moves = plan.Taught_Moves(job, cfg)
+    assert [(line.Kind, line.Target, state) for line, state, _ in moves][:4] == [
+        ('movej', 'Waypoint_1', 'holding'), ('movej', 'drop_rotate_1', 'holding'), ('movel', 'Waypoint_4', 'holding'),
+        ('movej', 'Waypoint_5', 'open')]
+    errors, warnings, samples = plan.Check_Taught_Model(job, cfg, scenes)
+    assert (errors, warnings) == ([], []) and samples > 0
+
+
+def test_a_taught_line_inside_the_model_stops_the_run(root, cfg, tmp_path):
+    """
+    Description:
+        With a test-only box of 60 mm around the TCP of Waypoint_2 (world frame, from the configured
+        base pose and TCP), the taught move to Waypoint_2 (among others) passes into it: the run stops with exit 1
+        before planning, each error naming the case, the program line of the move, the box and the
+        depth, and saying nothing is refitted; nothing is written.
+    """
+
+    with open(os.path.join(root, 'Configuration', 'Cell_SF1.yaml'), encoding='utf-8') as handle:
+        data = yaml.safe_load(handle)
+    with open(os.path.join(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_positions.urscript'), encoding='utf-8') as handle:
+        q = Read_URScript(handle.read()).Points['Waypoint_2'].Q
+    c, s = math.cos(cfg.Base_Yaw), math.sin(cfg.Base_Yaw)
+    base = np.array([[c, -s, 0.0, cfg.Base_Position[0]], [s, c, 0.0, cfg.Base_Position[1]], [0.0, 0.0, 1.0, cfg.Base_Position[2]],
+                     [0.0, 0.0, 0.0, 1.0]])
+    tcp = (base @ TCP_Pose(q, cfg.TCP_Offset))[:3, 3]
+    data['Environment']['Added_Boxes'].append({'Name': 'guard_test', 'Min': [float(v) - 0.03 for v in tcp],
+                                               'Max': [float(v) + 0.03 for v in tcp], 'Source': 'test only'})
+    config = tmp_path / 'cell.yaml'
+    config.write_text(yaml.safe_dump(data), encoding='utf-8')
+    with open(os.path.join(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_cases_17_18.script'), encoding='utf-8') as handle:
+        lines = Read_Program_Excerpt(handle.read())[17]
+    first = next(line.Line for line in lines if line.Kind == 'movej' and line.Target == 'Waypoint_2' and line.Line > 3407)
+    result = _Run(root, tmp_path, '--config', str(config), '--out', str(tmp_path / 'out'))
+    assert result.returncode == 1, result.stdout + result.stderr
+    errors = [line for line in result.stdout.splitlines() if line.startswith('[ERROR] The model is not valid for case 17 of sf1_plc_v4')]
+    assert any('the taught movej to Waypoint_2 at program line %d' % first in line and 'mm into' in line for line in errors), errors
+    assert all('guard_test' in line for line in errors)
+    assert 'Nothing is planned, and nothing is refitted' in result.stdout
+    assert not (tmp_path / 'out').exists()
+
+
+def test_a_taught_move_above_the_workspace_top_is_a_warning_only(root, cfg):
+    """
+    Description:
+        With Clearance.Workspace's top lowered to 2.0 m, below the 2.322 m case 17's taught sequence
+        reaches (SPEC 8), the taught moves that rise above it are warnings naming the excursion, never
+        errors: a top that is too low is conservative (a generated path may not use the space), not
+        unsafe.
+    """
+
+    plan = _Plan_Module(root)
+    job = _Job(plan)
+    low = dataclasses.replace(cfg, Workspace_Max=[cfg.Workspace_Max[0], cfg.Workspace_Max[1], 2.0])
+    scenes = {state: Scene_Cls(dataclasses.replace(low, Opening=plan.Opening(low, state, job))) for state in ('holding', 'open')}
+    errors, warnings, _ = plan.Check_Taught_Model(job, low, scenes)
+    assert errors == [] and warnings
+    assert all('beyond Clearance.Workspace' in line for line in warnings)

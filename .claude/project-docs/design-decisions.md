@@ -1015,3 +1015,27 @@ entries with the program's own `_q` (a new extract, no configuration).
 Pinned by `test/Example/test_plan_rotation.py::test_a_branch_point_is_the_ik_nearest_the_point_before_it`,
 `test_each_case_17_job_reproduces_its_committed_variant` (*slow*),
 `test/Example/test_write_variants.py::test_c2_is_the_output_of_data_generated`.
+
+## A new case is checked against the fitted geometry before it is planned; nothing is refitted
+
+**Decision.** `plan_rotation.py` replays the job's taught moves against the model under the taught
+rule before planning (`Check_Taught_Model`, owner 2026-10-21; SPEC §9.7). Only a taught sample
+inside modelled geometry stops the run; less room than the taught margin and a reach above the
+workspace top are warnings. The check covers the job's span (its first `From` to its last `To`).
+
+**Why.** The station zone, the station boxes and the workspace top are fitted to cases 17 and 18; a
+case they were not fitted to could plan against geometry the real robot contradicts. A taught line
+that passes through the model is that contradiction, stated where it happens. A taught line inside
+the margin is not one (the real cell may be that tight), and a workspace top below the taught reach
+only withholds space from a generated path (owner's answer, 2026-10-21).
+
+**Alternatives.** Refitting the boxes or the zone automatically was rejected (owner): a fit hides
+where the model is wrong. Checking the whole case was rejected: case 17's loading moves pass into
+machine (a)'s filled interior, where the model is known not to be valid (`KNOWN_ISSUES.md`), so
+the default job would stop. Stopping on a margin shortfall was rejected for the reason above.
+
+**Revisit if** the cell geometry is measured (the fits removed), or a case's station operation runs
+inside machine (a).
+
+Pinned by `test/Example/test_plan_rotation.py::test_the_taught_moves_of_case_17_pass_the_model`,
+`test_a_taught_line_inside_the_model_stops_the_run`, `test_a_taught_move_above_the_workspace_top_is_a_warning_only`.

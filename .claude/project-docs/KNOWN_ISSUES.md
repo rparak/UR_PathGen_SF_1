@@ -78,6 +78,12 @@ the full 20 mm.
 - **Pinned by:** `test/Scene/test_station.py` (the replay of both cases as taught and as generated,
   the recorded overrides, the zone pieces, the holder) and
   `test/Planner/test_core.py::test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end`.
+- **Another case or program is guarded, not fitted** (owner, 2026-10-21): before a job is planned,
+  its taught moves are replayed against the model (`Check_Taught_Model`, SPEC §9.7); a taught line
+  inside modelled geometry stops the run, naming the line, the piece and the depth, and less room
+  than the taught margin or a reach above the workspace top is a warning. The guard sees only
+  where the taught program ran: geometry fitted to cases 17 and 18 that a new case does not touch
+  (a station box too large for its path, an endpoint radius) is not checked, and nothing is refit.
 - **What would close it:** measuring the machine's position, the post, the holder and the stub on
   the real cell, then correcting the STL and removing the overrides and the box.
 

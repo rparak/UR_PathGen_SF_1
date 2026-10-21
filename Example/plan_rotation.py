@@ -54,8 +54,9 @@ from Configuration.Core import (Load_Configuration, Load_Job, Cell_Configuration
 from URScript.Core import (Read_URScript, Read_Program_Excerpt, Read_Extract_Source, Resolve_Sequence, Make_Generated_Point, Make_Document,
                            Write_URScript, Replace_Joints, Write_Motion_Sequence, Program_Entries, Program_Line_Str, Sequence_Plan_Str,
                            URScript_Error_Cls)
-#   ../Kinematics/Core — the informational _p of a via point and the IK branch of a configured point
-from Kinematics.Core import TCP_Pose, Matrix_To_Pose, Pose_To_Matrix, Solve_IK_Analytic, Nearest_Representative, Kinematics_Error_Cls
+#   ../Kinematics/Core — the informational _p of a via point, the IK branch of a configured point and a taught movel's line
+from Kinematics.Core import (TCP_Pose, Matrix_To_Pose, Pose_To_Matrix, Solve_IK_Analytic, Nearest_Representative, Linear_Path,
+                             Kinematics_Error_Cls)
 #   ../Scene/Core — the scene at each gripper opening and the check of the learned points
 from Scene.Core import Scene_Cls, Check_Learned_Kinematics
 #   ../Planner/Core — the planner and the estimates
@@ -136,6 +137,11 @@ CONST_REPORT_DISTMAX = 0.200
 # (2026-10-19), so the delivered output is written byte for byte.
 #   Unit [int] (characters)
 CONST_STATUS_WIDTH = 135
+# The environment geometry fitted to the taught samples of cases 17 and 18, not measured
+# (KNOWN_ISSUES; SPEC 4.10, 4.12, 4.13): the added station boxes and the station-zone pieces, as
+# Scene_Cls.Environment_Label names them. A taught line passing into one is reported with this note.
+#   Unit [Tuple<string>]
+CONST_FITTED = ('station_bracket', 'station_stub', 'station-zone piece')
 # A whole number of turns in words, for the status lines.
 #   Unit [Dict<int, string>]
 CONST_TURN_WORDS = {1: 'one', 2: 'two', 3: 'three'}
@@ -692,6 +698,91 @@ def Write_Outputs(out: str, cfg: Cell_Configuration_Str, plan: Job_Plan_Str, poi
         handle.write(Write_Motion_Sequence(entries, sequence_header, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN))
 
 
+def Taught_Moves(plan: Job_Plan_Str, cfg: Cell_Configuration_Str) -> tp.List[tp.Tuple[Program_Line_Str, str, tp.List[np.ndarray]]]:
+    """
+    Description:
+        The taught moves of the job's sequence as the robot runs them, from its first segment's From
+        (each line after the first): a movej joint-linear, a movel on its TCP line (Linear_Path), with
+        the program's _q (the taught joints, no point configuration) and the gripper state of the move
+        (the first segment's, switched by each gripper line).
+
+    Args:
+        (1) plan [Job_Plan_Str(object)]: The job.
+        (2) cfg [Cell_Configuration_Str(object)]: The cell configuration (the TCP).
+
+    Returns:
+        (1) parameter [List<Tuple<Program_Line_Str, string, List<Vector<float> 1x6>>>]: Per move: its line,
+                                                                                        its gripper state and
+                                                                                        its configurations (rad).
+    """
+
+    state = plan.Sequence.Segments[0].State
+    previous = np.asarray(plan.Points[plan.Sequence.Lines[0].Target].Q, dtype=float)
+    moves = []
+    for line in plan.Sequence.Lines[1:]:
+        if line.Kind == 'gripper':
+            state = 'open' if line.Target == 'open' else 'holding'
+        elif line.Kind in ('movej', 'movel'):
+            target = np.asarray(plan.Points[line.Target].Q, dtype=float)
+            moves.append((line, state, [previous, target] if line.Kind == 'movej' else Linear_Path(previous, target, cfg.TCP_Offset)))
+            previous = target
+    return moves
+
+
+def Check_Taught_Model(plan: Job_Plan_Str, cfg: Cell_Configuration_Str, scenes: tp.Dict[str, Scene_Cls]) -> tp.Tuple[tp.List[str], tp.List[str], int]:
+    """
+    Description:
+        Replay the job's taught moves against the model under the taught rule (owner, 2026-10-21):
+        the station zone, the station boxes and the workspace top are fitted to cases 17 and 18, so a
+        case they were not fitted to is checked before it is planned. A sample inside modelled
+        geometry (distance < 0: the real robot ran there) means the model is not valid for the case
+        there: an error naming the line, the robot body, the piece and the depth. Less room than the
+        taught margin, and a robot geom above the workspace top, are warnings. Nothing is refitted.
+
+    Args:
+        (1) plan [Job_Plan_Str(object)]: The job.
+        (2) cfg [Cell_Configuration_Str(object)]: The cell configuration.
+        (3) scenes [Dict<string, Scene_Cls>]: The scene of each gripper state the moves use.
+
+    Returns:
+        (1) parameter [Tuple<List<string>, List<string>, int>]: The errors, the warnings (one sentence
+                                                                 each, per move) and the samples checked.
+    """
+
+    errors, warnings, count = [], [], 0
+    for line, state, configurations in Taught_Moves(plan, cfg):
+        scene = scenes[state]
+        samples: tp.List[np.ndarray] = []
+        for a, b in zip(configurations[:-1], configurations[1:]):
+            found = list(scene.Segment_Samples(a, b))
+            samples += found if not samples else found[1:]
+        count += len(samples)
+        closest, closest_pair, room, room_pair, margin = CONST_REPORT_DISTMAX, '', CONST_REPORT_DISTMAX, '', 0.0
+        above = (0.0, '')
+        for q in samples:
+            c, c_pair, r, r_pair, r_margin = scene.Environment_Clearance(q, 'taught', None, CONST_REPORT_DISTMAX)
+            if c < closest:
+                closest, closest_pair = c, c_pair
+            if r < room:
+                room, room_pair, margin = r, r_pair, r_margin
+            for v in scene.Workspace_Violations(q):
+                if -v.Distance > above[0]:
+                    above = (-v.Distance, v.Body_1)
+        where = 'the taught %s to %s at program line %d (gripper %s)' % (line.Kind, line.Target, line.Line, state)
+        if closest < 0.0:
+            fitted = ' - geometry fitted to the taught samples of cases 17 and 18, not measured' if any(
+                f in closest_pair for f in CONST_FITTED) else ''
+            errors.append('The model is not valid for case %d of %s: %s passes %.1f mm into %s%s.'
+                          % (plan.Job.Case, plan.Program_Name, where, -closest * 1e3, closest_pair, fitted))
+        elif room < 0.0:
+            warnings.append('%s keeps %.1f mm to %s, below its taught margin of %.1f mm.'
+                            % (where[0].upper() + where[1:], (room + margin) * 1e3, room_pair, margin * 1e3))
+        if above[0] > 0.0:
+            warnings.append('%s reaches %.1f mm beyond Clearance.Workspace (%s): the workspace was fitted to case 17\'s taught '
+                            'sequence, so a generated path may not use that space.' % (where[0].upper() + where[1:], above[0] * 1e3, above[1]))
+    return errors, warnings, count
+
+
 def Plan_Job(plan: Job_Plan_Str, cfg: Cell_Configuration_Str, out: str, penalty_weight: float, workers: int,
              budget: tp.Optional[Planner_Budget_Str] = None) -> tp.List[str]:
     """
@@ -786,7 +877,8 @@ def main():
         plan = Load_Job_Plan(args.job)
         for level, message in plan.Job.Notes:
             print('[%s] %s' % (level, message))
-        openings = {s.Name: Opening(cfg, s.State, plan) for s in plan.Sequence.Segments}
+        for segment in plan.Sequence.Segments:
+            Opening(cfg, segment.State, plan)
         Check_Learned(cfg, plan.Points, os.path.basename(plan.Positions))
         Configured_Points(plan, cfg)
     except (Configuration_Error_Cls, URScript_Error_Cls, Kinematics_Error_Cls, OSError) as error:
@@ -797,9 +889,27 @@ def main():
         (['holding opening %.1f mm (%s)' % (cfg.Holding_Openings[(plan.Program_Name, plan.Job.Case)][0] * 1e3,
                                              cfg.Holding_Openings[(plan.Program_Name, plan.Job.Case)][1])] if 'holding' in states else [])
         + (['open %.1f mm' % (CONST_RELEASE_OPENING * 1e3)] if 'open' in states else []))))
-    del openings
     for line in Machine_Margin(cfg):
         print('[INFO] %s' % line)
+    # The model against the case's taught moves before anything is planned (Check_Taught_Model).
+    started = time.time()
+    try:
+        scenes = {state: Scene_Cls(dataclasses.replace(cfg, Opening=Opening(cfg, state, plan)))
+                  for state in sorted({state for _, state, _ in Taught_Moves(plan, cfg)})}
+        errors, warnings, samples = Check_Taught_Model(plan, cfg, scenes)
+    except (Configuration_Error_Cls, Kinematics_Error_Cls) as error:
+        print('[ERROR] %s' % error)
+        return 1
+    for line in warnings:
+        print('[WARNING] %s' % line)
+    if errors:
+        for line in errors:
+            print('[ERROR] %s' % line)
+        print('[ERROR] The model does not describe case %d of %s where the taught program ran. Nothing is planned, and nothing '
+              'is refitted: check the cell geometry there (KNOWN_ISSUES, SPEC 9.7).' % (plan.Job.Case, plan.Program_Name))
+        return 1
+    print('[INFO] Taught model check: %d taught moves of case %d (%d samples, %.0f s) pass through no modelled geometry; %d warning(s).'
+          % (len(Taught_Moves(plan, cfg)), plan.Job.Case, samples, time.time() - started, len(warnings)))
     try:
         report = Plan_Job(plan, cfg, args.out, args.penalty_weight, args.workers)
     except Planner_Error_Cls as error:
