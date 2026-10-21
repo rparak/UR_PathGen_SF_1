@@ -20,8 +20,9 @@ workspace for flexible small-batch production with high process variability.
 ## Contents
 
 [About](#about) · [Results](#results) · [Figures](#figures) · [Architecture](#architecture) ·
-[Repository layout](#repository-layout) · [Installation](#installation) · [Usage](#usage) ·
-[Adapting to another cell](#adapting-to-another-cell) · [Limitations and safety](#limitations-and-safety) ·
+[Inputs and outputs](#inputs-and-outputs) · [Method](#method) · [Repository layout](#repository-layout) ·
+[Installation](#installation) · [Usage](#usage) · [What a run needs](#what-a-run-needs) ·
+[Another program, case or path](#another-program-case-or-path) · [Limitations and safety](#limitations-and-safety) ·
 [License](#license) · [Acknowledgement](#acknowledgement)
 
 ## About
@@ -125,7 +126,8 @@ This is everything the planner checks a path against, each group with the margin
 The robot and the gripper are their collision hulls (the gripper at the 50 mm holding opening).
 Machine (a) and the side cabinet are moved from their CAD positions by the configured overrides.
 The station holder and stub are added boxes, fitted to the taught program. The small translucent
-box is the station zone: inside it, the zone pieces keep 5 mm instead of 20 mm.
+box is the station zone: inside it, the zone pieces keep 5 mm instead of 20 mm (see
+[Method](#collision-checking)).
 
 ### The paths
 
@@ -217,26 +219,144 @@ flowchart LR
     V --> U["Polyscope output<br/>points .urscript +<br/>motion sequence"]
 ```
 
-- **Taught vs generated rule.** Program lines are copied verbatim and judged by the taught rule.
-  Only the transfer segments are generated: `movej` with joint targets, `r=0`, at most five via
-  points, judged by the stricter generated rule. A segment that cannot meet it is an explicit
-  failure, never a longer or colliding path.
-- **Station zone.** The holder's geometry is fitted to the taught program, not measured. Inside a
-  configured box around it the margin is 5 mm, always for taught lines and for a generated sample
-  only within 50 mm of a fixed station point. Generated paths also stay no closer to a station box
-  than their taught ends.
-- **Conservative collision model.** Each STL component becomes its convex hull, or CoACD parts where
-  the hull is too coarse, checked to contain the original surface. The 20 mm environment margin
-  covers the kinematic error of nominal DH and the unmodelled cables.
-- **Determinism.** Every planner budget is an iteration count and every run uses a recorded seed, so
-  a plan depends only on its inputs. Planning in N worker processes gives the same output for any N.
+## Inputs and outputs
+
+**The input of the whole project** is the owner's robot program `sf1_plc_v4.script`: the URScript
+file the controller generates from the Polyscope program. The program itself is not committed (it
+holds Robotiq URCap code and network settings). Two verbatim extracts of it are committed, and
+every script takes its learned points and program lines from them. **Do not delete them**: without
+them nothing can be planned, replayed or checked.
+
+| File | What it is | Read by |
+|---|---|---|
+| `Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript` | **Input.** The program's 78 learned points as `global <name>_p` / `_q` lines (program lines 2453–2608) | every script that needs a learned point: `plan_rotation.py`, `write_variants.py`, `write_taught_programs.py`, `demo_visualize_position.py`, `demo_rotate_axis.py` |
+| `Data/Programs/sf1_plc_v4/sf1_plc_v4_cases_17_18.script` | **Input.** The program lines of cases 17 and 18 (lines 3397–3478 and 3480–3561), with their indentation, Polyscope markers and URCap code | `plan_rotation.py`, `write_variants.py`, `write_taught_programs.py` |
+| `Data/Programs/sf1_plc_v4/sf1_plc_v4_case_17.urscript`, `…_case_17_sequence.script` | The taught case 17, home → home, simplified: the points it moves to and its moves. Written by `write_taught_programs.py` | no script: a reference to compare the output with, line by line |
+| `Data/Generated/SF1_Rotation_17.urscript` | **Output.** The delivered path (c1): the learned points it moves to, then the generated via points `via_<from>_<to>_<nn>` | written by `plan_rotation.py` |
+| `Data/Generated/SF1_Rotation_17_Sequence.script` | **Output.** The delivered motion sequence of case 17, home → home | written by `plan_rotation.py` |
+| `Data/Generated/variants/<variant>/` | The same two files for each of `taught`, `b_optimised`, `c1`, `c2` and `c3` | written by `write_variants.py`; read by `replay_rotation.py` and `make_readme_figures.py` |
+| `Data/Generated/variants/comparison.csv`, `comparison.md` | The comparison table of the variants (the [Results](#results)) | written by `write_variants.py`; the CSV read by `make_readme_figures.py` |
+
+The other inputs are `Configuration/Cell_SF1.yaml`, the collision set in `CAD/Collision/` (built from
+`CAD/SF1_Environment.stl` by `build_collision.py`) and the vendored robot and gripper models in
+`models/`.
+
+**How the extracts were made.** Each is a range of lines of `sf1_plc_v4.script`, copied verbatim.
+Its header records the range and the sha256 of the program. With `SF1_PLC_V4_SCRIPT` set to the
+program's path, the tests check that hash and compare every line of the extracts with the program,
+byte for byte; without it, those tests are skipped. A new export of the program is extracted the
+same way, by hand: no script in this repository makes the extracts.
+
+**Two file formats.**
+
+- **`*.urscript`: points.** Only lines of two forms, plus `#` comments:
+
+  ```
+  global <name>_p=p[x, y, z, rx, ry, rz]    # TCP pose: m, rotation vector in rad, Polyscope base frame
+  global <name>_q=[j0, j1, j2, j3, j4, j5]  # joints in rad: base, shoulder, elbow, wrist 1, 2, 3
+  ```
+
+  The reader is strict: any other line, a `_p` without its `_q` or a duplicate name is an error.
+  Learned points are written back from their original number tokens, so a learned point is
+  byte-identical to the program's. A generated via point's `_p` is informational (the forward
+  kinematics of its `_q`); the robot is driven by `_q`.
+- **`*.script`: the motion program.** One move per line in program order, with `#` comments marking
+  the sections and the places of the program's Robotiq gripper nodes. Station lines are copied
+  verbatim from the program, `movej(get_inverse_kin(<name>_p, qnear=<name>_q), a=…, v=…)` and
+  `movel(<name>_p, a=1.2, v=0.25)`. Generated moves are joint targets only,
+  `movej(<name>_q, a=1.3962634015954636, v=1.0471975511965976, r=0)`, with the program's `a` and
+  `v`. It is not a complete robot program: the gripper nodes, the PLC I/O and the waits stay in the
+  robot program, into which the moves and the points file are put.
+
+The case extract (`sf1_plc_v4_cases_17_18.script`) is neither: it is raw program text, and only
+the program-excerpt reader reads it. That reader sorts its lines into moves to learned points,
+gripper actions and everything else.
+
+## Method
+
+### Planning
+
+Only the three transfer segments of case 17 are planned: S1 home → `drop_rotate_1`, S2
+`Waypoint_5` → `Waypoint_18` (gripper open) and S3 `Waypoint_6` → home. Every station line stays as
+taught. Each segment is planned in joint space between the `_q` of its ends, which are never
+wrapped:
+
+1. Both ends must keep the generated rule (below); otherwise the run stops with an error naming
+   the pairs.
+2. **The direct segment** is taken if it keeps the rule.
+3. Otherwise, **RRT-Connect** runs 20 times (restarts), each with its own seed. It works within the
+   joint limits, with a step of 0.35 rad and at most 3000 extensions. Half of its samples are drawn
+   from the box around both ends widened by 1 rad, half from the whole range. Each path found is
+   **shortcut** 150 times.
+4. The two fastest paths are **refined locally** (150 attempts each): a via point is removed or
+   moved by a random step that shrinks from 0.20 to 0.01 rad. A change is kept only if it lowers the
+   cost and both touched segments keep the rule.
+5. The lowest cost wins; ties go to fewer via points. More than five via points, or no path, is a
+   failure and nothing is written.
+6. The chosen path is checked again, every sample of every segment, with no shortcut in the check.
+
+**The objective** is the estimated duration plus 0.5 s/m × a clearance penalty. The duration is the
+UR `movej` estimate: the trapezoidal profile of the leading joint from rest to rest, with the
+program's a = 1.396 rad/s² and v = 1.047 rad/s and r = 0. The penalty is the sum over the samples of
+max(0, 30 mm − d), where d is the robot–environment distance. It counts outside the 50 mm station
+neighbourhood only. The penalty prefers clearance above the margins; it never replaces them.
+
+**Parallel restarts.** With `--workers N`, the restarts and refinements of all three segments run
+in N processes, each with its own copy of the scene. The result is the same for every N.
+
+### Collision checking
+
+- **The environment** is the cell STL, cropped to what the robot can reach. Each connected
+  component becomes its convex hull. Where a hull exceeds the original surface by more than 10 mm,
+  the component is split by CoACD into convex parts, which must contain the original surface within
+  1 mm; otherwise the hull is kept. Flat components are thickened by 0.5 mm. That gives 6718 pieces.
+  One open shell, the interior of machine (a), stays a filled hull, so the model is not valid inside
+  the machine. The corrections from the configuration move whole objects (machine (a), the side
+  cabinet) and add boxes (the station holder and stub). See [the collision model](#the-collision-model).
+- **The robot and gripper** are their collision hulls, with the gripper rigid at its opening: 50 mm
+  while holding the part, 85 mm open. Self-collision exclusions are listed explicitly.
+- **Margins.** The robot keeps 20 mm to the environment and 5 mm to itself (MuJoCo contacts,
+  filtered per pair). A segment is sampled joint-linearly, as `movej` moves, so densely that no
+  robot point moves more than 5 mm between two samples.
+- **Taught vs generated rule.** Program lines are judged by the taught rule, under which the
+  station-zone pieces need 5 mm and everything else 20 mm. Generated segments are judged by the
+  stricter generated rule:
+  - 20 mm everywhere. The 5 mm zone margin applies only while the TCP is within 50 mm of a fixed
+    station point.
+  - 30 mm to machine (a) outside the zone (its position is estimated to ±10 mm).
+  - No closer to a station box than the closer of the segment's two taught ends.
+  - Every robot collision geom inside the workspace box, whose top, 2.35 m, is the highest point
+    the taught sequence reaches. Space outside the CAD is not modelled.
+- **The station zone** is a configured box around the holder. The holder's geometry is fitted to
+  the taught program, not measured, so a generated path may not use it more tightly than the taught
+  program does.
+
+### Kinematics
+
+- **One kinematic truth: the official UR10e DH parameters.** The vendored MuJoCo Menagerie model
+  stays byte-identical. Its body offsets are patched in code when the scene is built, so that
+  MuJoCo's forward kinematics equals the DH forward kinematics.
+- **The TCP is configured, not derived:** (0, 0, 174) mm, the robot's TCP setting.
+- **Analytic IK** returns up to 8 solutions of a pose, each labelled by its branch S± E± W± and
+  checked by forward kinematics. It produces the c2 and c3 drop points (nominal DH, so they must be
+  re-taught).
+- **Every learned point is checked at load:** DH FK · TCP against its `_p`, within 10 mm (half the
+  environment margin). The largest residual of the 78 points is 4.04 mm / 0.377°. This is the gap
+  between nominal DH and the robot's calibrated kinematics; no calibration file is used.
+
+### Determinism
+
+Every budget is an iteration count, never a time. Segment k of the case plans with the seed
+20261017 × 1000 + 17 × 10 + k, and each restart and refinement derives its own generator from it.
+A run therefore depends only on its inputs. Re-planned on 2026-10-21 with 8 workers and with 1, the
+output was byte-identical to the committed `Data/Generated/`, and so were the re-planned variants.
 
 ## Repository layout
 
 ```text
 CAD/              the cell STL (visual) and Collision/: the convex pieces and their manifest
 Configuration/    Cell_SF1.yaml: base pose, tool and TCP, margins, overrides, workspace
-Data/Programs/    verbatim extracts of the robot program and the simplified taught case 17
+Data/Programs/    the input: verbatim extracts of the robot program, and the simplified taught case 17
 Data/Generated/   the delivered path (c1) and variants/: every variant and the comparison table
 Example/          runnable scripts: viewers, planning, variants, figures, collision build
 Media/            the README images (generated)
@@ -293,27 +413,51 @@ clearance is checked against; the viewers print a warning naming the corrections
 | 5 | c3: proposal, not verified on the robot |
 | 6 | all five in turn, with the strict comparison |
 
-**Plan** the transfer segments S1–S3 of case 17 and write the delivered output to
-`Data/Generated/`:
+**Run the optimisation.** One command plans S1–S3 of case 17 and writes the delivered output:
 
 ```bash
 .venv/bin/python Example/plan_rotation.py --workers 8
 ```
 
-The output is the same for every number of workers: 4–8 minutes with 8 on an M2 Pro, about 15 with 1.
+- **Reads:** the two program extracts, `Configuration/Cell_SF1.yaml`, the collision set and the
+  models.
+- **Writes:** `Data/Generated/SF1_Rotation_17.urscript` and `SF1_Rotation_17_Sequence.script`,
+  only after every segment has passed the final check. On any error it writes nothing and exits
+  with 1.
+- **Prints:** the check of the learned points, the margins, and per segment the taught and the
+  optimised path (via points, estimated time, joint travel, closest distance, rule violations),
+  with the home → home totals.
+- **Options:** `--out DIR` writes elsewhere, `--workers N` sets the planning processes (the output
+  does not depend on N), `--penalty-weight W` sets the clearance weight (default 0.5 s/m),
+  `--config FILE` sets the configuration.
+- **Time** (M2 Pro, 2026-10-21): about 3 minutes with 8 workers (2 min 43 s), about 10.5 minutes
+  with 1 (10 min 27 s).
 
-**Regenerate** the variants with their comparison table, then the README figures:
+**Compare and replay a result.** The committed output is the reference. Write a new run elsewhere
+and compare it with `diff`; an unchanged input gives identical files:
 
 ```bash
-.venv/bin/python Example/write_variants.py --workers 8        # about 15 minutes; --table-only re-measures
+.venv/bin/python Example/plan_rotation.py --workers 8 --out /tmp/sf1_plan
+diff /tmp/sf1_plan/SF1_Rotation_17.urscript Data/Generated/SF1_Rotation_17.urscript
+diff /tmp/sf1_plan/SF1_Rotation_17_Sequence.script Data/Generated/SF1_Rotation_17_Sequence.script
+```
+
+The replay plays the variant folders in `Data/Generated/variants/` (`--path 3` is c1, the
+delivered output); it takes no other folder. To replay and tabulate a new plan, regenerate the
+variants. This re-plans b_optimised, c1, c2 and c3 into `Data/Generated/variants/`, overwriting
+the committed files (`git diff` shows what changed), and rewrites the comparison table. Then
+rewrite the figures:
+
+```bash
+.venv/bin/python Example/write_variants.py --workers 8        # about 6 minutes; --table-only re-measures
 .venv/bin/python Example/make_readme_figures.py               # under a minute; --graphs-only skips the renders
 ```
 
 **Rebuild the inputs** after the robot program or the cell STL changes:
 
 ```bash
-.venv/bin/python Example/write_taught_programs.py
-.venv/bin/python Example/build_collision.py                   # several minutes, runs CoACD
+.venv/bin/python Example/write_taught_programs.py             # the simplified taught case 17
+.venv/bin/python Example/build_collision.py                   # about 19 minutes, runs CoACD
 ```
 
 **Run the tests.** The everyday command leaves out the four slow tests and takes about 8 minutes;
@@ -328,35 +472,118 @@ Measured on an M2 Pro, 2026-10-20. The slow tests are the parallel planning run 
 variant table re-measured from the files (67 s), the replay of every program segment (62 s) and the
 README graphs regenerated byte for byte (4 s).
 
-## Adapting to another cell
+## What a run needs
 
-Replace the inputs in this order; each step builds on the one before.
+**Inputs.** The two program extracts; `Configuration/Cell_SF1.yaml`; the collision set in
+`CAD/Collision/`, built with the configuration's current overrides (the scene refuses a set built
+with others); and the vendored models, matching their recorded hashes (`install.sh` checks them).
+
+**Configuration.** Every field of `Cell_SF1.yaml` is required, states its unit and source, and is
+validated at load. All problems are named at once. For planning:
+
+| Section | Fields | Used for |
+|---|---|---|
+| Environment | `Collision_Set`, `Stand_Region`, `Assembly_Overrides`, `Component_Overrides`, `Added_Boxes` | the environment pieces, the stand, the corrections, the station boxes |
+| Robot | `Model`, `Base_Position`, `Base_Yaw`, `Joint_Position_Limits` | the robot in the cell, the planner's joint range |
+| Tool | `Model`, `Coupling`, `Mount_Yaw`, `TCP_Offset`, `Holding_Openings` (an entry for case 17) | the gripper geometry, the TCP, the opening while the part is held |
+| Clearance | `Environment`, `Self`, `Self_Pair_Overrides`, `Station_Zone`, `Machine_Extra`, `Workspace` | the taught and generated rules |
+| Self_Collision | `Excluded_Pairs`, `Rigid_Groups` | which robot and gripper bodies are never checked against each other |
+| Kinematics | `FK_Sanity_Bound` | the check of every learned point at load |
+
+**Fixed in `Example/plan_rotation.py`, for case 17** (code constants, not configuration):
+
+- the case number (17) and the extract files, read from `Data/Programs/sf1_plc_v4/`;
+- the points: home, the drop (`drop_rotate_1`, `Waypoint_4`, `Waypoint_5`) and the pick
+  (`Waypoint_18`, `pick_rotate_1`, `Waypoint_6`), which are the six fixed station points;
+- the three segments and their gripper states: S1 and S3 holding, S2 open at the full 85 mm;
+- the delivered turn of wrist 3 at the pick's three points;
+- the seed (20261017) and the penalty weight (0.5 s/m, `--penalty-weight`);
+- the output names `SF1_Rotation_17.urscript` and `SF1_Rotation_17_Sequence.script`;
+- the shape of the station operations. The output is assembled for exactly this sequence:
+  `movel` down, gripper open, `movej` retreat, S2, `movej` pick, gripper close, `movel` up. Each of
+  these lines must occur once in the case.
+
+Also fixed in code:
+
+- the program's `movej` a and v, written into every generated move;
+- the `movel` a and v, for the time estimate only;
+- the 30 mm penalty distance, the five-via-point limit and the planner's budgets;
+- the STL component that fills machine (a)'s interior (component 1638, labelled "model not valid
+  here" in the viewers).
+
+**Fitted to this program**, though they are configuration fields: the station-zone box and
+endpoint radius, the station boxes (fitted to the taught samples of cases 17 and 18) and the
+workspace top (the highest point of the taught case 17).
+
+## Another program, case or path
+
+There is no generic input yet. A new program, case or segment means changing the inputs and the
+constants above, then validating the result again. Follow the case that matches.
+
+**A new export of the same program** (for example after re-teaching the c2 or c3 drop):
+
+1. Copy the `global` lines and the cases' lines into the two extracts, verbatim, and update the
+   line ranges and the sha256 in their headers. The tests that compare the extracts with the
+   program record the same range and hash; update them too. The point names must stay the same.
+2. Run `write_taught_programs.py`, then `plan_rotation.py`, then `write_variants.py` and
+   `make_readme_figures.py`.
+3. Re-validate (below). The station boxes and the zone are fitted to the old taught points; check
+   that the new taught program still keeps 5 mm to them.
+
+**Another case of the same program:**
+
+1. The case's lines must be in the cases extract. Extend it if needed.
+2. In `Example/plan_rotation.py`, change the case number, the point names, the station points, the
+   taught via points, the segments and their gripper states, the wrist-3 turn (empty for a new case)
+   and the output file names.
+3. Add a `Tool.Holding_Openings` entry for the case.
+4. If the case's station operation does not have the shape above, the code that assembles the
+   output and estimates the station time must be changed. That is a code change, not a constant.
+5. If the case works elsewhere in the cell, the station zone, the station boxes and the workspace
+   top were not fitted to it. They have to be fitted again from that case's taught program.
+
+**Another path (other segment ends)** in case 17: the same constants (segments, station points,
+gripper states). A segment end must be a learned point that keeps the generated rule, and the
+output is still assembled around the one drop and one pick above; other segments change that code.
+
+**Another program:** a new folder `Data/Programs/<program>/` with the two extracts, and the three
+paths at the top of `Example/plan_rotation.py` (every other script takes them from there). If the
+program's `movej` a and v differ, change the planner's tokens (`src/Planner/Core.py`), and the
+`movel` a and v in `plan_rotation.py`. The output headers name `sf1_plc_v4.script`.
+
+**Another cell**, in this order:
 
 1. **Cell geometry.** Put the cell's STL into `CAD/` (in the world frame the configuration uses)
    and run `Example/build_collision.py`. Read its report: pieces with a large excess (an open shell
-   filled by its hull) need a component override or a configured box.
-2. **Configuration** (`Configuration/Cell_SF1.yaml`): the robot base position and yaw, joint limits,
-   the gripper coupling and mount yaw, the gripper openings, the margins, the station zone, the
-   workspace box, the self-collision exclusions, and the component and assembly overrides and added
-   boxes that correct the CAD. Every field states its unit and source.
+   filled by its hull) need a component override or a configured box. Update the component id of
+   the machine interior in `Example/plan_rotation.py`.
+2. **Configuration:** every field of `Configuration/Cell_SF1.yaml` (above), each with its source.
 3. **TCP.** `Tool.TCP_Offset` is copied from the robot's TCP setting, never derived from the points.
-4. **Program export.** Put the extracts of the robot program into `Data/Programs/<program>/` (the
-   learned `_p` / `_q` lines and the case's lines) and run `Example/write_taught_programs.py`.
-5. **Positions and case.** The case, its station points, its taught via points and the gripper state
-   per segment are constants of `Example/plan_rotation.py`.
+4. Then the program, as above.
 
-Then re-validate before trusting any output:
+**Re-validate before trusting any output:**
 
 - every learned point's DH FK · TCP against its `_p` (the scripts refuse a point outside the
   configured bound);
 - the base yaw, by where the taught points land in the cell;
 - the collision set's conservativeness and excess;
 - the taught program replayed against the model, with every penetration explained;
-- the margins against the new cell's kinematic error;
+- the margins against the new kinematic error;
 - the planned path on the real robot at reduced speed.
 
-The test suite pins SF1's measured values (residuals, distances, durations). For a new cell they
+The test suite pins SF1's measured values (residuals, distances, durations). For new inputs they
 are measured again, not copied.
+
+**Limits of the current procedure.**
+
+- One case and one program per run, chosen by editing code.
+- Exactly three transfer segments around one drop and one pick.
+- The variants, the replay catalogue and the README figures are written for case 17.
+- The extracts are made by hand.
+
+A job file (program, case, segments and gripper states as validated configuration) and a script
+that cuts the extracts from a program export would remove most of these limits. Neither exists
+today.
 
 ## Limitations and safety
 
