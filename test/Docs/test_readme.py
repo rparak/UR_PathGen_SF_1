@@ -58,14 +58,20 @@ def _Readme(root):
         return handle.read()
 
 
-def _Table_Rows(text):
-    # The rows of the results table: the lines starting with a variant in backticks, split into cells.
-    rows = {}
+def _Results_Tables(text):
+    # The results tables in order: each run of consecutive lines starting with a variant in backticks,
+    # as variant -> its cells.
+    tables, rows = [], None
     for line in text.splitlines():
         match = re.match(r'\| `(\w+)` \|', line)
-        if match:
-            rows[match.group(1)] = [cell.strip() for cell in line.strip().strip('|').split(' | ')]
-    return rows
+        if not match:
+            rows = None
+            continue
+        if rows is None:
+            rows = {}
+            tables.append(rows)
+        rows[match.group(1)] = [cell.strip() for cell in line.strip().strip('|').split(' | ')]
+    return tables
 
 
 def _Csv(root):
@@ -91,21 +97,25 @@ def _Expected(sections, taught_total):
 def test_the_results_table_is_comparison_csv(root):
     """
     Description:
-        Every number of the README's results table is comparison.csv's: per variant the estimated
-        home -> home time, its change against the taught one, the via points, the joint travel, the
-        TCP path, the highest robot point (the total row, as written), the closest distance and the
-        least room above its margin over the transfer segments S1 - S3. The five variants appear in
-        order, the proposals marked as not verified on the robot.
+        The README has two results tables, and every number in them is comparison.csv's. The
+        compact one (shown first): per variant the estimated home -> home time, its change against
+        the taught one and the highest robot point. The full one (collapsed): those and the via
+        points, the joint travel, the TCP path (the total row, as written), the closest distance and
+        the least room above its margin over the transfer segments S1 - S3. In both, the five
+        variants appear in order, the proposals marked as not verified on the robot.
     """
 
-    rows, table = _Table_Rows(_Readme(root)), _Csv(root)
-    assert list(rows) == list(CONST_VARIANTS)
+    tables, table = _Results_Tables(_Readme(root)), _Csv(root)
+    assert len(tables) == 2
     taught_total = float(table['taught']['total']['t_est_s'])
-    for variant in CONST_VARIANTS:
-        assert rows[variant][2:] == _Expected(table[variant], taught_total), variant
-    for variant in ('c2', 'c3'):
-        assert 'not verified on the robot' in rows[variant][1]
-    assert '**delivered**' in rows['c1'][1]
+    for rows, columns in zip(tables, ((0, 1, 5), tuple(range(8)))):
+        assert list(rows) == list(CONST_VARIANTS)
+        for variant in CONST_VARIANTS:
+            expected = _Expected(table[variant], taught_total)
+            assert rows[variant][2:] == [expected[k] for k in columns], variant
+        for variant in ('c2', 'c3'):
+            assert 'not verified on the robot' in rows[variant][1]
+        assert '**delivered**' in rows['c1'][1]
 
 
 def test_every_image_the_readme_shows_exists(root):
