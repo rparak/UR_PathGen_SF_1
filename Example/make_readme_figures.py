@@ -73,6 +73,9 @@ CONST_ORDER = tuple(CONST_VARIANTS)
 CONST_SHORT = {'taught': 'reference', 'b_optimised': 'previous optimisation', 'c1': 'delivered',
                'c2': 'proposal *', 'c3': 'proposal *'}
 CONST_PROPOSAL_NOTE = '* proposal for re-teaching, not verified on the robot'
+# The footnote of the graphs that show times (owner, 2026-10-21): their timing is the duration estimate.
+#   Unit [string]
+CONST_ESTIMATE_NOTE = 'Simulation estimate — blends and gripper time not modelled.'
 # The page themes a graph is written for (GitHub's light and dark page colours) and their ink.
 #   Unit [Dict<string, Dict<string, string>>] (hex colour)
 CONST_THEMES = {
@@ -361,7 +364,7 @@ def Graph_Cycle_Time(table: tp.Dict, mode: str) -> tp.Any:
     """
 
     theme = CONST_THEMES[mode]
-    fig, ax = New_Figure((8.0, 4.2), theme)
+    fig, ax = New_Figure((8.0, 4.4), theme)
     x = np.arange(len(CONST_ORDER))
     bottom = np.zeros(len(CONST_ORDER))
     for section, color in zip(CONST_STACK, CONST_STACK_COLORS[mode]):
@@ -384,8 +387,8 @@ def Graph_Cycle_Time(table: tp.Dict, mode: str) -> tp.Any:
     ax.set_ylim(0, taught * 1.22)
     legend = ax.legend(loc='upper right', ncol=2, fontsize=8.5, frameon=False, labelcolor=theme['text'])
     legend.set_title(None)
-    fig.subplots_adjust(left=0.08, right=0.98, top=0.97, bottom=0.2)
-    Footnote(fig, theme, [CONST_PROPOSAL_NOTE])
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.97, bottom=0.227)
+    Footnote(fig, theme, [CONST_PROPOSAL_NOTE, CONST_ESTIMATE_NOTE])
     return fig
 
 
@@ -512,7 +515,7 @@ def Graph_Joints(data: tp.Dict[str, Variant_Data_Str], mode: str) -> tp.Any:
 
     theme = CONST_THEMES[mode]
     colors = CONST_VARIANT_COLORS[mode]
-    fig, axes = New_Figure((8.0, 10.4), theme, 7, 1, sharex=True, gridspec_kw={'height_ratios': [1.25] + [1.0] * 6})
+    fig, axes = New_Figure((8.0, 10.6), theme, 7, 1, sharex=True, gridspec_kw={'height_ratios': [1.25] + [1.0] * 6})
     timeline, joints = axes[0], axes[1:]
     end = max(data[v].Time[-1] for v in CONST_ORDER)
     for row, v in enumerate(CONST_ORDER):
@@ -542,8 +545,8 @@ def Graph_Joints(data: tp.Dict[str, Variant_Data_Str], mode: str) -> tp.Any:
     joints[-1].set_xlim(-0.3, end + 2.2)
     fig.legend(*joints[0].get_legend_handles_labels(), loc='upper left', bbox_to_anchor=(0.09, 0.995), ncol=3, fontsize=8.5,
                frameon=False, labelcolor=theme['text'])
-    fig.subplots_adjust(left=0.13, right=0.98, top=0.92, bottom=0.07, hspace=0.14)
-    Footnote(fig, theme, [CONST_PROPOSAL_NOTE + ' (dashed).'])
+    fig.subplots_adjust(left=0.13, right=0.98, top=0.922, bottom=0.084, hspace=0.14)
+    Footnote(fig, theme, [CONST_PROPOSAL_NOTE + ' (dashed).', CONST_ESTIMATE_NOTE])
     return fig
 
 
