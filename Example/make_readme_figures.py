@@ -53,8 +53,8 @@ from URScript.Core import URScript_Error_Cls
 from Kinematics.Core import TCP_Pose, Kinematics_Error_Cls
 #   ../Scene/Core — the scene, its station-zone pieces and the collision geometry group
 from Scene.Core import Scene_Cls, CONST_ADDED_BOX_PREFIX, CONST_COLLISION_GROUP
-#   ../Example/plan_rotation — the variants and the gripper openings of the case
-from plan_rotation import CONST_VARIANT_DIR, CONST_VARIANTS, Opening
+#   ../Example/plan_rotation — the variants, the default job (case 17) and the gripper openings of its case
+from plan_rotation import CONST_DEFAULT_JOB, CONST_VARIANT_DIR, CONST_VARIANTS, Load_Job_Plan, Opening
 #   ../Example/replay_rotation — the moves of a variant, their samples and their timing, as replayed
 from replay_rotation import Load_Variant, Build_Moves, Move_Samples, Frames, Frame_Configuration, Write_PNG
 #   ../Example/write_variants — the comparison table
@@ -757,7 +757,8 @@ def Render_Images(cfg: Cell_Configuration_Str, data: tp.Dict[str, Variant_Data_S
         (1) parameter [List<string>]: The files written.
     """
 
-    scene = Scene_Cls(dataclasses.replace(cfg, Opening=Opening(cfg, 'holding')), with_environment=True, with_visual=False)
+    scene = Scene_Cls(dataclasses.replace(cfg, Opening=Opening(cfg, 'holding', Load_Job_Plan(CONST_DEFAULT_JOB))), with_environment=True,
+                      with_visual=False)
     m = scene.Model
     width, height = CONST_RENDER_SIZE
     m.vis.global_.offwidth, m.vis.global_.offheight = max(m.vis.global_.offwidth, width), max(m.vis.global_.offheight, height)
@@ -842,7 +843,8 @@ def main():
     try:
         cfg = Load_Configuration(args.config)
         table = Read_Table_CSV(os.path.join(CONST_VARIANT_DIR, CONST_TABLE_CSV))
-        scenes = {state: Scene_Cls(dataclasses.replace(cfg, Opening=Opening(cfg, state)), with_environment=False)
+        plan = Load_Job_Plan(CONST_DEFAULT_JOB)
+        scenes = {state: Scene_Cls(dataclasses.replace(cfg, Opening=Opening(cfg, state, plan)), with_environment=False)
                   for state in ('holding', 'open')}
         data = {v: Load_Variant_Data(v, cfg, scenes) for v in CONST_ORDER}
     except (Configuration_Error_Cls, URScript_Error_Cls, Kinematics_Error_Cls, ValueError, OSError) as error:

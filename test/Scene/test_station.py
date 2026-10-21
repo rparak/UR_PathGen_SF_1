@@ -106,7 +106,7 @@ def scenes(cfg):
         distinct opening). Case 17's configured holding opening must be the one typed here.
     """
 
-    assert cfg.Holding_Openings[17][0] == CONST_OPENING[17, 'holding']
+    assert cfg.Holding_Openings[('sf1_plc_v4', 17)][0] == CONST_OPENING[17, 'holding']
     built = {opening: Scene_Cls(dataclasses.replace(cfg, Opening=opening)) for opening in sorted(set(CONST_OPENING.values()))}
     return {key: built[opening] for key, opening in CONST_OPENING.items()}
 

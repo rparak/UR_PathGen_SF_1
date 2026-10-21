@@ -21,6 +21,8 @@
 # File Name: ../test/Configuration/test_core.py
 ## =========================================================================== ##
 
+# System (Default)
+import os
 # Math (Mathematical functions)
 import math
 # Copy (Shallow and deep copy)
@@ -31,7 +33,7 @@ import pytest
 import yaml
 # Custom Lib.:
 #   ../src/Configuration/Core — the loader under test
-from Configuration.Core import Load_Configuration, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE
+from Configuration.Core import Load_Configuration, Load_Job, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE, CONST_PROJECT_ROOT
 
 """
 Description:
@@ -98,7 +100,7 @@ def test_the_shipped_configuration_loads_in_si_units():
     assert cfg.Clearance_Environment == 0.020 and cfg.Clearance_Self == 0.005
     assert cfg.Self_Pair_Overrides == [('base', 'upper_arm_link', 0.0)]
     assert cfg.Mount_Yaw == 0.0
-    assert cfg.Holding_Openings == {17: (0.050, 'owner, 2026-10-18: the 50 x 50 mm part')}
+    assert cfg.Holding_Openings == {('sf1_plc_v4', 17): (0.050, 'owner, 2026-10-18: the 50 x 50 mm part')}
     assert cfg.Assembly_Overrides == [
         ('machine_a', 1154, [-0.150, 0.0, 0.0], 'owner estimate, 2026-10-18 (100 mm, then a further 50 mm), not measured'),
         ('side_cabinet', 2643, [-0.050, 0.0, 0.0], 'owner estimate, 2026-10-18, not measured')]
@@ -131,13 +133,14 @@ def test_a_missing_required_field_fails_naming_it(tmp_path, field):
     ('Clearance.Environment', -0.02, 'greater than 0'),
     ('Kinematics.FK_Sanity_Bound.Position', 0.0, 'greater than 0'),
     ('Tool.Opening', 'wide', 'finite number'),
-    ('Tool.Holding_Openings', [{'Case': 17, 'Opening': 0.086, 'Source': 'x'}], 'at most the 2F-85 stroke'),
-    ('Tool.Holding_Openings', [{'Case': 17, 'Opening': 0.0, 'Source': 'x'}], 'greater than 0'),
-    ('Tool.Holding_Openings', [{'Case': 17, 'Opening': 0.05, 'Source': ' '}], 'Source: text'),
-    ('Tool.Holding_Openings', [{'Case': 17, 'Opening': 0.05}], 'Source: text'),
+    ('Tool.Holding_Openings', [{'Program': 'p', 'Case': 17, 'Opening': 0.086, 'Source': 'x'}], 'at most the 2F-85 stroke'),
+    ('Tool.Holding_Openings', [{'Program': 'p', 'Case': 17, 'Opening': 0.0, 'Source': 'x'}], 'greater than 0'),
+    ('Tool.Holding_Openings', [{'Program': 'p', 'Case': 17, 'Opening': 0.05, 'Source': ' '}], 'Source: text'),
+    ('Tool.Holding_Openings', [{'Program': 'p', 'Case': 17, 'Opening': 0.05}], 'Source: text'),
+    ('Tool.Holding_Openings', [{'Case': 17, 'Opening': 0.05, 'Source': 'a'}], 'Program: program folder'),
     ('Tool.Holding_Openings', [], 'non-empty list'),
-    ('Tool.Holding_Openings', [{'Case': 17, 'Opening': 0.05, 'Source': 'a'}, {'Case': 17, 'Opening': 0.04, 'Source': 'b'}],
-     'more than once'),
+    ('Tool.Holding_Openings', [{'Program': 'p', 'Case': 17, 'Opening': 0.05, 'Source': 'a'},
+                               {'Program': 'p', 'Case': 17, 'Opening': 0.04, 'Source': 'b'}], 'more than once'),
     ('Self_Collision.Excluded_Pairs', [['base']], 'pairs'),
     ('Clearance.Self_Pair_Overrides', [['base', 'upper_arm_link', -1.0]], 'margin >= 0'),
     ('Robot.Model', 'models/none.xml', 'does not exist'),
@@ -222,3 +225,124 @@ def test_an_unknown_key_is_a_warning_not_a_failure(tmp_path):
     data['Tool']['Opennig'] = 0.05
     cfg = _Load(tmp_path, data)
     assert cfg.Notes == [('WARNING', 'Unrecognised key Tool.Opennig is ignored (misspelt?).')]
+
+
+def test_the_same_case_number_of_two_programs_is_two_entries(tmp_path):
+    """
+    Description:
+        Tool.Holding_Openings is keyed by program and case: case 17 of another program is its own
+        entry, never sf1_plc_v4's (owner, 2026-10-21).
+    """
+
+    data = _Shipped()
+    _Set(data, 'Tool.Holding_Openings', [{'Program': 'sf1_plc_v4', 'Case': 17, 'Opening': 0.05, 'Source': 'a'},
+                                         {'Program': 'other', 'Case': 17, 'Opening': 0.03, 'Source': 'b'}])
+    assert _Load(tmp_path, data).Holding_Openings == {('sf1_plc_v4', 17): (0.05, 'a'), ('other', 17): (0.03, 'b')}
+
+
+# Every field of a job, as a dotted path, named here independently of the loader's schema.
+#   Unit [List<string>]
+CONST_JOB_REQUIRED = ['Program', 'Case', 'Segments', 'Point_Configurations', 'Output.Points', 'Output.Sequence', 'Output.Title',
+                      'Output.Status', 'Output.Stations']
+# The shipped default job, typed from the owner's statements (2026-10-18, 2026-10-19).
+#   Unit [string], [List<Tuple>]
+CONST_JOB_TURN = 'owner, 2026-10-19: q6 representative chosen to avoid an unnecessary wrist-3 turn'
+CONST_JOB_SEGMENTS = [('S1', 'home', 'drop_rotate_1'), ('S2', 'Waypoint_5', 'Waypoint_18'), ('S3', 'Waypoint_6', 'home')]
+
+
+def _Shipped_Job():
+    with open(os.path.join(CONST_PROJECT_ROOT, 'Configuration', 'Jobs', 'sf1_plc_v4_case_17.yaml'), encoding='utf-8') as handle:
+        return yaml.safe_load(handle)
+
+
+def _Load_Job(tmp_path, data):
+    path = tmp_path / 'job.yaml'
+    path.write_text(yaml.safe_dump(data), encoding='utf-8')
+    return Load_Job(str(path))
+
+
+def test_the_shipped_default_job_loads():
+    """
+    Description:
+        The default job loads by its name without notes: program sf1_plc_v4, case 17, S1 - S3 as the
+        owner set them, wrist 3 of the pick's three points one turn lower, and its output names.
+    """
+
+    job = Load_Job('sf1_plc_v4_case_17')
+    assert job.Notes == []
+    assert job.Program == os.path.join(CONST_PROJECT_ROOT, 'Data', 'Programs', 'sf1_plc_v4')
+    assert job.Case == 17 and job.Segments == CONST_JOB_SEGMENTS
+    assert job.Point_Configurations == [(name, 5, -1, '', CONST_JOB_TURN) for name in ('Waypoint_18', 'pick_rotate_1', 'Waypoint_6')]
+    assert (job.Output_Points, job.Output_Sequence, job.Title, job.Stations) == (
+        'SF1_Rotation_17.urscript', 'SF1_Rotation_17_Sequence.script', 'rotation sequence', ['drop', 'pick'])
+
+
+@pytest.mark.parametrize('field', CONST_JOB_REQUIRED)
+def test_a_missing_job_field_fails_naming_it(tmp_path, field):
+    """
+    Description:
+        Removing any REQUIRED field of a job fails the load with a message naming it.
+    """
+
+    data = _Shipped_Job()
+    _Set(data, field, _Set)
+    with pytest.raises(Configuration_Error_Cls, match=field.replace('.', r'\.') + ' is missing'):
+        _Load_Job(tmp_path, data)
+
+
+@pytest.mark.parametrize('field, value, fragment', [
+    ('Program', 'Data/Programs/none', 'must name a program folder'),
+    ('Case', 0, 'case number >= 1'),
+    ('Segments', [], 'non-empty list'),
+    ('Segments', [{'Name': 'S1', 'From': 'home', 'To': 'home'}], 'starts and ends at home'),
+    ('Segments', [{'Name': 'S1', 'From': 'home', 'To': 'a'}, {'Name': 'S1', 'From': 'b', 'To': 'home'}], 'more than once'),
+    ('Point_Configurations', [{'Point': 'home', 'Joint': 7, 'Turns': 1, 'Source': 'x'}], 'Joint 1 \\(base\\) to 6'),
+    ('Point_Configurations', [{'Point': 'home', 'Joint': 6, 'Turns': 0, 'Source': 'x'}], 'other than 0'),
+    ('Point_Configurations', [{'Point': 'home', 'Branch': 'S- E-', 'Source': 'x'}], 'Branch as'),
+    ('Point_Configurations', [{'Point': 'home', 'Branch': 'S- E- W-', 'Source': ' '}], 'ASCII text'),
+    ('Point_Configurations', [{'Point': 'home', 'Branch': 'S- E- W-', 'Source': 'x'},
+                              {'Point': 'home', 'Joint': 6, 'Turns': 1, 'Source': 'y'}], 'more than once'),
+    ('Output.Points', 'SF1.script', 'ending in .urscript'),
+    ('Output.Sequence', 'SF1_Rotation_17.urscript', 'ending in .script'),
+    ('Output.Status', 'Delivered \u2014 tested', 'ASCII text'),
+    ('Output.Stations', ['drop'], 'the 3 segments have 2 between them'),
+])
+def test_an_invalid_job_value_fails(tmp_path, field, value, fragment):
+    """
+    Description:
+        An invalid job value fails the load naming the problem; a status with a non-ASCII dash is
+        refused (it goes into a header pasted into Polyscope).
+    """
+
+    data = _Shipped_Job()
+    _Set(data, field, value)
+    with pytest.raises(Configuration_Error_Cls, match=fragment):
+        _Load_Job(tmp_path, data)
+
+
+def test_every_job_problem_is_listed_at_once_and_an_unknown_key_is_a_warning(tmp_path):
+    """
+    Description:
+        Two problems of a job are reported together; a misspelt key alone is a WARNING note and the
+        job loads.
+    """
+
+    data = _Shipped_Job()
+    _Set(data, 'Case', _Set)
+    _Set(data, 'Output.Title', '')
+    with pytest.raises(Configuration_Error_Cls) as error:
+        _Load_Job(tmp_path, data)
+    assert '2 problem(s)' in str(error.value) and 'Case is missing' in str(error.value) and 'Output.Title' in str(error.value)
+    data = _Shipped_Job()
+    data['Output']['Titel'] = 'x'
+    assert _Load_Job(tmp_path, data).Notes == [('WARNING', 'Unrecognised key Output.Titel of the job is ignored (misspelt?).')]
+
+
+def test_an_unknown_job_name_is_refused_naming_the_jobs():
+    """
+    Description:
+        A job name with no file in Configuration/Jobs/ is refused, listing the jobs there.
+    """
+
+    with pytest.raises(Configuration_Error_Cls, match=r'The job "sf1_plc_v4_case_99" cannot be read .*sf1_plc_v4_case_17'):
+        Load_Job('sf1_plc_v4_case_99')

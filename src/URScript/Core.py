@@ -56,7 +56,7 @@ CONST_JOINT_LINE = re.compile(r'^global\s+([A-Za-z_][A-Za-z0-9_]*)_q\s*=\s*\[(.*
 # Program-excerpt lines: a block marker, a movej to a learned point by its pose with qnear (as
 # Polyscope writes it), a movel to a learned pose, and a Robotiq gripper position command.
 #   Unit [Pattern]
-CONST_CASE_MARKER = re.compile(r'^# case (\d+):')
+CONST_CASE_MARKER = re.compile(r'^# case (\d+):(?: lines (\d+)-\d+)?')
 CONST_PROGRAM_MOVEJ = re.compile(r'^\s*movej\(get_inverse_kin\(([A-Za-z_]\w*)_p, qnear=\1_q\)(?:, a=[^,()]+, v=[^,()]+(?:, r=[^,()]+)?)?\)\s*$')
 CONST_PROGRAM_MOVEL = re.compile(r'^\s*movel\(([A-Za-z_]\w*)_p(?:, a=[^,()]+, v=[^,()]+)?\)\s*$')
 CONST_PROGRAM_GRIPPER = re.compile(r'^\s*rq_set_pos_spd_for\((\d+), \d+, \d+, "\d+"\)\s*$')
@@ -134,6 +134,10 @@ class Program_Line_Str:
     # The line exactly as in the program, indentation included.
     #   Unit [string]
     Raw: str = ''
+    # Its 1-based line number in the program (from the case marker's range; 0 when the excerpt
+    # gives none).
+    #   Unit [int]
+    Line: int = 0
 
 
 @dataclass
@@ -181,6 +185,53 @@ class URScript_Document_Str:
     # Whether the text ended with a newline.
     #   Unit [bool]
     Final_Newline: bool = True
+
+
+@dataclass
+class Sequence_Segment_Str:
+    """
+    Description:
+        One segment of a job's sequence (Resolve_Sequence): the program lines it replaces by a
+        generated path.
+    """
+
+    # The segment's name and its ends (learned points).
+    #   Unit [string]
+    Name: str = ''
+    From: str = ''
+    To: str = ''
+    # The gripper state while it runs: 'holding' or 'open'.
+    #   Unit [string]
+    State: str = ''
+    # The targets of the taught moves strictly between its ends.
+    #   Unit [List<string>]
+    Taught_Vias: tp.List[str] = field(default_factory=list)
+    # The program lines after the From line up to the To line, inclusive.
+    #   Unit [List<Program_Line_Str>]
+    Lines: tp.List[Program_Line_Str] = field(default_factory=list)
+
+
+@dataclass
+class Sequence_Plan_Str:
+    """
+    Description:
+        A job's sequence in a case's program lines (Resolve_Sequence).
+    """
+
+    # The program lines from the first segment's From line to the last segment's To line.
+    #   Unit [List<Program_Line_Str>]
+    Lines: tp.List[Program_Line_Str] = field(default_factory=list)
+    # The segments in program order.
+    #   Unit [List<Sequence_Segment_Str>]
+    Segments: tp.List[Sequence_Segment_Str] = field(default_factory=list)
+    # Between each two segments, the station operation: the lines after the first's To line up to
+    # the second's From line, inclusive, copied verbatim.
+    #   Unit [List<List<Program_Line_Str>>]
+    Stations: tp.List[tp.List[Program_Line_Str]] = field(default_factory=list)
+    # The fixed station points of the generated rule (SPEC 9.7): every point the sequence moves to
+    # but its first and last end and the taught via points, in program order.
+    #   Unit [List<string>]
+    Station_Points: tp.List[str] = field(default_factory=list)
 
 
 def Parse_Numbers(text: str, line_number: int) -> tp.List[str]:
@@ -267,11 +318,11 @@ def Read_Program_Excerpt(text: str) -> tp.Dict[int, tp.List[Program_Line_Str]]:
     """
 
     cases: tp.Dict[int, tp.List[Program_Line_Str]] = {}
-    current = None
+    current, first = None, 0
     for number, raw in enumerate(text.split('\n')[:-1] if text.endswith('\n') else text.split('\n'), start=1):
         marker = CONST_CASE_MARKER.match(raw)
         if marker is not None:
-            current = int(marker.group(1))
+            current, first = int(marker.group(1)), int(marker.group(2) or 0)
             if current in cases:
                 raise URScript_Error_Cls('Line %d opens case %d a second time.' % (number, current))
             cases[current] = []
@@ -282,17 +333,18 @@ def Read_Program_Excerpt(text: str) -> tp.Dict[int, tp.List[Program_Line_Str]]:
                                          % (number, raw))
             continue
         movej, movel, gripper = CONST_PROGRAM_MOVEJ.match(raw), CONST_PROGRAM_MOVEL.match(raw), CONST_PROGRAM_GRIPPER.match(raw)
+        line = first + len(cases[current]) if first else 0
         if movej is not None:
-            cases[current].append(Program_Line_Str('movej', movej.group(1), raw))
+            cases[current].append(Program_Line_Str('movej', movej.group(1), raw, line))
         elif movel is not None:
-            cases[current].append(Program_Line_Str('movel', movel.group(1), raw))
+            cases[current].append(Program_Line_Str('movel', movel.group(1), raw, line))
         elif gripper is not None:
             if gripper.group(1) not in CONST_GRIPPER_ACTIONS:
                 raise URScript_Error_Cls('Line %d sets the gripper to position %s; only 0 (open) and 255 (close) are '
                                          'known.' % (number, gripper.group(1)))
-            cases[current].append(Program_Line_Str('gripper', CONST_GRIPPER_ACTIONS[gripper.group(1)], raw))
+            cases[current].append(Program_Line_Str('gripper', CONST_GRIPPER_ACTIONS[gripper.group(1)], raw, line))
         else:
-            cases[current].append(Program_Line_Str('other', '', raw))
+            cases[current].append(Program_Line_Str('other', '', raw, line))
     for case, lines in cases.items():
         if not lines:
             raise URScript_Error_Cls('Case %d has no lines.' % case)
@@ -675,25 +727,111 @@ def Program_Entries(lines: tp.Sequence[Program_Line_Str]) -> tp.List[tp.Tuple[st
     return entries
 
 
-def Rotation_Sequence(lines: tp.Sequence[Program_Line_Str], home: str) -> tp.List[Program_Line_Str]:
+def Resolve_Sequence(lines: tp.Sequence[Program_Line_Str], segments: tp.Sequence[tp.Tuple[str, str, str]],
+                     learned: tp.Collection[str]) -> Sequence_Plan_Str:
     """
     Description:
-        The rotation sequence of a case's program lines: from its first movej to home to its last,
-        inclusive (home -> ... -> home). Refuses a case that does not move to home exactly twice.
+        The sequence a job plans in a case's program lines (SPEC 10.6). Each segment's ends are
+        matched in program order: From at the next move to it after the previous segment's end, To at
+        the next move to it after From. The sequence runs from the first segment's From line to the
+        last segment's To line; the lines between two segments are their station operation, copied
+        verbatim. A segment's gripper state is the result of the case's last gripper action before
+        it (0 open, 255 close = holding), or, before the first, the opposite of that first action.
+        Refused, each with a sentence naming the segment and the line: an end that is not a learned
+        point, an end the case does not move to in that order, a segment containing a gripper action,
+        a station line blending (r > 0) into the generated segment after it, a case without gripper
+        actions, and two consecutive gripper actions of the same kind.
 
     Args:
         (1) lines [List<Program_Line_Str>]: The case's program lines in order (Read_Program_Excerpt).
-        (2) home [string]: The home point's name.
+        (2) segments [List<Tuple<string, string, string>>]: The segments (name, from, to), in program order.
+        (3) learned [Collection<string>]: The program's learned point names.
 
     Returns:
-        (1) parameter [List<Program_Line_Str>]: The lines of home -> ... -> home.
+        (1) parameter [Sequence_Plan_Str(object)]: The sequence.
     """
 
-    homes = [k for k, line in enumerate(lines) if line.Kind == 'movej' and line.Target == home]
-    if len(homes) != 2:
-        raise URScript_Error_Cls('The case moves to %s %d time(s); the rotation sequence needs exactly two (home -> ... -> home).'
-                                 % (home, len(homes)))
-    return list(lines[homes[0]:homes[1] + 1])
+    def Where(index: int) -> str:
+        """
+        Description:
+            Where a line of the case is, for a message: its program line, else its place in the case.
+
+        Args:
+            (1) index [int]: The line's index in the case.
+
+        Returns:
+            (1) parameter [string]: The place.
+        """
+
+        return 'program line %d' % lines[index].Line if lines[index].Line else 'case line %d' % (index + 1)
+
+    def Next_Move(target: str, after: int) -> int:
+        """
+        Description:
+            The index of the case's next move to a point after a line.
+
+        Args:
+            (1) target [string]: The point.
+            (2) after [int]: The index after which to look.
+
+        Returns:
+            (1) parameter [int]: The index, -1 when there is none.
+        """
+
+        for index in range(after + 1, len(lines)):
+            if lines[index].Kind in ('movej', 'movel') and lines[index].Target == target:
+                return index
+        return -1
+
+    # 1\ The gripper actions of the whole case: alternating, at least one.
+    actions = [(index, line.Target) for index, line in enumerate(lines) if line.Kind == 'gripper']
+    if not actions:
+        raise URScript_Error_Cls('The case has no gripper action, so the gripper state of its segments (holding or open) '
+                                 'cannot be derived.')
+    for (_, first), (index, second) in zip(actions[:-1], actions[1:]):
+        if first == second:
+            raise URScript_Error_Cls('The case\'s gripper actions must alternate; %s is a second %s in a row.' % (Where(index), second))
+
+    # 2\ Match the segments in order.
+    out, after = Sequence_Plan_Str(), -1
+    bounds = []
+    for name, start, goal in segments:
+        for point in (start, goal):
+            if point not in learned:
+                raise URScript_Error_Cls('Segment %s (%s -> %s): %s is not a learned point of the program (it is not in the '
+                                         'positions extract).' % (name, start, goal, point))
+        i_from = Next_Move(start, after)
+        i_to = Next_Move(goal, i_from) if i_from >= 0 else -1
+        if i_from < 0 or i_to < 0:
+            missing, since = (start, after) if i_from < 0 else (goal, i_from)
+            raise URScript_Error_Cls('Segment %s (%s -> %s): the case does not move to %s after %s. A segment\'s ends are '
+                                     'matched in program order.' % (name, start, goal, missing,
+                                                                    Where(since) if since >= 0 else 'its start'))
+        crossed = [index for index, _ in actions if i_from < index < i_to]
+        if crossed:
+            raise URScript_Error_Cls('Segment %s (%s -> %s) contains the gripper action at %s (%s). A generated segment runs at '
+                                     'one gripper state; end it before the action.' % (name, start, goal, Where(crossed[0]),
+                                                                                        lines[crossed[0]].Raw.strip()))
+        if bounds and lines[i_from].Kind == 'movej' and ', r=' in lines[i_from].Raw:
+            raise URScript_Error_Cls('Segment %s (%s -> %s): the station line at %s blends into it (%s); a blend into a generated '
+                                     'segment is not checked (SPEC 8.5).' % (name, start, goal, Where(i_from), lines[i_from].Raw.strip()))
+        before = [target for index, target in actions if index < i_from]
+        state = ('open' if before[-1] == 'open' else 'holding') if before else ('holding' if actions[0][1] == 'open' else 'open')
+        out.Segments.append(Sequence_Segment_Str(name, start, goal, state,
+                                                 [line.Target for line in lines[i_from + 1:i_to] if line.Kind in ('movej', 'movel')],
+                                                 list(lines[i_from + 1:i_to + 1])))
+        if bounds:
+            out.Stations.append(list(lines[bounds[-1][1] + 1:i_from + 1]))
+        bounds.append((i_from, i_to))
+        after = i_to
+
+    # 3\ The sequence and its station points: every point it moves to, but its two ends and the taught via points.
+    out.Lines = list(lines[bounds[0][0]:bounds[-1][1] + 1])
+    for k, segment in enumerate(out.Segments):
+        names = ([segment.To] if k < len(out.Segments) - 1 else []) + (
+            [line.Target for line in out.Stations[k] if line.Kind in ('movej', 'movel')] if k < len(out.Stations) else [])
+        out.Station_Points += [n for n in names if n not in out.Station_Points]
+    return out
 
 
 def Read_Motion_Sequence(text: str) -> tp.List[Motion_Str]:

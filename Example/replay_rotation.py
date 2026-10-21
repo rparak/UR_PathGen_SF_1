@@ -57,9 +57,9 @@ from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP, CONST_GRIPPER_PREFIX, C
 #   ../Planner/Core — the duration estimates and their profile
 from Planner.Core import Segment_Duration, Linear_Duration, Profile_Fraction
 #   ../Example/plan_rotation — the case, the openings, the outputs and the clearance labels
-from plan_rotation import (CONST_CASE, CONST_TAUGHT_VIAS, CONST_STATION_POINTS, CONST_VARIANT_DIR, CONST_VARIANTS, CONST_FILE_NAMES,
+from plan_rotation import (CONST_DEFAULT_JOB, CONST_VARIANT_DIR, CONST_VARIANTS, CONST_FILE_NAMES,
                            CONST_MACHINE_INTERIOR, CONST_LABEL_CLEAR, CONST_LABEL_VIOLATED, CONST_LABEL_INVALID, CONST_REPORT_DISTMAX,
-                           Segments, Opening, Check_Learned)
+                           Job_Plan_Str, Load_Job_Plan, Segments, Opening, Check_Learned)
 
 """
 Description:
@@ -356,7 +356,7 @@ def Move_Text(move: Move_Str) -> str:
     return '%s -> %s (%s%s)' % (move.Kind, move.Target, move.Rule, ', ' + section if section else '')
 
 
-def Variant_Path(variant: str, points: tp.Dict, segment: str) -> tp.List[np.ndarray]:
+def Variant_Path(variant: str, points: tp.Dict, segment: str, plan: Job_Plan_Str) -> tp.List[np.ndarray]:
     """
     Description:
         One segment's path of a variant from its own points: the taught via points for the taught
@@ -366,15 +366,17 @@ def Variant_Path(variant: str, points: tp.Dict, segment: str) -> tp.List[np.ndar
     Args:
         (1) variant [string]: The variant.
         (2) points [Dict<string, Robot_Point_Str>]: The variant's points.
-        (3) segment [string]: 'S1', 'S2' or 'S3'.
+        (3) segment [string]: The segment's name.
+        (4) plan [Job_Plan_Str(object)]: The job (its segments and their taught via points).
 
     Returns:
         (1) parameter [List<Vector<float> 1x6>]: The configurations (rad).
     """
 
-    start, goal = Segments()[segment]
+    start, goal = Segments(plan)[segment]
     prefix = 'via_%s_%s_' % (start, goal)
-    vias = CONST_TAUGHT_VIAS[segment] if variant == 'taught' else sorted(name for name in points if name.startswith(prefix))
+    taught = {s.Name: s.Taught_Vias for s in plan.Sequence.Segments}[segment]
+    vias = taught if variant == 'taught' else sorted(name for name in points if name.startswith(prefix))
     return [np.asarray(points[n].Q) for n in [start] + vias + [goal]]
 
 
@@ -624,7 +626,7 @@ def Build_Scenes(cfg: Cell_Configuration_Str, openings: tp.Dict[str, float], wit
 
 
 def Label_Moves(paths: tp.Dict, loaded: tp.Dict, scenes: tp.Dict[str, Scene_Cls], cfg: Cell_Configuration_Str,
-                skip_check: bool) -> None:
+                skip_check: bool, plan: Job_Plan_Str) -> None:
     """
     Description:
         Label every move of every variant (Check_Moves, with the variant's own station points) and
@@ -637,10 +639,11 @@ def Label_Moves(paths: tp.Dict, loaded: tp.Dict, scenes: tp.Dict[str, Scene_Cls]
         (3) scenes [Dict<string, Scene_Cls>]: The scene of each gripper state.
         (4) cfg [Cell_Configuration_Str(object)]: The cell configuration.
         (5) skip_check [bool]: --skip-check.
+        (6) plan [Job_Plan_Str(object)]: The job (its station points).
     """
 
     for variant, (_, moves) in paths.items():
-        station_q = [loaded[variant][1][n].Q for n in CONST_STATION_POINTS]
+        station_q = [loaded[variant][1][n].Q for n in plan.Sequence.Station_Points]
         if skip_check:
             for move in moves:
                 move.Label = '' if move.Kind == 'gripper' else 'clearance not checked (--skip-check)'
@@ -649,7 +652,7 @@ def Label_Moves(paths: tp.Dict, loaded: tp.Dict, scenes: tp.Dict[str, Scene_Cls]
             print('[INFO] %s: %s.' % (variant, '; '.join('%d move(s) %s' % (n, label) for label, n in sorted(counts.items()))))
 
 
-def Print_Strict_Comparison(variants: tp.Sequence[str], loaded: tp.Dict, scenes: tp.Dict[str, Scene_Cls]) -> None:
+def Print_Strict_Comparison(variants: tp.Sequence[str], loaded: tp.Dict, scenes: tp.Dict[str, Scene_Cls], plan: Job_Plan_Str) -> None:
     """
     Description:
         The strict comparison of several variants: S1 - S3 of each, from its own points, judged by
@@ -660,16 +663,17 @@ def Print_Strict_Comparison(variants: tp.Sequence[str], loaded: tp.Dict, scenes:
         (2) loaded [Dict<string, Tuple<List<Motion_Str>, Dict<string, Robot_Point_Str>>>]: Per variant: operations
                                                                                           and points.
         (3) scenes [Dict<string, Scene_Cls>]: The scene of each gripper state.
+        (4) plan [Job_Plan_Str(object)]: The job (its segments, their gripper states and the station points).
     """
 
-    for segment in ('S1', 'S2', 'S3'):
-        scene = scenes['open' if segment == 'S2' else 'holding']
+    for segment in plan.Sequence.Segments:
+        scene = scenes[segment.State]
         for variant in variants:
             points = loaded[variant][1]
-            path = Variant_Path(variant, points, segment)
-            label, samples, violations = Label(scene, path, [points[n].Q for n in CONST_STATION_POINTS])
+            path = Variant_Path(variant, points, segment.Name, plan)
+            label, samples, violations = Label(scene, path, [points[n].Q for n in plan.Sequence.Station_Points])
             print('[INFO] Strict comparison (generated rule), case %d %s %s (%d via points): %s - %d samples, %d violations.'
-                  % (CONST_CASE, segment, variant, len(path) - 2, label, samples, violations))
+                  % (plan.Job.Case, segment.Name, variant, len(path) - 2, label, samples, violations))
 
 
 def Show_In_Viewer(playlist: tp.List, scenes: tp.Dict[str, Scene_Cls], openings: tp.Dict[str, float], title: str, speed: float,
@@ -778,7 +782,8 @@ def main():
     print('[WARNING] Simulation passed != safe on the robot.')
     try:
         cfg = Load_Configuration(args.config)
-        openings = {state: Opening(cfg, state) for state in ('holding', 'open')}
+        plan = Load_Job_Plan(CONST_DEFAULT_JOB)
+        openings = {state: Opening(cfg, state, plan) for state in ('holding', 'open')}
         loaded = {variant: Load_Variant(os.path.join(CONST_VARIANT_DIR, variant)) for variant in variants}
         for variant, (_, points) in loaded.items():
             Check_Learned(cfg, points, 'variant %s' % variant)
@@ -787,7 +792,7 @@ def main():
         print('[ERROR] %s' % error)
         return 1
     print('[INFO] Path %d: %s. Gripper: holding %.1f mm (%s), open %.1f mm.'
-          % (number, name, openings['holding'] * 1e3, cfg.Holding_Openings[CONST_CASE][1], openings['open'] * 1e3))
+          % (number, name, openings['holding'] * 1e3, cfg.Holding_Openings[(plan.Program_Name, plan.Job.Case)][1], openings['open'] * 1e3))
     # The visual STL is the original CAD without the collision model's corrections: say so when it is asked for.
     if args.with_stl:
         print('[WARNING] %s' % Visual_Mesh_Warning(cfg))
@@ -796,14 +801,14 @@ def main():
     scenes = Build_Scenes(cfg, openings, with_visual)
     print('[INFO] Scene built in %.1f s: %d geoms; visual mesh %s.'
           % (time.time() - t0, scenes['holding'].Model.ngeom, 'loaded' if with_visual else 'not loaded'))
-    Label_Moves(paths, loaded, scenes, cfg, args.skip_check)
+    Label_Moves(paths, loaded, scenes, cfg, args.skip_check, plan)
     if len(variants) > 1 and not args.skip_check:
-        Print_Strict_Comparison(variants, loaded, scenes)
+        Print_Strict_Comparison(variants, loaded, scenes, plan)
     playlist = [(variant, start, moves, Frames(moves, args.speed)) for variant, (start, moves) in paths.items()]
     if args.headless or args.screenshots:
         Print_Steps(playlist, openings, args.speed)
         if args.screenshots:
-            Write_Screenshots(args.screenshots, number, paths, scenes, [loaded[variants[0]][1][n].Q for n in CONST_STATION_POINTS])
+            Write_Screenshots(args.screenshots, number, paths, scenes, [loaded[variants[0]][1][n].Q for n in plan.Sequence.Station_Points])
         return 0
     return Show_In_Viewer(playlist, scenes, openings, '%d: %s' % (number, name), args.speed, with_visual)
 

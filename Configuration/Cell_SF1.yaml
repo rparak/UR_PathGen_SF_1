@@ -121,11 +121,14 @@ Tool:
   # Inner pad-face gap of a scene that names no case of the program (the demo, the tests): the
   # 50 x 50 mm part (owner). A path of a program case uses Holding_Openings. REQUIRED. [m]
   Opening: 0.050
-  # Inner pad-face gap while the part of a case of sf1_plc_v4.script is held. The deliverable is
-  # case 17 (owner, 2026-10-18); used by its planning, verification and replay. Each entry: Case,
-  # Opening (> 0, at most the 85 mm stroke), Source. REQUIRED. [-, m, -]
+  # Inner pad-face gap while the part of a case of a robot program is held, per program and case:
+  # a case number names a case of one program only (owner, 2026-10-21). Used by the planning,
+  # verification and replay of a job of that case (Configuration/Jobs/). Each entry: Program (its
+  # folder under Data/Programs/), Case, Opening (> 0, at most the 85 mm stroke), Source. Case 18 has
+  # no entry: its part's size is not known (an earlier 50 mm was an assumption, SPEC 8).
+  # REQUIRED. [-, -, m, -]
   Holding_Openings:
-    - {Case: 17, Opening: 0.050, Source: 'owner, 2026-10-18: the 50 x 50 mm part'}
+    - {Program: sf1_plc_v4, Case: 17, Opening: 0.050, Source: 'owner, 2026-10-18: the 50 x 50 mm part'}
   # TCP in the flange frame [x, y, z, rx, ry, rz]: the Polyscope TCP of SF1 (owner, 2026-10-17),
   # identical to the Robotiq value (Instruction Manual rev. 2020/02/11, p. 127, section 5.2.3).
   # Configured, never derived from *_p. REQUIRED. [m, rad (rotation vector)]

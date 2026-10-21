@@ -816,7 +816,7 @@ Pinned by `test/Planner/test_core.py::test_plan_all_gives_the_same_paths_with_on
 ## The pick's wrist 3 is delivered one turn lower: the one exception to never turning a learned joint
 
 **Decision.** In the delivered output Waypoint_18, pick_rotate_1 and Waypoint_6 use wrist 3 =
-taught − 2π (`CONST_Q_TURNS`, `Delivered_Points` in `Example/plan_rotation.py`; owner, 2026-10-19:
+taught − 2π (the default job's `Point_Configurations`, applied by `Configured_Points` in `Example/plan_rotation.py`; owner, 2026-10-19:
 "q6 representative chosen to avoid an unnecessary wrist-3 turn"). Their `_p` and every other `_q`
 token stay the program's; the program's pick lines stay verbatim and take the new qnear.
 
@@ -954,3 +954,37 @@ nested switch, a default case).
 
 Pinned by `test/Example/test_extract_program.py` (the synthetic program, the refusals, and, with
 `SF1_PLC_V4_SCRIPT` set, the re-extraction of the committed files).
+
+## What is planned is a job file; what it implies in the program is derived, not configured
+
+**Decision.** `Example/plan_rotation.py --job <name>` plans `Configuration/Jobs/<name>.yaml`
+(owner, 2026-10-21; SPEC §8.6): the program folder, the case, the segments (from, to), the point
+configurations (joint turns, IK branches) and the output names and wording. The gripper state of
+each segment, the station operations, the fixed station points and the station time are derived
+from the case's lines (`Resolve_Sequence`, `Load_Job_Plan`). The default job
+`sf1_plc_v4_case_17` writes the earlier output byte for byte. `Tool.Holding_Openings` stays in
+the cell configuration, keyed by program and case. There is no `Home` field: the sequence runs from
+the first segment's `From` to the last segment's `To`.
+
+**Why.** Every new case, path or program meant editing code constants (the case, the point names,
+the station points, the taught via points, the segment states, the output names) and the code
+that assembled the output for one drop and one pick. A derived value stored next to its inputs
+drifts from them: the station points and the gripper states follow from the program's lines. A
+`Home` field could only equal the first `From` and the last `To`, a field with a single legal
+value. `Output.Title`, `Output.Status` and `Output.Stations` exist because the delivered headers'
+wording ("the rotation sequence", "Delivered.", "Station: drop / pick") cannot be derived and the
+output had to stay byte for byte.
+
+**Alternatives.** Job fields inside `Cell_SF1.yaml` were rejected: the cell and what is planned in
+it change independently. Configuring the gripper states was rejected: they would contradict the
+program's gripper lines silently. Keying the holding opening by case number only was rejected:
+case 17 of another program would take sf1_plc_v4's 50 mm. Making the generated `movej` speed a job
+field was deferred: the planner's objective uses it (`KNOWN_ISSUES.md`).
+
+**Revisit if** a program's station operation needs a line that is not copied verbatim, or a
+segment must cross a gripper action.
+
+Pinned by `test/Configuration/test_core.py` (the job loader), `test/URScript/test_core.py`
+(`Resolve_Sequence` on case 17 and its refusals), `test/Example/test_plan_rotation.py` (the default
+job's points, sequence, station time and output names; *slow*: the default job writes
+`Data/Generated/` byte for byte).

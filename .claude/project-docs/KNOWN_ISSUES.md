@@ -193,6 +193,22 @@ are recorded), so what follows is open for c3; for c2 it describes the files as 
 - **What would close it:** for c3, re-teaching on the robot (owner, 2026-10-19: not now, no robot
   available).
 
+## Generated moves run at sf1_plc_v4's movej a and v only; a job at another speed is refused
+
+The generated `movej` lines are written with the program's `a` = 1.3962634015954636 rad/s² and
+`v` = 1.0471975511965976 rad/s (`CONST_MOVEJ_A_TOKEN` / `_V_TOKEN`, `src/Planner/Core.py`), and the
+planner's duration objective uses the same values. A job whose taught segment lines move at another
+`a` or `v` is refused before planning (`Load_Job_Plan`, SPEC §8.6), rather than written at a speed
+its estimate did not assume.
+
+- **Impact:** a program taught at other joint speeds cannot be planned until the tokens become a
+  per-job value; the station lines, copied verbatim, keep their own speeds.
+- **Evidence:** every taught `movej` inside S1 – S3 of cases 17 and 18 uses these tokens (the
+  extract, 2026-10-21).
+- **Pinned by:** the check in `Load_Job_Plan`, `Example/plan_rotation.py`.
+- **What would close it:** the segment's taught `a` and `v` carried into its planning request and
+  its written moves.
+
 ## The replay's timing is an estimate
 
 `Example/replay_rotation.py` plays each move for its estimated duration (the trapezoid of SPEC

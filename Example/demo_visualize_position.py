@@ -39,16 +39,16 @@ import typing as tp
 #   ../Configuration/Core — the cell configuration
 from Configuration.Core import Load_Configuration, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE
 #   ../URScript/Core — the learned points
-from URScript.Core import Read_URScript, Robot_Point_Str
+from URScript.Core import Robot_Point_Str, URScript_Error_Cls
 #   ../Kinematics/Core — the refusal of a point outside the FK sanity bound
 from Kinematics.Core import Kinematics_Error_Cls
 #   ../Scene/Core — the scene
 from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP, Visual_Mesh_Warning
-#   ../Example/plan_rotation — the program extract, the case, the openings and the clearance label
-from plan_rotation import CONST_POSITIONS, CONST_CASE, Opening, Configuration_Label, Check_Learned
+#   ../Example/plan_rotation — the default job (the program extract, the case), the openings and the clearance label
+from plan_rotation import CONST_DEFAULT_JOB, Load_Job_Plan, Opening, Configuration_Label, Check_Learned
 
 
-def Resolve_Name(name: str, points: tp.Dict[str, Robot_Point_Str]) -> tp.Tuple[str, str]:
+def Resolve_Name(name: str, points: tp.Dict[str, Robot_Point_Str], source: str) -> tp.Tuple[str, str]:
     """
     Description:
         The learned point a --pos argument names: a joint position, with or without its _q suffix.
@@ -58,6 +58,7 @@ def Resolve_Name(name: str, points: tp.Dict[str, Robot_Point_Str]) -> tp.Tuple[s
     Args:
         (1) name [string]: The argument.
         (2) points [Dict<string, Robot_Point_Str>]: The learned points.
+        (3) source [string]: The file they come from, for the message.
 
     Returns:
         (1) parameter [Tuple<string, string>]: The point name and '' - or '' and the refusal sentence.
@@ -69,15 +70,15 @@ def Resolve_Name(name: str, points: tp.Dict[str, Robot_Point_Str]) -> tp.Tuple[s
     base = name[:-2] if name.endswith('_q') else name
     if base not in points:
         return '', ('There is no learned position "%s" in %s. --list prints the %d names.'
-                    % (name, os.path.basename(CONST_POSITIONS), len(points)))
+                    % (name, source, len(points)))
     return base, ''
 
 
 def main():
     """
     Description:
-        Show the robot static at one learned position of the program extract, with the gripper at
-        case 17's holding opening or open, and report its clearance under the taught rule.
+        Show the robot static at one learned position of the default job's program extract, with the
+        gripper at its case's (17) holding opening or open, and report its clearance under the taught rule.
 
             macOS:  .venv/bin/mjpython Example/demo_visualize_position.py --pos home_q
             List:   .venv/bin/python Example/demo_visualize_position.py --list
@@ -96,29 +97,33 @@ def main():
     parser.add_argument('--with-stl', action='store_true', help='load the visual STL of the cell (default: collision geometry only)')
     parser.add_argument('--headless', action='store_true', help='report without a viewer')
     args = parser.parse_args()
-    with open(CONST_POSITIONS, encoding='utf-8') as handle:
-        points = Read_URScript(handle.read()).Points
+    try:
+        plan = Load_Job_Plan(CONST_DEFAULT_JOB)
+    except (Configuration_Error_Cls, URScript_Error_Cls, OSError) as error:
+        print('[ERROR] %s' % error)
+        return 1
+    points, source, case = plan.Points, os.path.basename(plan.Positions), plan.Job.Case
     if args.list:
-        print('[INFO] %d learned positions in %s:' % (len(points), os.path.basename(CONST_POSITIONS)))
+        print('[INFO] %d learned positions in %s:' % (len(points), source))
         for name in points:
             print('  %s' % name)
         return 0
     if not args.pos:
         print('[ERROR] Name a position with --pos NAME (--list prints them).')
         return 1
-    name, refusal = Resolve_Name(args.pos, points)
+    name, refusal = Resolve_Name(args.pos, points, source)
     if refusal:
         print('[ERROR] %s' % refusal)
         return 1
     print('[WARNING] Simulation passed != safe on the robot.')
     try:
         cfg = Load_Configuration(args.config)
-        opening = Opening(cfg, args.opening)
-        Check_Learned(cfg, points, os.path.basename(CONST_POSITIONS))
+        opening = Opening(cfg, args.opening, plan)
+        Check_Learned(cfg, points, source)
     except (Configuration_Error_Cls, Kinematics_Error_Cls) as error:
         print('[ERROR] %s' % error)
         return 1
-    source = cfg.Holding_Openings[CONST_CASE][1] if args.opening == 'holding' else 'the full 2F-85 stroke'
+    opening_source = cfg.Holding_Openings[(plan.Program_Name, case)][1] if args.opening == 'holding' else 'the full 2F-85 stroke'
     # The visual STL is the original CAD without the collision model's corrections: say so when it is asked for.
     if args.with_stl:
         print('[WARNING] %s' % Visual_Mesh_Warning(cfg))
@@ -129,7 +134,7 @@ def main():
           % (time.time() - t0, scene.Model.ngeom, 'loaded' if with_visual else 'not loaded'))
     q = points[name].Q
     label, violations, interior = Configuration_Label(scene, cfg, q, 'taught')
-    print('[INFO] Position %s_q, gripper %s at %.1f mm (case %d: %s).' % (name, args.opening, opening * 1e3, CONST_CASE, source))
+    print('[INFO] Position %s_q, gripper %s at %.1f mm (case %d: %s).' % (name, args.opening, opening * 1e3, case, opening_source))
     for component, distance in interior:
         print('[WARNING] Within the margin of the machine (a) interior hull (component %d): %.1f mm.' % (component, distance * 1e3))
     for v in violations:
@@ -152,7 +157,7 @@ def main():
             if not with_visual:
                 viewer.opt.geomgroup[CONST_COLLISION_GROUP] = 1
         viewer.set_texts((mujoco.mjtFontScale.mjFONTSCALE_150, mujoco.mjtGridPos.mjGRID_TOPLEFT,
-                          '%s_q  gripper %s %.1f mm (case %d)' % (name, args.opening, opening * 1e3, CONST_CASE),
+                          '%s_q  gripper %s %.1f mm (case %d)' % (name, args.opening, opening * 1e3, case),
                           label + ('\n' + pairs if pairs else '')))
         while viewer.is_running():
             viewer.sync()

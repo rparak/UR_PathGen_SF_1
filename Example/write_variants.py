@@ -44,18 +44,17 @@ import numpy as np
 #   ../Configuration/Core — the cell configuration
 from Configuration.Core import Load_Configuration, Cell_Configuration_Str, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE, CONST_PROJECT_ROOT
 #   ../URScript/Core — the program extracts and the writers
-from URScript.Core import (Read_Motion_Sequence, Program_Entries, Make_Document, Write_URScript, Write_Motion_Sequence, Replace_Joints,
-                           Motion_Str, URScript_Error_Cls)
-#   ../Kinematics/Core — the proposals' branches and the TCP
-from Kinematics.Core import TCP_Pose, Solve_IK_Analytic, Pose_To_Matrix, Nearest_Representative, Kinematics_Error_Cls
+from URScript.Core import (Read_Motion_Sequence, Program_Entries, Make_Document, Write_URScript, Write_Motion_Sequence, Motion_Str,
+                           URScript_Error_Cls)
+#   ../Kinematics/Core — the TCP
+from Kinematics.Core import TCP_Pose, Kinematics_Error_Cls
 #   ../Scene/Core — the scene of each gripper state
 from Scene.Core import Scene_Cls
 #   ../Planner/Core — the planner
 from Planner.Core import Plan_All, Make_Pool, Planner_Error_Cls
-#   ../Example/plan_rotation — the case, its segments, the delivered points and the writer
-from plan_rotation import (CONST_CASE, CONST_POINTS, CONST_STATION_POINTS, CONST_PENALTY_WEIGHT, CONST_VARIANT_DIR, CONST_VARIANTS,
-                           CONST_FILE_NAMES, CONST_REPORT_DISTMAX, CONST_POSITIONS, Opening, Read_Program, Check_Learned, Plan_Requests,
-                           Delivered_Points, Write_Outputs)
+#   ../Example/plan_rotation — the default job (case 17), its configured points and the writer
+from plan_rotation import (CONST_DEFAULT_JOB, CONST_PENALTY_WEIGHT, CONST_VARIANT_DIR, CONST_VARIANTS, CONST_FILE_NAMES, CONST_REPORT_DISTMAX,
+                           Job_Plan_Str, Load_Job_Plan, Opening, Check_Learned, Plan_Requests, Configured_Points, Write_Outputs)
 #   ../Example/replay_rotation — the variant files and their moves, as replayed
 from replay_rotation import Load_Variant, Build_Moves, Run_Floors, Move_Samples, Move_Str
 #   ../Example/write_taught_programs — the points a case moves to
@@ -71,7 +70,7 @@ Description:
 #   Unit [Dict<string, string>]
 CONST_PROPOSAL_BRANCHES = {'c2': 'S- E- W-', 'c3': 'S- E- W+'}
 # The drop operation's points in order: each proposal point is the IK solution of its _p on the
-# branch nearest the point before it (drop_rotate_1: nearest home).
+# branch nearest the point before it (drop_rotate_1: nearest home; Configured_Points).
 #   Unit [Tuple<string>]
 CONST_DROP_POINTS = ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5')
 # The sections of home -> home in order, and the target each one ends with.
@@ -90,55 +89,46 @@ CONST_COLUMNS = ('variant', 'section', 'motion_lines', 'distinct_points', 'vias'
                  'least_room_margin_mm', 'violating_samples')
 
 
-def Proposal_Points(points: tp.Dict, branch: str, cfg: Cell_Configuration_Str) -> tp.Dict:
+def Proposal_Configurations(plan: Job_Plan_Str, branch: str) -> tp.List[tp.Tuple[str, int, int, str, str]]:
     """
     Description:
-        A proposal's points: the delivered points (Delivered_Points) with the drop's three on another
-        branch - each the nominal-DH IK of its _p on that branch (Solve_IK_Analytic), turned to the
-        representative nearest the point before it (home for drop_rotate_1). The _p tokens stay the
-        program's; the _q are generated. Not taught: a proposal for re-teaching on the robot.
+        A proposal's point configurations: the c1 job's (the pick's wrist 3 one turn lower) and the
+        drop's three on another IK branch, each nearest the point before it (Configured_Points).
+        The _p tokens stay the program's; the _q are generated.
 
     Args:
-        (1) points [Dict<string, Robot_Point_Str>]: The program's points.
+        (1) plan [Job_Plan_Str(object)]: The c1 job.
         (2) branch [string]: The drop's branch, e.g. 'S- E- W-'.
-        (3) cfg [Cell_Configuration_Str(object)]: The cell configuration (the TCP).
 
     Returns:
-        (1) parameter [Dict<string, Robot_Point_Str>]: The points.
+        (1) parameter [List<Tuple<string, int, int, string, string>>]: The configurations (Job_Configuration_Str form).
     """
 
-    out = Delivered_Points(points)
-    previous = np.asarray(points[CONST_POINTS['home']].Q, dtype=float)
-    for name in CONST_DROP_POINTS:
-        solutions = {b: q for b, q in Solve_IK_Analytic(Pose_To_Matrix(points[name].P), cfg.TCP_Offset)}
-        if branch not in solutions:
-            raise Kinematics_Error_Cls('%s has no solution on branch %s (its branches: %s).' % (name, branch, ', '.join(sorted(solutions))))
-        previous = Nearest_Representative(solutions[branch], previous)
-        out[name] = Replace_Joints(points[name], previous)
-    return out
+    return list(plan.Job.Point_Configurations) + [(name, -1, 0, branch, 'proposal for re-teaching (owner, 2026-10-19)')
+                                                  for name in CONST_DROP_POINTS]
 
 
-def Variant_Points(points: tp.Dict, cfg: Cell_Configuration_Str) -> tp.Dict[str, tp.Dict]:
+def Variant_Points(plan: Job_Plan_Str, cfg: Cell_Configuration_Str) -> tp.Dict[str, tp.Dict]:
     """
     Description:
         The points of every planned variant: b_optimised the program's (as before 2026-10-19), c1
-        the delivered ones, c2 and c3 the proposals.
+        the c1 job's (the pick's wrist 3 one turn lower), c2 and c3 the drop on another branch.
 
     Args:
-        (1) points [Dict<string, Robot_Point_Str>]: The program's points.
+        (1) plan [Job_Plan_Str(object)]: The c1 job.
         (2) cfg [Cell_Configuration_Str(object)]: The cell configuration.
 
     Returns:
         (1) parameter [Dict<string, Dict<string, Robot_Point_Str>>]: Variant -> its points.
     """
 
-    out = {'b_optimised': dict(points), 'c1': Delivered_Points(points)}
+    out = {'b_optimised': Configured_Points(plan, cfg, []), 'c1': Configured_Points(plan, cfg)}
     for variant, branch in CONST_PROPOSAL_BRANCHES.items():
-        out[variant] = Proposal_Points(points, branch, cfg)
+        out[variant] = Configured_Points(plan, cfg, Proposal_Configurations(plan, branch))
     return out
 
 
-def Write_Taught(folder: str, points: tp.Dict, lines: tp.Sequence, status: tp.Sequence[str]) -> None:
+def Write_Taught(folder: str, plan: Job_Plan_Str, status: tp.Sequence[str]) -> None:
     """
     Description:
         The taught variant: the points the taught sequence moves to (the program's tokens, in the
@@ -147,19 +137,19 @@ def Write_Taught(folder: str, points: tp.Dict, lines: tp.Sequence, status: tp.Se
 
     Args:
         (1) folder [string]: The variant's directory.
-        (2) points [Dict<string, Robot_Point_Str>]: The program's points.
-        (3) lines [List<Program_Line_Str>]: The rotation sequence's program lines.
-        (4) status [List<string>]: The status header lines.
+        (2) plan [Job_Plan_Str(object)]: The job (the program's points and the sequence's lines).
+        (3) status [List<string>]: The status header lines.
     """
 
+    points, lines, case = plan.Points, plan.Sequence.Lines, plan.Job.Case
     names = Case_Targets(lines)
     os.makedirs(folder, exist_ok=True)
-    header = ['# Case %d of sf1_plc_v4.script as taught, home -> home: the points it moves to, verbatim from' % CONST_CASE,
-              '# Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript. Written by Example/write_variants.py.'] + list(status) + [
+    header = ['# Case %d of %s as taught, home -> home: the points it moves to, verbatim from' % (case, plan.Program_File),
+              '# %s. Written by Example/write_variants.py.' % os.path.relpath(plan.Positions, CONST_PROJECT_ROOT)] + list(status) + [
               CONST_SAFETY_LINE]
     with open(os.path.join(folder, CONST_FILE_NAMES[0]), 'w', encoding='utf-8') as handle:
         handle.write(Write_URScript(Make_Document([points[name] for name in names], header)))
-    header = ['# Case %d of sf1_plc_v4.script as taught, home -> home: every movej and movel in program order, verbatim' % CONST_CASE,
+    header = ['# Case %d of %s as taught, home -> home: every movej and movel in program order, verbatim' % (case, plan.Program_File),
               '# (targets, a, v, r), the gripper actions as comments. Points: %s.' % CONST_FILE_NAMES[0]] + list(status) + [
               CONST_SAFETY_LINE]
     with open(os.path.join(folder, CONST_FILE_NAMES[1]), 'w', encoding='utf-8') as handle:
@@ -211,7 +201,7 @@ def Section_Of(moves: tp.Sequence[Move_Str]) -> tp.List[str]:
     return out
 
 
-def Measure_Variant(folder: str, cfg: Cell_Configuration_Str, scenes: tp.Dict[str, Scene_Cls]) -> tp.List[tp.Dict]:
+def Measure_Variant(folder: str, cfg: Cell_Configuration_Str, scenes: tp.Dict[str, Scene_Cls], plan: Job_Plan_Str) -> tp.List[tp.Dict]:
     """
     Description:
         The comparison rows of a written variant, per section and in total. Per move: the motion
@@ -228,13 +218,14 @@ def Measure_Variant(folder: str, cfg: Cell_Configuration_Str, scenes: tp.Dict[st
         (1) folder [string]: The variant's directory.
         (2) cfg [Cell_Configuration_Str(object)]: The cell configuration.
         (3) scenes [Dict<string, Scene_Cls>]: The scene of each gripper state ('holding', 'open').
+        (4) plan [Job_Plan_Str(object)]: The job (its station points).
 
     Returns:
         (1) parameter [List<Dict>]: One row per section, then the total.
     """
 
     moves, points, operations = Variant_Moves(folder, cfg)
-    station_q = [points[name].Q for name in CONST_STATION_POINTS]
+    station_q = [points[name].Q for name in plan.Sequence.Station_Points]
     tcps = scenes['holding'].Station_TCPs(station_q)
     floors = Run_Floors(moves, scenes)
     sections = Section_Of(moves)
@@ -392,7 +383,7 @@ def Read_Table_CSV(path: str) -> tp.Dict[str, tp.Dict[str, tp.Dict[str, str]]]:
     return table
 
 
-def Table_Markdown(table: tp.Dict[str, tp.List[tp.Dict]], blends: tp.Sequence[tp.Tuple[str, float]], base_z: float) -> str:
+def Table_Markdown(table: tp.Dict[str, tp.List[tp.Dict]], blends: tp.Sequence[tp.Tuple[str, float]], base_z: float, case: int) -> str:
     """
     Description:
         comparison.md: the variants and their status, the home -> home totals, then one table per
@@ -402,6 +393,7 @@ def Table_Markdown(table: tp.Dict[str, tp.List[tp.Dict]], blends: tp.Sequence[tp
         (1) table [Dict<string, List<Dict>>]: Variant -> its rows (Measure_Variant).
         (2) blends [List<Tuple<string, float>>]: The taught program's blended lines (target, r).
         (3) base_z [float]: The robot base height (Robot.Base_Position z) (m).
+        (4) case [int]: The case.
 
     Returns:
         (1) parameter [string]: The file content.
@@ -434,7 +426,7 @@ def Table_Markdown(table: tp.Dict[str, tp.List[tp.Dict]], blends: tp.Sequence[tp
         if key == 'room':
             return '%s mm, %s (margin %s mm)' % (f['least_room_mm'], f['least_room_pair'] or '-', f['least_room_margin_mm'])
         return f[key] or '-'
-    out = ['# Case %d home -> home: the variants compared' % CONST_CASE, '',
+    out = ['# Case %d home -> home: the variants compared' % case, '',
            'Written by `Example/write_variants.py` from the files in this directory; `comparison.csv` holds the same',
            'numbers. **Simulation passed ≠ safe on the robot.**', '',
            '| Variant | Status |', '|---|---|']
@@ -488,7 +480,7 @@ def Blends(folder: str) -> tp.List[tp.Tuple[str, float]]:
         return [(o.Target, o.R) for o in Read_Motion_Sequence(handle.read()) if o.Kind != 'gripper' and o.R > 0.0]
 
 
-def Write_Table(out: str, cfg: Cell_Configuration_Str, scenes: tp.Dict[str, Scene_Cls]) -> tp.Dict[str, tp.List[tp.Dict]]:
+def Write_Table(out: str, cfg: Cell_Configuration_Str, scenes: tp.Dict[str, Scene_Cls], plan: Job_Plan_Str) -> tp.Dict[str, tp.List[tp.Dict]]:
     """
     Description:
         Measure every written variant (Measure_Variant) and write comparison.csv and comparison.md.
@@ -497,16 +489,17 @@ def Write_Table(out: str, cfg: Cell_Configuration_Str, scenes: tp.Dict[str, Scen
         (1) out [string]: The variants directory.
         (2) cfg [Cell_Configuration_Str(object)]: The cell configuration.
         (3) scenes [Dict<string, Scene_Cls>]: The scene of each gripper state.
+        (4) plan [Job_Plan_Str(object)]: The job (its case and station points).
 
     Returns:
         (1) parameter [Dict<string, List<Dict>>]: Variant -> its rows.
     """
 
-    table = {variant: Measure_Variant(os.path.join(out, variant), cfg, scenes) for variant in CONST_VARIANTS}
+    table = {variant: Measure_Variant(os.path.join(out, variant), cfg, scenes, plan) for variant in CONST_VARIANTS}
     with open(os.path.join(out, CONST_TABLE_CSV), 'w', encoding='utf-8') as handle:
         handle.write(Table_CSV(table))
     with open(os.path.join(out, CONST_TABLE_MD), 'w', encoding='utf-8') as handle:
-        handle.write(Table_Markdown(table, Blends(os.path.join(out, 'taught')), cfg.Base_Position[2]))
+        handle.write(Table_Markdown(table, Blends(os.path.join(out, 'taught')), cfg.Base_Position[2], plan.Job.Case))
     return table
 
 
@@ -537,10 +530,10 @@ def main():
     print('[WARNING] Simulation passed != safe on the robot. c3 is a proposal for re-teaching, not verified on the robot.')
     try:
         cfg = Load_Configuration(args.config)
-        openings = {state: Opening(cfg, state) for state in ('holding', 'open')}
-        points, lines = Read_Program()
-        Check_Learned(cfg, points, os.path.basename(CONST_POSITIONS))
-        variant_points = Variant_Points(points, cfg)
+        plan = Load_Job_Plan(CONST_DEFAULT_JOB)
+        openings = {state: Opening(cfg, state, plan) for state in ('holding', 'open')}
+        Check_Learned(cfg, plan.Points, os.path.basename(plan.Positions))
+        variant_points = Variant_Points(plan, cfg)
     except (Configuration_Error_Cls, URScript_Error_Cls, Kinematics_Error_Cls, OSError) as error:
         print('[ERROR] %s' % error)
         return 1
@@ -549,7 +542,7 @@ def main():
         requests = []
         for variant, vp in variant_points.items():
             requests += [dataclasses.replace(r, Label='%s %s' % (variant, r.Label))
-                         for r in Plan_Requests(cfg, vp, [vp[n].Q for n in CONST_STATION_POINTS], CONST_PENALTY_WEIGHT)]
+                         for r in Plan_Requests(cfg, plan, vp, [vp[n].Q for n in plan.Sequence.Station_Points], CONST_PENALTY_WEIGHT)]
         try:
             if args.workers > 1:
                 with Make_Pool(args.workers) as pool:
@@ -561,14 +554,16 @@ def main():
             return 1
         print('[INFO] Planned %d segments of %d variants in %.0f s (%d worker%s).'
               % (len(requests), len(variant_points), time.time() - started, args.workers, '' if args.workers == 1 else 's'))
-        Write_Taught(os.path.join(args.out, 'taught'), points, lines, Status_Lines('taught'))
+        Write_Taught(os.path.join(args.out, 'taught'), plan, Status_Lines('taught'))
+        segments = [s.Name for s in plan.Sequence.Segments]
         for k, (variant, vp) in enumerate(variant_points.items()):
-            generated = {s: r.Path for s, r in zip(('S1', 'S2', 'S3'), results[3 * k:3 * k + 3])}
-            Write_Outputs(os.path.join(args.out, variant), cfg, vp, points, lines, generated, CONST_PENALTY_WEIGHT, Status_Lines(variant))
+            generated = {s: r.Path for s, r in zip(segments, results[len(segments) * k:len(segments) * (k + 1)])}
+            Write_Outputs(os.path.join(args.out, variant), cfg, plan, vp, generated, CONST_PENALTY_WEIGHT, Status_Lines(variant),
+                          CONST_FILE_NAMES)
     scenes = {state: Scene_Cls(dataclasses.replace(cfg, Opening=o)) for state, o in openings.items()}
     measured = time.time()
-    table = Write_Table(args.out, cfg, scenes)
-    print('[INFO] Variants (case %d home -> home; estimated durations, r = 0, blends and gripper excluded):' % CONST_CASE)
+    table = Write_Table(args.out, cfg, scenes, plan)
+    print('[INFO] Variants (case %d home -> home; estimated durations, r = 0, blends and gripper excluded):' % plan.Job.Case)
     for variant, rows in table.items():
         total = rows[-1]
         print('[INFO]   %-12s %6.2f s  %2d lines  max robot z %.3f m  closest %.1f mm (%s)  %d samples breaking the rule  [%s]'

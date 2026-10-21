@@ -36,17 +36,20 @@ import typing as tp
 from Configuration.Core import CONST_PROJECT_ROOT
 #   ../URScript/Core — the writers
 from URScript.Core import Program_Entries, Program_Line_Str, Make_Document, Write_URScript, Write_Motion_Sequence, URScript_Error_Cls
-#   ../Example/plan_rotation — the program extracts (SPEC 10.1) and the case (case 17, home -> ... -> home)
-from plan_rotation import CONST_PROGRAM_DIR, CONST_CASE, Read_Program
+#   ../Configuration/Core — the error a job raises
+from Configuration.Core import Configuration_Error_Cls
+#   ../Example/plan_rotation — the default job: the program extracts (SPEC 10.1) and its sequence (case 17, home -> ... -> home)
+from plan_rotation import CONST_DEFAULT_JOB, Load_Job_Plan
 
 """
 Description:
     Initialization of constants.
 """
-# The file names of the simplified program: its points and its motion sequence.
+# The file names of the simplified program, in the program folder: its points and its motion
+# sequence (program folder name, case).
 #   Unit [string]
-CONST_POINTS_NAME = 'sf1_plc_v4_case_%d.urscript' % CONST_CASE
-CONST_SEQUENCE_NAME = 'sf1_plc_v4_case_%d_sequence.script' % CONST_CASE
+CONST_POINTS_NAME = '%s_case_%d.urscript'
+CONST_SEQUENCE_NAME = '%s_case_%d_sequence.script'
 
 
 def Case_Targets(lines: tp.Sequence[Program_Line_Str]) -> tp.List[str]:
@@ -80,35 +83,34 @@ def main():
     """
 
     parser = argparse.ArgumentParser(description='Write the simplified taught program of case 17 (home -> home).')
-    parser.add_argument('--out', default=CONST_PROGRAM_DIR, help='output directory (default: %(default)s)')
+    parser.add_argument('--out', default='', help='output directory (default: the default job\'s program folder)')
     args = parser.parse_args()
     try:
-        points, lines = Read_Program()
-    except (OSError, URScript_Error_Cls) as error:
+        plan = Load_Job_Plan(CONST_DEFAULT_JOB)
+    except (OSError, URScript_Error_Cls, Configuration_Error_Cls) as error:
         print('[ERROR] %s' % error)
         return 1
+    points, lines, case = plan.Points, plan.Sequence.Lines, plan.Job.Case
+    out = args.out or plan.Job.Program
+    points_name, sequence_name = CONST_POINTS_NAME % (plan.Program_Name, case), CONST_SEQUENCE_NAME % (plan.Program_Name, case)
     targets = Case_Targets(lines)
-    missing = [name for name in targets if name not in points]
-    if missing:
-        print('[ERROR] Case %d moves to %s, which the positions extract does not hold.' % (CONST_CASE, ', '.join(missing)))
-        return 1
-    os.makedirs(args.out, exist_ok=True)
-    points_header = ['# Case %d of sf1_plc_v4.script as taught, home -> home: the points it moves to, in the order of' % CONST_CASE,
-                     '# first use, verbatim from Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript. Written by',
+    os.makedirs(out, exist_ok=True)
+    points_header = ['# Case %d of %s as taught, home -> home: the points it moves to, in the order of' % (case, plan.Program_File),
+                     '# first use, verbatim from %s. Written by' % os.path.relpath(plan.Positions, CONST_PROJECT_ROOT),
                      '# Example/write_taught_programs.py.',
                      '# _p: TCP pose [m, rad rotation vector] in the Polyscope base frame; _q: joints [rad], base to wrist 3.']
-    with open(os.path.join(args.out, CONST_POINTS_NAME), 'w', encoding='utf-8') as handle:
+    with open(os.path.join(out, points_name), 'w', encoding='utf-8') as handle:
         handle.write(Write_URScript(Make_Document([points[name] for name in targets], points_header)))
-    sequence_header = ['# Case %d of sf1_plc_v4.script as taught, the rotation sequence home -> home: every movej and movel' % CONST_CASE,
+    sequence_header = ['# Case %d of %s as taught, the rotation sequence home -> home: every movej and movel' % (case, plan.Program_File),
                        '# in program order, verbatim (targets, a, v, r), the gripper actions as comments. Left out: the',
                        '# Robotiq URCap code, the PLC I/O and the waits.',
-                       '# Points: %s. Written by Example/write_taught_programs.py.' % CONST_POINTS_NAME]
-    with open(os.path.join(args.out, CONST_SEQUENCE_NAME), 'w', encoding='utf-8') as handle:
+                       '# Points: %s. Written by Example/write_taught_programs.py.' % points_name]
+    with open(os.path.join(out, sequence_name), 'w', encoding='utf-8') as handle:
         # No generated movej here: the a and v tokens are not used.
         handle.write(Write_Motion_Sequence(Program_Entries(lines), sequence_header, '', ''))
     print('[INFO] Case %d (home -> home): %d points, %d motion lines, %d gripper actions written to %s.'
-          % (CONST_CASE, len(targets), sum(1 for line in lines if line.Kind in ('movej', 'movel')),
-             sum(1 for line in lines if line.Kind == 'gripper'), os.path.relpath(args.out, CONST_PROJECT_ROOT)))
+          % (case, len(targets), sum(1 for line in lines if line.Kind in ('movej', 'movel')),
+             sum(1 for line in lines if line.Kind == 'gripper'), os.path.relpath(out, CONST_PROJECT_ROOT)))
     return 0
 
 

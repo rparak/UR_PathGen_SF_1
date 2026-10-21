@@ -149,15 +149,14 @@ def test_with_stl_warns_that_the_stl_is_not_the_collision_model(root, tmp_path, 
 def test_every_script_takes_the_positions_path_from_plan_rotation(root):
     """
     Description:
-        The program extract of the learned points has one definition, plan_rotation's
-        CONST_POSITIONS: the demo uses it, and no other script in Example/ builds a path from the
-        file's name (a string literal that is the name alone; the headers that quote it in a
-        sentence are text, not a path).
+        The program extract of the learned points comes from the job: the demo reads the default
+        job's (plan_rotation's Default_Positions, Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript)
+        and no script in Example/ builds a path from the file's name (a string literal that is the
+        name alone; the headers that quote it in a sentence are text, not a path).
     """
 
     demo = _Demo_Module(root)
-    import plan_rotation
-    assert demo.CONST_POSITIONS == plan_rotation.CONST_POSITIONS
+    assert demo.Default_Positions() == os.path.join(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_positions.urscript')
     folder = os.path.join(root, 'Example')
     defining = []
     for name in sorted(n for n in os.listdir(folder) if n.endswith('.py')):
@@ -165,4 +164,4 @@ def test_every_script_takes_the_positions_path_from_plan_rotation(root):
             tree = ast.parse(handle.read())
         if any(isinstance(node, ast.Constant) and node.value == 'sf1_plc_v4_positions.urscript' for node in ast.walk(tree)):
             defining.append(name)
-    assert defining == ['plan_rotation.py']
+    assert defining == []

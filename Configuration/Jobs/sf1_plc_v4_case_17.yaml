@@ -1,0 +1,59 @@
+## =========================================================================== ##
+# Description:
+#   Planning job: case 17 of sf1_plc_v4.script, home -> ... -> home, the deliverable (owner,
+#   2026-10-18). Planned by Example/plan_rotation.py (the default job, or --job sf1_plc_v4_case_17).
+#
+#   Read only by src/Configuration/Core.py (Load_Job); nothing writes it. Every field is
+#   REQUIRED: the loader fails, naming every missing or invalid field at once. A key the loader
+#   does not know is reported as a WARNING. Paths are relative to the repository root.
+#
+#   What the job implies in the program is derived from the case's lines, not configured: the
+#   gripper state of each segment (holding / open, from the gripper actions before it), the
+#   station operations (every line between two segments, copied verbatim), the fixed station
+#   points of the generated rule and the station time (estimated from those lines' a and v). The
+#   holding opening is the case's Tool.Holding_Openings entry in Configuration/Cell_SF1.yaml.
+## =========================================================================== ##
+
+# The program folder: its extracts, made by Example/extract_program.py, <folder>/<name>_positions.urscript
+# and the one <name>_cases_*.script holding Case; both must carry the same source sha256. REQUIRED. [path]
+Program: Data/Programs/sf1_plc_v4
+
+# The case of the program's switch, the body of its branch '(17 == switch_1)' (owner, 2026-10-18).
+# REQUIRED. [-]
+Case: 17
+
+# The segments planned, in program order (owner, 2026-10-18): S1 home -> drop, S2 retreat ->
+# approach, S3 lift -> home. Each: Name, From and To, learned points the case moves to; From is
+# matched at the next move to it after the previous segment, To at the next move to it after From.
+# The lines between From and To are replaced by a generated path (at most 5 via points); a segment
+# may not contain a gripper action. REQUIRED (at least one). [-, point, point]
+Segments:
+  - {Name: S1, From: home, To: drop_rotate_1}
+  - {Name: S2, From: Waypoint_5, To: Waypoint_18}
+  - {Name: S3, From: Waypoint_6, To: home}
+
+# Learned points written with another _q than taught; the _p stays the program's (SPEC 10.5). Each
+# is either a joint turn, {Point, Joint (1 base ... 6 wrist 3), Turns (whole turns, not 0), Source},
+# or an IK branch, {Point, Branch ("S<+|-> E<+|-> W<+|->"), Source}: the nominal-DH IK of the
+# point's _p on the branch, nearest the _q of the point the output moves to just before it. The
+# robot's get_inverse_kin(<name>_p, qnear=<name>_q) of a station line to such a point takes the
+# solution nearest the new qnear, which the first run at reduced speed confirms (KNOWN_ISSUES).
+# The pick's three points use wrist 3 one turn lower, 4.739 - 2 pi = -1.544 rad: S3 turns wrist 3 by
+# 1.5 instead of 4.7 rad (home -> home 17.50 -> 14.66 s, estimate). REQUIRED (may be empty).
+# [-, -, 2 pi, -, text]
+Point_Configurations:
+  - {Point: Waypoint_18, Joint: 6, Turns: -1, Source: 'owner, 2026-10-19: q6 representative chosen to avoid an unnecessary wrist-3 turn'}
+  - {Point: pick_rotate_1, Joint: 6, Turns: -1, Source: 'owner, 2026-10-19: q6 representative chosen to avoid an unnecessary wrist-3 turn'}
+  - {Point: Waypoint_6, Joint: 6, Turns: -1, Source: 'owner, 2026-10-19: q6 representative chosen to avoid an unnecessary wrist-3 turn'}
+
+# The output, written into plan_rotation.py's --out (default Data/Generated/). Points and Sequence:
+# the file names. Title: what the sequence is, in the headers ("the <Title> <from> -> <to>").
+# Status: what the output is, the first status line of both headers. Stations: the name of each
+# station operation between two segments, one fewer than Segments, in the sequence's comments.
+# Title and Status are one line of ASCII text each. REQUIRED, all five. [file, file, text, text, names]
+Output:
+  Points: SF1_Rotation_17.urscript
+  Sequence: SF1_Rotation_17_Sequence.script
+  Title: rotation sequence
+  Status: Delivered.
+  Stations: [drop, pick]

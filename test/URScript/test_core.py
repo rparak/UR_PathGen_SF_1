@@ -33,7 +33,7 @@ import pytest
 #   ../src/URScript/Core — the reader and writer under test
 from URScript.Core import (Read_URScript, Write_URScript, Write_Movej_Sequence, Make_Generated_Point, Make_Document,
                            Format_Generated, URScript_Error_Cls, Read_Program_Excerpt, Write_Motion_Sequence, Program_Entries,
-                           Gripper_Comment, Read_Motion_Sequence, Rotation_Sequence, Replace_Joints)
+                           Gripper_Comment, Read_Motion_Sequence, Resolve_Sequence, Replace_Joints)
 
 """
 Description:
@@ -215,26 +215,51 @@ def test_the_case_extract_reads_in_program_order(root):
         assert [(line.Kind, line.Target) for line in cases[case] if line.Kind != 'other'] == order
 
 
-def test_the_rotation_sequence_runs_from_the_first_home_to_the_last(root):
+def test_the_job_sequence_of_case_17_is_home_to_home_with_its_gripper_states(root):
     """
     Description:
-        Rotation_Sequence returns case 17's lines from its first movej to home to its second,
-        inclusive: the moves typed from the program (between load2 before it and load2 after it),
-        the two gripper actions inside; a case that moves to home once or three times is refused.
+        Resolve_Sequence on case 17 with the owner's segments (S1 home -> drop_rotate_1, S2
+        Waypoint_5 -> Waypoint_18, S3 Waypoint_6 -> home): the sequence runs from the first move to
+        home (program line 3407) to the second (3463), the moves typed from the program; S1 and S3
+        hold the part, S2 runs open (the release before it, the grasp after it, owner 2026-10-18); the
+        taught via points, the two station operations and the six station points are the program's.
     """
 
     lines = Read_Program_Excerpt(_Read_File(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_cases_17_18.script'))[17]
-    rotation = Rotation_Sequence(lines, 'home')
-    moves = [(line.Kind, line.Target) for line in rotation if line.Kind != 'other']
-    assert moves == [('movej', 'home'), ('movej', 'Waypoint_1'), ('movej', 'drop_rotate_1'), ('movel', 'Waypoint_4'),
-                     ('gripper', 'open'), ('movej', 'Waypoint_5'), ('movej', 'Waypoint_1'), ('movej', 'Waypoint_2'),
-                     ('movej', 'Waypoint_3'), ('movej', 'Waypoint_18'), ('movej', 'pick_rotate_1'), ('gripper', 'close'),
-                     ('movel', 'Waypoint_6'), ('movej', 'Waypoint_2'), ('movej', 'home')]
-    homes = [k for k, line in enumerate(lines) if line.Kind == 'movej' and line.Target == 'home']
-    with pytest.raises(URScript_Error_Cls, match='moves to home 1 time'):
-        Rotation_Sequence(lines[:homes[1]], 'home')
-    with pytest.raises(URScript_Error_Cls, match='moves to home 3 time'):
-        Rotation_Sequence(list(lines) + [lines[homes[0]]], 'home')
+    learned = Read_URScript(_Read_File(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_positions.urscript')).Points
+    plan = Resolve_Sequence(lines, [('S1', 'home', 'drop_rotate_1'), ('S2', 'Waypoint_5', 'Waypoint_18'), ('S3', 'Waypoint_6', 'home')],
+                            learned)
+    assert [(line.Kind, line.Target) for line in plan.Lines if line.Kind != 'other'] == [
+        ('movej', 'home'), ('movej', 'Waypoint_1'), ('movej', 'drop_rotate_1'), ('movel', 'Waypoint_4'), ('gripper', 'open'),
+        ('movej', 'Waypoint_5'), ('movej', 'Waypoint_1'), ('movej', 'Waypoint_2'), ('movej', 'Waypoint_3'), ('movej', 'Waypoint_18'),
+        ('movej', 'pick_rotate_1'), ('gripper', 'close'), ('movel', 'Waypoint_6'), ('movej', 'Waypoint_2'), ('movej', 'home')]
+    assert (plan.Lines[0].Line, plan.Lines[-1].Line) == (3407, 3463)
+    assert [(s.Name, s.State, s.Taught_Vias) for s in plan.Segments] == [
+        ('S1', 'holding', ['Waypoint_1']), ('S2', 'open', ['Waypoint_1', 'Waypoint_2', 'Waypoint_3']), ('S3', 'holding', ['Waypoint_2'])]
+    assert [[(line.Kind, line.Target) for line in station if line.Kind != 'other'] for station in plan.Stations] == [
+        [('movel', 'Waypoint_4'), ('gripper', 'open'), ('movej', 'Waypoint_5')],
+        [('movej', 'pick_rotate_1'), ('gripper', 'close'), ('movel', 'Waypoint_6')]]
+    assert plan.Station_Points == ['drop_rotate_1', 'Waypoint_4', 'Waypoint_5', 'Waypoint_18', 'pick_rotate_1', 'Waypoint_6']
+
+
+@pytest.mark.parametrize('segments, fragment', [
+    ([('S1', 'home', 'nowhere')], 'nowhere is not a learned point'),
+    ([('S1', 'drop_rotate_1', 'Waypoint_5')], 'contains the gripper action at program line 3425'),
+    ([('S1', 'Waypoint_5', 'Waypoint_18'), ('S2', 'home', 'drop_rotate_1')], 'does not move to drop_rotate_1 after program line 3463'),
+    ([('S1', 'home', 'drop_rotate_1'), ('S2', 'Waypoint_1', 'Waypoint_18')], 'line at program line 3433 blends into it'),
+])
+def test_a_segment_the_case_cannot_hold_is_refused(root, segments, fragment):
+    """
+    Description:
+        A segment end that is not a learned point, a segment crossing a gripper action, an end the
+        case does not reach in program order, and a station line blending into the next generated
+        segment are each refused with a sentence naming the segment and the program line.
+    """
+
+    lines = Read_Program_Excerpt(_Read_File(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_cases_17_18.script'))[17]
+    learned = Read_URScript(_Read_File(root, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_positions.urscript')).Points
+    with pytest.raises(URScript_Error_Cls, match=fragment):
+        Resolve_Sequence(lines, segments, learned)
 
 
 @pytest.mark.parametrize('text, fragment', [

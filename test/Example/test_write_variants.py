@@ -254,12 +254,13 @@ def test_the_table_is_what_the_variant_files_measure(root, cfg):
     """
 
     writer = _Writer(root)
-    scenes = {state: Scene_Cls(dataclasses.replace(cfg, Opening=writer.Opening(cfg, state))) for state in ('holding', 'open')}
-    table = {variant: writer.Measure_Variant(_Folder(root, variant), cfg, scenes) for variant in CONST_TOTALS}
+    plan = writer.Load_Job_Plan(writer.CONST_DEFAULT_JOB)
+    scenes = {state: Scene_Cls(dataclasses.replace(cfg, Opening=writer.Opening(cfg, state, plan))) for state in ('holding', 'open')}
+    table = {variant: writer.Measure_Variant(_Folder(root, variant), cfg, scenes, plan) for variant in CONST_TOTALS}
     with open(_Folder(root, 'comparison.csv'), encoding='utf-8') as handle:
         assert writer.Table_CSV(table) == handle.read()
     with open(_Folder(root, 'comparison.md'), encoding='utf-8') as handle:
-        assert writer.Table_Markdown(table, writer.Blends(_Folder(root, 'taught')), cfg.Base_Position[2]) == handle.read()
+        assert writer.Table_Markdown(table, writer.Blends(_Folder(root, 'taught')), cfg.Base_Position[2], 17) == handle.read()
 
 
 def test_the_table_is_read_back_as_written(root, tmp_path):

@@ -121,7 +121,7 @@ def scenes(cfg):
         be the one typed here.
     """
 
-    assert cfg.Holding_Openings[17][0] == CONST_OPENING['S1']
+    assert cfg.Holding_Openings[('sf1_plc_v4', 17)][0] == CONST_OPENING['S1']
     return {o: Scene_Cls(dataclasses.replace(cfg, Opening=o)) for o in sorted(set(CONST_OPENING.values()))}
 
 

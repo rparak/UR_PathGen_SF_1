@@ -38,6 +38,8 @@ import numpy as np
 # Custom Lib.:
 #   ../Kinematics/Core — the pose of a point
 from Kinematics.Core import TCP_Pose
+#   ../Planner/Core — the duration estimates, the station time typed from them
+from Planner.Core import Estimate_Duration, Linear_Duration
 #   ../Configuration/Core — the error a missing case raises
 from Configuration.Core import Configuration_Error_Cls
 #   ../URScript/Core — the case extract
@@ -66,35 +68,89 @@ def _Plan_Module(root):
     return module
 
 
+def _Job(plan, name='sf1_plc_v4_case_17'):
+    return plan.Load_Job_Plan(name)
+
+
 def test_the_holding_opening_is_the_cases_configured_value(root, cfg):
     """
     Description:
-        While the part is held, the path uses case 17's configured opening (another entry's opening
-        and Tool.Opening are not used); open is 85 mm.
+        While the part is held, the path uses the configured opening of case 17 of sf1_plc_v4
+        (another case's, another program's case 17 and Tool.Opening are not used); open is 85 mm.
     """
 
     plan = _Plan_Module(root)
-    other = dataclasses.replace(cfg, Opening=0.030, Holding_Openings={17: (0.045, 'a'), 18: (0.040, 'b')})
-    assert plan.Opening(other, 'holding') == 0.045
-    assert plan.Opening(other, 'open') == 0.085
+    other = dataclasses.replace(cfg, Opening=0.030, Holding_Openings={('sf1_plc_v4', 17): (0.045, 'a'), ('sf1_plc_v4', 18): (0.040, 'b'),
+                                                                      ('other', 17): (0.035, 'c')})
+    assert plan.Opening(other, 'holding', _Job(plan)) == 0.045
+    assert plan.Opening(other, 'open', _Job(plan)) == 0.085
 
 
 def test_a_configuration_without_case_17_is_refused(root, cfg):
     """
     Description:
-        A configuration whose Tool.Holding_Openings does not list case 17 is refused, naming the case
-        and the field, never given a default.
+        A configuration whose Tool.Holding_Openings does not list case 17 of sf1_plc_v4 is refused,
+        naming the case, the program and the field, never given a default (case 17 of another
+        program does not count).
     """
 
     plan = _Plan_Module(root)
-    with pytest.raises(Configuration_Error_Cls, match=r'Tool\.Holding_Openings has no entry for case 17'):
-        plan.Opening(dataclasses.replace(cfg, Holding_Openings={18: (0.050, 'a')}), 'holding')
+    with pytest.raises(Configuration_Error_Cls, match=r'Tool\.Holding_Openings has no entry for case 17 of sf1_plc_v4'):
+        plan.Opening(dataclasses.replace(cfg, Holding_Openings={('sf1_plc_v4', 18): (0.050, 'a'), ('other', 17): (0.05, 'b')}),
+                     'holding', _Job(plan))
+
+
+def test_the_variant_file_names_are_the_case_17_jobs_output(root):
+    """
+    Description:
+        The variants' file names (CONST_FILE_NAMES) are the default job's Output names: one name for
+        the delivered files in Data/Generated/ and in Data/Generated/variants/<name>/.
+    """
+
+    plan = _Plan_Module(root)
+    job = _Job(plan).Job
+    assert plan.CONST_FILE_NAMES == (job.Output_Points, job.Output_Sequence) == ('SF1_Rotation_17.urscript',
+                                                                              'SF1_Rotation_17_Sequence.script')
+
+
+def test_the_station_time_is_estimated_from_the_station_lines(root, cfg):
+    """
+    Description:
+        The station operations' time is the sum over their lines, each from the end before it with
+        its own a and v: the drop's movel (1.2 m/s^2, 0.25 m/s, SPEC 10.6) and retreat movej, the
+        pick's movej and the lift's movel, typed here from the program's sequence; 2.31 s (the
+        report, 2026-10-19).
+    """
+
+    plan = _Plan_Module(root)
+    job = _Job(plan)
+    p = plan.Configured_Points(job, cfg)
+    a, v = 1.3962634015954636, 1.0471975511965976
+    expected = (Linear_Duration(p['drop_rotate_1'].P, p['Waypoint_4'].P, 1.2, 0.25)
+                + Estimate_Duration([p['Waypoint_4'].Q, p['Waypoint_5'].Q], a, v)
+                + Estimate_Duration([p['Waypoint_18'].Q, p['pick_rotate_1'].Q], a, v)
+                + Linear_Duration(p['pick_rotate_1'].P, p['Waypoint_6'].P, 1.2, 0.25))
+    assert plan.Station_Duration(job, p) == expected
+    assert round(expected, 2) == 2.31
+
+
+def test_an_unknown_job_is_refused_before_anything_is_written(root, tmp_path):
+    """
+    Description:
+        --job naming no file in Configuration/Jobs/ is refused with exit 1, naming the job and the
+        jobs there; nothing is written.
+    """
+
+    result = _Run(root, tmp_path, '--job', 'sf1_plc_v4_case_99', '--out', str(tmp_path / 'out'))
+    assert result.returncode == 1
+    assert '[ERROR] The job "sf1_plc_v4_case_99" cannot be read' in result.stdout and 'sf1_plc_v4_case_17' in result.stdout
+    assert not (tmp_path / 'out').exists()
 
 
 def test_the_optimised_sequence_starts_at_home_with_a_generated_move(root):
     """
     Description:
-        Rotation_Entries is home -> ... -> home and nothing else: the program's move to home blends
+        Sequence_Entries of the default job is home -> ... -> home and nothing else: the program's move to home blends
         (r=0.01, typed from the program) into S1, so the start is a generated movej to home (r=0); S1
         - S3 are generated movej to their via points and ends; the station lines are the program's,
         verbatim; no line of the loading moves before or after appears.
@@ -105,7 +161,7 @@ def test_the_optimised_sequence_starts_at_home_with_a_generated_move(root):
         lines = Read_Program_Excerpt(handle.read())[17]
     homes = [k for k, line in enumerate(lines) if line.Kind == 'movej' and line.Target == 'home']
     assert lines[homes[0]].Raw.rstrip().endswith(', r=0.01)')
-    entries = plan.Rotation_Entries(lines[homes[0]:homes[1] + 1], {'S1': ['v1'], 'S2': ['v2'], 'S3': ['v3']})
+    entries = plan.Sequence_Entries(_Job(plan), {'S1': ['v1'], 'S2': ['v2'], 'S3': ['v3']})
     moves = [e for e in entries if e[0] != 'comment']
     raw = {(line.Kind, line.Target): line.Raw for line in lines[homes[0]:homes[1] + 1] if line.Kind in ('movel', 'movej')}
     assert moves == [('movej', 'home'), ('movej', 'v1'), ('movej', 'drop_rotate_1'), ('program', raw['movel', 'Waypoint_4']),
@@ -181,27 +237,28 @@ def test_a_parallel_run_writes_the_committed_output(root, tmp_path, cfg):
 def test_the_delivered_points_turn_only_the_picks_wrist_3(root, points, cfg):
     """
     Description:
-        Delivered_Points (owner, 2026-10-19, SPEC 10.5): wrist 3 of Waypoint_18, pick_rotate_1 and
+        Configured_Points of the default job (owner, 2026-10-19, SPEC 10.5): wrist 3 of Waypoint_18, pick_rotate_1 and
         Waypoint_6 one turn lower (taught 4.739 rad), every other joint and every _p token the
         program's, every other point unchanged; the same arm pose (DH TCP equal to 1e-12 m and
         rad); the given points are not changed.
     """
 
     plan = _Plan_Module(root)
-    before = {name: list(point.Q_Tokens) for name, point in points.items()}
-    delivered = plan.Delivered_Points(points)
+    job = _Job(plan)
+    before = {name: list(point.Q_Tokens) for name, point in job.Points.items()}
+    delivered = plan.Configured_Points(job, cfg)
     turned = ('Waypoint_18', 'pick_rotate_1', 'Waypoint_6')
     for name, point in points.items():
         d = delivered[name]
         assert d.P_Tokens == point.P_Tokens
         if name not in turned:
-            assert d is point
+            assert d.Q_Tokens == point.Q_Tokens
             continue
         assert d.Q_Tokens[:5] == point.Q_Tokens[:5] and point.Q[5] == pytest.approx(4.739, abs=0.001)
         assert d.Q[5] == pytest.approx(point.Q[5] - 2.0 * math.pi, abs=1e-11)
         a, b = TCP_Pose(d.Q, cfg.TCP_Offset), TCP_Pose(point.Q, cfg.TCP_Offset)
         assert np.max(np.abs(a - b)) < 1e-12
-    assert {name: list(point.Q_Tokens) for name, point in points.items()} == before
+    assert {name: list(point.Q_Tokens) for name, point in job.Points.items()} == before
 
 
 def test_the_delivered_headers_state_what_is_verbatim(root, points):
@@ -234,7 +291,7 @@ def test_the_delivered_headers_state_what_is_verbatim(root, points):
             in sequence)
 
 
-def test_a_written_point_with_another_pose_is_refused(root, points):
+def test_a_written_point_with_another_pose_is_refused(root, points, cfg):
     """
     Description:
         Provenance sorts the learned points written into verbatim and another _q, and refuses one
@@ -242,7 +299,7 @@ def test_a_written_point_with_another_pose_is_refused(root, points):
     """
 
     plan = _Plan_Module(root)
-    delivered = plan.Delivered_Points(points)
+    delivered = plan.Configured_Points(_Job(plan), cfg)
     assert plan.Provenance(['home', 'pick_rotate_1'], delivered, points) == (['home'], ['pick_rotate_1'])
     moved = dict(delivered, home=points['drop_rotate_1'])
     with pytest.raises(plan.Planner_Error_Cls, match='The point home to be written has another _p'):
@@ -262,3 +319,23 @@ def test_the_delivered_headers_state_the_machine_margin_and_its_source(root, cfg
             text = handle.read()
         assert '\n'.join('# ' + line for line in _Margin_Lines(cfg)) + '\n' in text, name
     assert cfg.Clearance_Environment + cfg.Machine_Extra_Margin == pytest.approx(0.030)
+
+
+def test_a_branch_point_is_the_ik_nearest_the_point_before_it(root, cfg):
+    """
+    Description:
+        A Branch configuration (owner, 2026-10-21, the chain rule) gives the drop's three points of c2
+        exactly the joints written in Data/Generated/variants/c2/ (made 2026-10-19 by the earlier
+        Proposal_Points, before the rule was a job field), token for token, with the program's _p;
+        the IK solution nearest each point's own taught _q would differ by one turn of wrist 2.
+    """
+
+    plan = _Plan_Module(root)
+    job = _Job(plan)
+    branch = [(name, -1, 0, 'S- E- W-', 'x') for name in ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5')]
+    points = plan.Configured_Points(job, cfg, list(job.Job.Point_Configurations) + branch)
+    with open(os.path.join(root, 'Data', 'Generated', 'variants', 'c2', 'SF1_Rotation_17.urscript'), encoding='utf-8') as handle:
+        c2 = Read_URScript(handle.read()).Points
+    for name in ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5', 'Waypoint_18', 'pick_rotate_1', 'Waypoint_6'):
+        assert (points[name].P_Tokens, points[name].Q_Tokens) == (c2[name].P_Tokens, c2[name].Q_Tokens), name
+    assert points['drop_rotate_1'].Q[4] - job.Points['drop_rotate_1'].Q[4] == pytest.approx(3.635, abs=0.001)

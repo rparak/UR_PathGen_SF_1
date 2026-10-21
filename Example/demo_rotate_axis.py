@@ -45,14 +45,14 @@ from Configuration.Core import Load_Configuration, Configuration_Error_Cls, CONS
 from URScript.Core import Read_URScript
 #   ../Scene/Core — the scene and its clearance check
 from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP, Visual_Mesh_Warning
-#   ../Example/plan_rotation — the program extract of the learned points
-from plan_rotation import CONST_POSITIONS
+#   ../Example/plan_rotation — the program extract of the learned points (the default job's)
+from plan_rotation import Default_Positions
 
 """
 Description:
     Initialization of constants.
 """
-# The learned point the motion starts from (read from plan_rotation's CONST_POSITIONS, SPEC 10.1).
+# The learned point the motion starts from (read from the default job's positions extract, SPEC 10.1).
 #   Unit [string]
 CONST_START = 'home'
 # The rotated joint (0 = base, shoulder_pan) and the amplitude around the start (owner, Q5).
@@ -164,12 +164,13 @@ def main():
     args = parser.parse_args()
     try:
         cfg = Load_Configuration(args.config)
+        positions = Default_Positions()
     except Configuration_Error_Cls as error:
         print('[ERROR] %s' % error)
         return 1
     for level, message in cfg.Notes:
         print('[%s] %s' % (level, message))
-    with open(CONST_POSITIONS, encoding='utf-8') as handle:
+    with open(positions, encoding='utf-8') as handle:
         start = Read_URScript(handle.read()).Points[CONST_START].Q
 
     # 1\ The scene (the visual mesh only when asked for and shown).

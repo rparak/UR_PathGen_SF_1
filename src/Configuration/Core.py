@@ -38,9 +38,10 @@ import yaml
 Description:
     Initialization of constants.
 
-    The only reader of the cell configuration (Configuration/Cell_SF1.yaml). Every field is
-    REQUIRED; every problem is collected and raised once as Configuration_Error_Cls. Angles in the
-    file are degrees, and are converted to radians here so that no other module converts units.
+    The only reader of the cell configuration (Configuration/Cell_SF1.yaml) and of the planning
+    jobs (Configuration/Jobs/<name>.yaml). Every field is REQUIRED; every problem is collected and
+    raised once as Configuration_Error_Cls. Angles in the file are degrees, and are converted to
+    radians here so that no other module converts units.
 """
 # The repository root (two levels above this file: src/Configuration/).
 #   Unit [string]
@@ -68,6 +69,24 @@ CONST_OVERRIDE_TRANSLATION_MAX = 0.150
 # rev. 2020/02/11, section 1). A holding opening above it cannot be configured.
 #   Unit [float] (m)
 CONST_GRIPPER_STROKE = 0.085
+# The planning jobs, Configuration/Jobs/<name>.yaml (SPEC 8.6).
+#   Unit [string]
+CONST_JOB_DIR = os.path.join(CONST_PROJECT_ROOT, 'Configuration', 'Jobs')
+# The joints of a joint vector, base to wrist 3, as a job's Point_Configurations numbers them (1-6)
+# and as messages and headers name them.
+#   Unit [Tuple<string>]
+CONST_JOINT_NAMES = ('base', 'shoulder', 'elbow', 'wrist 1', 'wrist 2', 'wrist 3')
+# An IK branch as Solve_IK_Analytic labels it: shoulder, elbow and wrist sign.
+#   Unit [Pattern]
+CONST_BRANCH = re.compile(r'S[+-] E[+-] W[+-]')
+# A learned point, segment or station name, and an output file name of a job.
+#   Unit [Pattern]
+CONST_JOB_NAME = re.compile(r'[A-Za-z_][A-Za-z0-9_]*')
+CONST_OUTPUT_FILE = {'Points': re.compile(r'[A-Za-z0-9_.-]+\.urscript'), 'Sequence': re.compile(r'[A-Za-z0-9_.-]+\.script')}
+# The known keys of a job, as CONST_SCHEMA.
+#   Unit [Dict]
+CONST_JOB_SCHEMA = {'Program': None, 'Case': None, 'Segments': None, 'Point_Configurations': None,
+                    'Output': {'Points': None, 'Sequence': None, 'Title': None, 'Status': None, 'Stations': None}}
 # The known keys, as nested dictionaries; a leaf is None. Used to report unknown keys.
 #   Unit [Dict]
 CONST_SCHEMA = {
@@ -149,9 +168,9 @@ class Cell_Configuration_Str:
     # Inner pad-face gap of a scene that names no case (the demo, the tests).
     #   Unit [float] (m)
     Opening: float = 0.0
-    # Inner pad-face gap while a case's part is held, per case of the robot program (opening, source).
-    #   Unit [Dict<int, Tuple<float, string>>] (-, m, -)
-    Holding_Openings: tp.Dict[int, tp.Tuple[float, str]] = field(default_factory=dict)
+    # Inner pad-face gap while a case's part is held, per program folder and case (opening, source).
+    #   Unit [Dict<Tuple<string, int>, Tuple<float, string>>] (-, -, m, -)
+    Holding_Openings: tp.Dict[tp.Tuple[str, int], tp.Tuple[float, str]] = field(default_factory=dict)
     # TCP in the flange frame [x, y, z, rx, ry, rz].
     #   Unit [Vector<float> 1x6] (m, rad)
     TCP_Offset: tp.List[float] = field(default_factory=list)
@@ -288,8 +307,9 @@ def Valid_Assembly_Override(item: tp.Any) -> bool:
 def Valid_Holding_Opening(item: tp.Any) -> bool:
     """
     Description:
-        Whether one entry of Tool.Holding_Openings has exactly the keys Case (a case number >= 1),
-        Opening (a finite number) and Source (non-empty text).
+        Whether one entry of Tool.Holding_Openings has exactly the keys Program (a program folder
+        name under Data/Programs/), Case (a case number >= 1), Opening (a finite number) and Source
+        (non-empty text).
 
     Args:
         (1) item [Any]: The entry as read from YAML.
@@ -298,7 +318,8 @@ def Valid_Holding_Opening(item: tp.Any) -> bool:
         (1) parameter [bool]: True when the entry is well formed.
     """
 
-    return (isinstance(item, dict) and set(item) == {'Case', 'Opening', 'Source'}
+    return (isinstance(item, dict) and set(item) == {'Program', 'Case', 'Opening', 'Source'}
+            and isinstance(item['Program'], str) and re.fullmatch(r'[A-Za-z0-9_.-]+', item['Program']) is not None
             and isinstance(item['Case'], int) and not isinstance(item['Case'], bool) and item['Case'] >= 1
             and isinstance(item['Opening'], (int, float)) and not isinstance(item['Opening'], bool)
             and math.isfinite(item['Opening'])
@@ -604,17 +625,17 @@ def Load_Configuration(config_path: str = CONST_DEFAULT_CONFIG_FILE) -> Cell_Con
     holding = reader.Raw('Tool.Holding_Openings')
     if holding is not None:
         if not isinstance(holding, list) or not holding or not all(Valid_Holding_Opening(h) for h in holding):
-            reader.Fail('Tool.Holding_Openings must be a non-empty list of {Case: case number >= 1, Opening: m, '
-                        'Source: text}, not %r.' % (holding,))
+            reader.Fail('Tool.Holding_Openings must be a non-empty list of {Program: program folder, Case: case number '
+                        '>= 1, Opening: m, Source: text}, not %r.' % (holding,))
         else:
             for h in holding:
                 if not 0.0 < h['Opening'] <= CONST_GRIPPER_STROKE:
-                    reader.Fail('Tool.Holding_Openings: case %d holds at %r m; the opening must be greater than 0 and '
-                                'at most the 2F-85 stroke of %.3f m.' % (h['Case'], h['Opening'], CONST_GRIPPER_STROKE))
-            cases = [h['Case'] for h in holding]
+                    reader.Fail('Tool.Holding_Openings: case %d of %s holds at %r m; the opening must be greater than 0 '
+                                'and at most the 2F-85 stroke of %.3f m.' % (h['Case'], h['Program'], h['Opening'], CONST_GRIPPER_STROKE))
+            cases = [(h['Program'], h['Case']) for h in holding]
             if len(set(cases)) != len(cases):
-                reader.Fail('Tool.Holding_Openings names a case more than once: %r.' % (cases,))
-            cfg.Holding_Openings = {h['Case']: (float(h['Opening']), h['Source']) for h in holding}
+                reader.Fail('Tool.Holding_Openings names a case of a program more than once: %r.' % (cases,))
+            cfg.Holding_Openings = {(h['Program'], h['Case']): (float(h['Opening']), h['Source']) for h in holding}
     cfg.TCP_Offset = reader.Vector('Tool.TCP_Offset', 6)
     cfg.Clearance_Environment = reader.Number('Clearance.Environment', positive=True)
     cfg.Clearance_Self = reader.Number('Clearance.Self', positive=True)
@@ -668,3 +689,194 @@ def Load_Configuration(config_path: str = CONST_DEFAULT_CONFIG_FILE) -> Cell_Con
     for key in Unknown_Keys(data, CONST_SCHEMA, ''):
         cfg.Notes.append(('WARNING', 'Unrecognised key %s is ignored (misspelt?).' % key))
     return cfg
+
+
+@dataclass
+class Job_Configuration_Str:
+    """
+    Description:
+        A loaded planning job (Configuration/Jobs/<name>.yaml): which program, case and segments are
+        planned, how learned points are configured, and what the output is called. Paths are
+        absolute. What the job implies in the program (the gripper states, the station lines) is
+        resolved from the program's lines, not stored here.
+    """
+
+    # The job's name (the file name without .yaml) and the file.
+    #   Unit [string]
+    Name: str = ''
+    File: str = ''
+    # The program folder holding the extracts (Example/extract_program.py).
+    #   Unit [string]
+    Program: str = ''
+    # The case of the program's switch.
+    #   Unit [int]
+    Case: int = 0
+    # The segments to optimise, in program order (name, from, to).
+    #   Unit [List<Tuple<string, string, string>>]
+    Segments: tp.List[tp.Tuple[str, str, str]] = field(default_factory=list)
+    # Learned points written with another _q: (point, joint index 0-5, whole turns, '', source) for a
+    # joint turn, (point, -1, 0, branch, source) for an IK branch.
+    #   Unit [List<Tuple<string, int, int, string, string>>] (-, -, 2 pi, -, -)
+    Point_Configurations: tp.List[tp.Tuple[str, int, int, str, str]] = field(default_factory=list)
+    # The output file names, the sequence's title and the output's status in the headers, and the
+    # name of each verbatim block between two segments.
+    #   Unit [string], [List<string>]
+    Output_Points: str = ''
+    Output_Sequence: str = ''
+    Title: str = ''
+    Status: str = ''
+    Stations: tp.List[str] = field(default_factory=list)
+    # (level, message) notes from the load, e.g. unknown keys.
+    #   Unit [List<Tuple<string, string>>]
+    Notes: tp.List[tp.Tuple[str, str]] = field(default_factory=list)
+
+
+def Job_File(job: str) -> str:
+    """
+    Description:
+        The file of a job: Configuration/Jobs/<job>.yaml for a name, the path itself for a path
+        ending in .yaml.
+
+    Args:
+        (1) job [string]: The job's name or file.
+
+    Returns:
+        (1) parameter [string]: The file.
+    """
+
+    return os.path.abspath(job) if job.endswith('.yaml') else os.path.join(CONST_JOB_DIR, job + '.yaml')
+
+
+def Header_Text(reader: Field_Reader_Cls, path: str) -> str:
+    """
+    Description:
+        A job's text that goes into an output header: non-empty, one line, ASCII only (the output
+        is pasted into a Polyscope program).
+
+    Args:
+        (1) reader [Field_Reader_Cls(object)]: The job's reader.
+        (2) path [string]: The dotted key path.
+
+    Returns:
+        (1) parameter [string]: The text ('' when missing or invalid; a problem is recorded).
+    """
+
+    value = reader.Raw(path)
+    if value is None:
+        return ''
+    if not isinstance(value, str) or not value.strip() or '\n' in value or not value.isascii():
+        reader.Fail('%s must be one line of ASCII text (it goes into the output headers), not %r.' % (path, value))
+        return ''
+    return value
+
+
+def Load_Job(job: str) -> Job_Configuration_Str:
+    """
+    Description:
+        Load and validate a planning job (SPEC 8.6), as Load_Configuration: every problem is
+        collected, then the load fails once with all of them; an unknown key is a WARNING note.
+
+    Args:
+        (1) job [string]: The job's name (Configuration/Jobs/<name>.yaml) or its file (*.yaml).
+
+    Returns:
+        (1) parameter [Job_Configuration_Str(object)]: The job.
+    """
+
+    # 1\ Read the file.
+    path = Job_File(job)
+    try:
+        with open(path, 'r', encoding='utf-8') as handle:
+            data = yaml.safe_load(handle)
+    except OSError as error:
+        known = sorted(name[:-5] for name in os.listdir(CONST_JOB_DIR) if name.endswith('.yaml')) if os.path.isdir(CONST_JOB_DIR) else []
+        raise Configuration_Error_Cls('The job "%s" cannot be read (%s). The jobs in Configuration/Jobs/: %s.'
+                                      % (job, error, ', '.join(known) or 'none')) from error
+    except yaml.YAMLError as error:
+        raise Configuration_Error_Cls('The job file "%s" is not valid YAML: %s' % (path, error)) from error
+    if not isinstance(data, dict):
+        raise Configuration_Error_Cls('The job file "%s" must be a mapping of fields.' % path)
+
+    # 2\ Read every field, collecting problems.
+    reader = Field_Reader_Cls(data)
+    out = Job_Configuration_Str(Name=os.path.basename(path)[:-5], File=path)
+    program = reader.Raw('Program')
+    if program is not None:
+        if not isinstance(program, str) or os.path.isabs(program) or not os.path.isdir(os.path.join(CONST_PROJECT_ROOT, program)):
+            reader.Fail('Program must name a program folder relative to the repository root (Data/Programs/<name>), not %r. '
+                        'Make it with Example/extract_program.py.' % (program,))
+        else:
+            out.Program = os.path.normpath(os.path.join(CONST_PROJECT_ROOT, program))
+    case = reader.Raw('Case')
+    if case is not None:
+        if not isinstance(case, int) or isinstance(case, bool) or case < 1:
+            reader.Fail('Case must be a case number >= 1, not %r.' % (case,))
+        else:
+            out.Case = case
+    segments = reader.Raw('Segments')
+    if segments is not None:
+        if not isinstance(segments, list) or not segments or not all(
+                isinstance(s, dict) and set(s) == {'Name', 'From', 'To'}
+                and all(isinstance(s[k], str) and CONST_JOB_NAME.fullmatch(s[k]) for k in s) for s in segments):
+            reader.Fail('Segments must be a non-empty list of {Name: name, From: learned point, To: learned point}, not %r.'
+                        % (segments,))
+        else:
+            out.Segments = [(s['Name'], s['From'], s['To']) for s in segments]
+            names = [s[0] for s in out.Segments]
+            if len(set(names)) != len(names):
+                reader.Fail('Segments names a segment more than once: %r.' % (names,))
+            for name, start, goal in out.Segments:
+                if start == goal:
+                    reader.Fail('Segments: %s starts and ends at %s; a segment joins two points.' % (name, start))
+    configurations = reader.Raw('Point_Configurations')
+    if configurations is not None:
+        if not isinstance(configurations, list):
+            reader.Fail('Point_Configurations must be a list (may be empty), not %r.' % (configurations,))
+            configurations = []
+        for item in configurations:
+            turn = isinstance(item, dict) and set(item) == {'Point', 'Joint', 'Turns', 'Source'}
+            branch = isinstance(item, dict) and set(item) == {'Point', 'Branch', 'Source'}
+            if not (turn or branch) or not isinstance(item['Point'], str) or not CONST_JOB_NAME.fullmatch(item['Point']) \
+                    or not isinstance(item['Source'], str) or not item['Source'].strip() or not item['Source'].isascii():
+                reader.Fail('Point_Configurations: each entry is {Point, Joint: 1-6, Turns: whole turns != 0, Source} or '
+                            '{Point, Branch: e.g. "S- E- W-", Source}, the source ASCII text, not %r.' % (item,))
+            elif turn and not (isinstance(item['Joint'], int) and not isinstance(item['Joint'], bool) and 1 <= item['Joint'] <= 6
+                               and isinstance(item['Turns'], int) and not isinstance(item['Turns'], bool) and item['Turns'] != 0):
+                reader.Fail('Point_Configurations: %s needs Joint 1 (base) to 6 (wrist 3) and Turns a whole number other '
+                            'than 0, not %r.' % (item['Point'], item))
+            elif branch and not (isinstance(item['Branch'], str) and CONST_BRANCH.fullmatch(item['Branch'])):
+                reader.Fail('Point_Configurations: %s needs Branch as "S<+|-> E<+|-> W<+|->", not %r.' % (item['Point'], item['Branch']))
+            elif turn:
+                out.Point_Configurations.append((item['Point'], item['Joint'] - 1, item['Turns'], '', item['Source']))
+            else:
+                out.Point_Configurations.append((item['Point'], -1, 0, item['Branch'], item['Source']))
+        points = [c[0] for c in out.Point_Configurations]
+        if len(set(points)) != len(points):
+            reader.Fail('Point_Configurations configures a point more than once: %r. One entry per point.' % (points,))
+    for key in ('Points', 'Sequence'):
+        value = reader.Raw('Output.' + key)
+        if value is not None and not (isinstance(value, str) and CONST_OUTPUT_FILE[key].fullmatch(value)):
+            reader.Fail('Output.%s must be a file name ending in %s, not %r.'
+                        % (key, '.urscript' if key == 'Points' else '.script', value))
+        elif value is not None:
+            setattr(out, 'Output_' + key, value)
+    if out.Output_Points and out.Output_Points == out.Output_Sequence:
+        reader.Fail('Output.Points and Output.Sequence must be different files.')
+    out.Title = Header_Text(reader, 'Output.Title')
+    out.Status = Header_Text(reader, 'Output.Status')
+    stations = reader.Raw('Output.Stations')
+    if stations is not None:
+        if not isinstance(stations, list) or not all(isinstance(s, str) and CONST_JOB_NAME.fullmatch(s) for s in stations):
+            reader.Fail('Output.Stations must be a list of names, not %r.' % (stations,))
+        elif out.Segments and len(stations) != len(out.Segments) - 1:
+            reader.Fail('Output.Stations names %d station(s); the %d segments have %d between them.'
+                        % (len(stations), len(out.Segments), len(out.Segments) - 1))
+        else:
+            out.Stations = list(stations)
+
+    # 3\ Fail once with every problem; report unknown keys as notes.
+    if reader.Problems:
+        raise Configuration_Error_Cls('The job "%s" has %d problem(s):\n  - %s' % (path, len(reader.Problems), '\n  - '.join(reader.Problems)))
+    for key in Unknown_Keys(data, CONST_JOB_SCHEMA, ''):
+        out.Notes.append(('WARNING', 'Unrecognised key %s of the job is ignored (misspelt?).' % key))
+    return out
