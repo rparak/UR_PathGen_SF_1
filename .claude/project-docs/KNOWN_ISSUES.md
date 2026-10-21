@@ -5,17 +5,23 @@ the real SF1 cell at reduced speed first, with someone at the stop button. This 
 simulation does not model or has not verified. It contains only what the skeleton decided or
 measured.
 
-## Kinematic error measured at two poses only
+## Kinematic error measured at the learned points only, unmeasured at generated via points
 
 The tool uses the nominal UR10e DH parameters; there is no `calibration.conf` of this robot.
-Comparing `DH_FK(q) · TCP` with the robot's own `_p` gives 1.72 mm / 0.261° at `home` (A) and
-4.02 mm / 0.376° at `drop_rotate_1` (B). That is the difference between nominal and calibrated
-kinematics. Along a path, and at generated via points, the error is unmeasured and may be larger.
+Comparing `DH_FK(q) · TCP` with the robot's own `_p` gives the difference between nominal and
+calibrated kinematics. It is measured at all 78 learned points of the program extract: at most
+4.04 mm (`Waypoint_7`) and 0.377° (`Waypoint_1`), measured 2026-10-21; `home` (A) 1.72 mm / 0.261°,
+`drop_rotate_1` (B) 4.02 mm / 0.376°. Every learned point a script reads is checked at load against
+the 10 mm sanity bound (SPEC §9.4); a point outside stops the script. At the generated via points,
+and between points along a path, the error is unmeasured and may be larger.
 
 - **Impact:** of the 20 mm environment margin, 4.0 mm is taken by the measured error, which leaves
   15.0 mm for cables. If the error reached the 10 mm sanity bound, 9.0 mm would be left (SPEC §9.8).
-- **Evidence:** SPEC §4.3.
-- **Pinned by:** `test/Kinematics/test_core.py::test_the_configured_tcp_residual_is_pinned`.
+- **Evidence:** SPEC §4.3 (A and B), SPEC §9.4 (all 78 points); `Example/plan_rotation.py` prints
+  the largest residual of the 78 points on every run.
+- **Pinned by:** `test/Kinematics/test_core.py::test_the_configured_tcp_residual_is_pinned` (A and B);
+  the check at load by `test/Example/test_plan_rotation.py`, `test_write_variants.py`,
+  `test_visualize_position.py` and `test_replay.py` (a point outside the bound is refused).
 - **What would close it:** the robot's `calibration.conf` and FK with its corrections.
 
 ## Simulation only: no real robot is available
