@@ -1,17 +1,18 @@
 # Case 17 of sf1_plc_v4.script, the rotation sequence home -> home, optimised: the station lines
 # verbatim from the program, the transfer segments S1-S3 generated movej (the program's a and v,
 # r=0). Points: SF1_Rotation_17.urscript.
-# The station lines to pick_rotate_1, Waypoint_6 are the program's text; their points have the program's _p and
+# The station lines to Waypoint_4, Waypoint_5, pick_rotate_1, Waypoint_6 are the program's text; their points have the program's _p and
 # another _q (SF1_Rotation_17.urscript).
 # Machine margin: generated segments keep 30.0 mm (Clearance.Environment 20.0 + Machine_Extra 10.0 mm) to machine_a
 # outside the station zone; source: owner accuracy estimate of the machine position, 2026-10-18.
-# Delivered. Waypoint_18, pick_rotate_1, Waypoint_6 use wrist 3 one turn lower than taught (owner, 2026-10-19: q6 representative chosen
-# to avoid an unnecessary wrist-3 turn); same pose, same _p (SPEC 10.5).
+# Delivered - tested on the real cell (owner, 2026-10-21). drop_rotate_1, Waypoint_4, Waypoint_5 take IK branch S- E- W-, nearest the
+# point before them (owner, 2026-10-21: c2, delivered and tested on the real cell); Waypoint_18, pick_rotate_1, Waypoint_6 use wrist 3
+# one turn lower than taught (owner, 2026-10-19: q6 representative chosen to avoid an unnecessary wrist-3 turn); same pose, same _p
+# (SPEC 10.5).
 # Simulation passed != safe on the robot: run it at reduced speed first.
 # Start at home (generated, r=0): the program's line blends (r=0.01) into S1, and a blend into a generated segment is not checked
 movej(home_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
 # S1 (generated): home -> drop_rotate_1
-movej(via_home_drop_rotate_1_01_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
 movej(drop_rotate_1_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
 # Station: drop (verbatim from the program)
 movel(Waypoint_4_p, a=1.2, v=0.25)
@@ -19,7 +20,6 @@ movel(Waypoint_4_p, a=1.2, v=0.25)
 movej(get_inverse_kin(Waypoint_5_p, qnear=Waypoint_5_q), a=1.3962634015954636, v=1.0471975511965976)
 # S2 (generated): Waypoint_5 -> Waypoint_18
 movej(via_Waypoint_5_Waypoint_18_01_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
-movej(via_Waypoint_5_Waypoint_18_02_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
 movej(Waypoint_18_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
 # Station: pick (verbatim from the program)
 movej(get_inverse_kin(pick_rotate_1_p, qnear=pick_rotate_1_q), a=1.3962634015954636, v=1.0471975511965976)

@@ -988,3 +988,30 @@ Pinned by `test/Configuration/test_core.py` (the job loader), `test/URScript/tes
 (`Resolve_Sequence` on case 17 and its refusals), `test/Example/test_plan_rotation.py` (the default
 job's points, sequence, station time and output names; *slow*: the default job writes
 `Data/Generated/` byte for byte).
+
+## The delivered c2 is the default job; c1 is a job of its own
+
+**Decision.** `Configuration/Jobs/sf1_plc_v4_case_17.yaml`, the default job, is c2 (owner,
+2026-10-21: delivered and tested on the real cell): the drop's three points as `Branch: S- E- W-`
+entries and the pick's wrist-3 turn. `plan_rotation.py` writes it into `Data/Generated/`.
+`sf1_plc_v4_case_17_c1.yaml` is c1, the previous optimisation (simulation only). Both reproduce
+their committed variant's point and motion lines byte for byte; the headers differ only in their
+status lines. A branch point's `_q` is the IK solution nearest the point the output moves to just
+before it (the chain rule).
+
+**Why.** The output a person takes to the robot should be the one that ran on it, written by the
+default command. The chain rule is the rule that made the c2 drop on 2026-10-19
+(`Proposal_Points`): the rule "nearest the point's own taught `_q`" was asked for, measured and
+rejected, because it puts wrist 2 one full turn away (−2.903 instead of 3.381 rad at
+drop_rotate_1), which is not what was tested (owner's choice, 2026-10-21).
+
+**Alternatives.** Keeping c1 in `Data/Generated/` and c2 only as a variant was rejected: the
+default output would not be the delivered path. A `Near` field per branch entry was rejected: the
+chain rule reproduces c2 with no extra field.
+
+**Revisit if** the drop is re-taught on the robot: the new program export replaces the branch
+entries with the program's own `_q` (a new extract, no configuration).
+
+Pinned by `test/Example/test_plan_rotation.py::test_a_branch_point_is_the_ik_nearest_the_point_before_it`,
+`test_each_case_17_job_reproduces_its_committed_variant` (*slow*),
+`test/Example/test_write_variants.py::test_c2_is_the_output_of_data_generated`.

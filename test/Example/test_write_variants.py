@@ -117,20 +117,21 @@ def test_every_variant_has_its_files_and_its_status(root):
             assert 'Simulation passed != safe on the robot' in text
 
 
-def test_c1_is_the_output_of_data_generated(root):
+def test_c2_is_the_output_of_data_generated(root):
     """
     Description:
-        The c1 variant is the output of Data/Generated/ (Example/plan_rotation.py): the same points
-        token for token and the same motion lines; only the status comments differ.
+        The c2 variant, delivered and tested on the real cell (owner, 2026-10-21), is the output of
+        Data/Generated/ (Example/plan_rotation.py, the default job): the same points token for token
+        and the same motion lines; only the status comments differ.
     """
 
     with open(os.path.join(root, 'Data', 'Generated', 'SF1_Rotation_17.urscript'), encoding='utf-8') as handle:
         delivered = Read_URScript(handle.read()).Points
-    c1 = _Points(root, 'c1')
-    assert list(c1) == list(delivered)
-    assert all((c1[n].P_Tokens, c1[n].Q_Tokens) == (delivered[n].P_Tokens, delivered[n].Q_Tokens) for n in c1)
+    c2 = _Points(root, 'c2')
+    assert list(c2) == list(delivered)
+    assert all((c2[n].P_Tokens, c2[n].Q_Tokens) == (delivered[n].P_Tokens, delivered[n].Q_Tokens) for n in c2)
     texts = []
-    for path in (os.path.join(root, 'Data', 'Generated', 'SF1_Rotation_17_Sequence.script'), _Folder(root, 'c1', 'SF1_Rotation_17_Sequence.script')):
+    for path in (os.path.join(root, 'Data', 'Generated', 'SF1_Rotation_17_Sequence.script'), _Folder(root, 'c2', 'SF1_Rotation_17_Sequence.script')):
         with open(path, encoding='utf-8') as handle:
             texts.append([line for line in handle.read().splitlines() if not line.startswith('#') or line.startswith('# Gripper')])
     assert texts[0] == texts[1]

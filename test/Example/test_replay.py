@@ -182,7 +182,7 @@ def test_list_prints_the_catalogue(root, tmp_path):
 def test_one_case_is_checked_densely_and_labelled_by_kind(root, scene, tmp_path):
     """
     Description:
-        Path 3 (case 17 delivered, c1, home -> home) with the dense clearance check and screenshots,
+        Path 3 (case 17 c1, the previous optimisation, home -> home) with the dense clearance check and screenshots,
         without --with-stl: the scene is built without the visual STL (exactly the geoms of the scene
         without it); its 11 moves (12 motion lines, the start excluded: S1 1, S2 2, S3 1 via) are each
         labelled by their own rule and keep it: every generated movej the generated rule, every

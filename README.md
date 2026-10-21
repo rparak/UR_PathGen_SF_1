@@ -234,8 +234,8 @@ sudo apt install python3.11 python3.11-venv       # Ubuntu
 models and the collision set against their recorded hashes.
 
 **Run.** View a learned position with its clearance, replay a variant (case 17, home → home), and
-run the optimisation, which plans S1–S3 of case 17 and writes c1, the previous optimisation, to
-`Data/Generated/` (the delivered c2 is in `Data/Generated/variants/c2/`). The viewer needs
+run the optimisation, which plans S1–S3 of case 17 and writes c2, the delivered path, to
+`Data/Generated/`. The viewer needs
 `mjpython` on macOS; on Linux use `.venv/bin/python`.
 
 ```bash
@@ -279,8 +279,8 @@ clearance is checked against; the viewers print a warning naming the corrections
 .venv/bin/python Example/replay_rotation.py --path 3 --headless
 ```
 
-**Run the optimisation.** One command plans S1–S3 of case 17 and writes its output, c1 (the
-delivered c2 is written by `write_variants.py`, below):
+**Run the optimisation.** One command plans S1–S3 of case 17 and writes its output, c2 (the
+default job, `Configuration/Jobs/sf1_plc_v4_case_17.yaml`):
 
 ```bash
 .venv/bin/python Example/plan_rotation.py --workers 8
@@ -309,8 +309,8 @@ diff /tmp/sf1_plan/SF1_Rotation_17.urscript Data/Generated/SF1_Rotation_17.urscr
 diff /tmp/sf1_plan/SF1_Rotation_17_Sequence.script Data/Generated/SF1_Rotation_17_Sequence.script
 ```
 
-The replay plays the variant folders in `Data/Generated/variants/` (`--path 3` is c1, the output of
-`plan_rotation.py`; `--path 4` is c2, the delivered path); it takes no other folder. To replay and
+The replay plays the variant folders in `Data/Generated/variants/` (`--path 4` is c2, the delivered path and
+the output of `plan_rotation.py`; `--path 3` is c1, the previous optimisation); it takes no other folder. To replay and
 tabulate a new plan, regenerate the variants. This re-plans b_optimised, c1, c2 and c3 into
 `Data/Generated/variants/`, overwriting the committed files (`git diff` shows what changed), and
 rewrites the comparison table. Then rewrite the figures:
@@ -460,7 +460,7 @@ from them, and without them nothing can be planned, replayed or checked.
 |---|---|
 | `Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript` | **Input:** the program's 78 learned points (`global <name>_p` / `_q`) |
 | `Data/Programs/sf1_plc_v4/sf1_plc_v4_cases_17_18.script` | **Input:** the program lines of cases 17 and 18 |
-| `Data/Generated/SF1_Rotation_17.urscript`, `SF1_Rotation_17_Sequence.script` | **Output:** c1, the output of `plan_rotation.py`: its points and its motion sequence |
+| `Data/Generated/SF1_Rotation_17.urscript`, `SF1_Rotation_17_Sequence.script` | **Output:** c2, the delivered path, the output of `plan_rotation.py`: its points and its motion sequence |
 | `Data/Generated/variants/` | **Output:** every variant in the same two files, the delivered c2 among them, and `comparison.csv` / `comparison.md` |
 
 <details>
@@ -477,8 +477,8 @@ them nothing can be planned, replayed or checked.
 | `Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript` | **Input.** The program's 78 learned points as `global <name>_p` / `_q` lines (program lines 2453–2608) | every script that needs a learned point: `plan_rotation.py`, `write_variants.py`, `write_taught_programs.py`, `demo_visualize_position.py`, `demo_rotate_axis.py` |
 | `Data/Programs/sf1_plc_v4/sf1_plc_v4_cases_17_18.script` | **Input.** The program lines of cases 17 and 18 (lines 3397–3478 and 3480–3561), with their indentation, Polyscope markers and URCap code | `plan_rotation.py`, `write_variants.py`, `write_taught_programs.py` |
 | `Data/Programs/sf1_plc_v4/sf1_plc_v4_case_17.urscript`, `…_case_17_sequence.script` | The taught case 17, home → home, simplified: the points it moves to and its moves. Written by `write_taught_programs.py` | no script: a reference to compare the output with, line by line |
-| `Data/Generated/SF1_Rotation_17.urscript` | **Output.** c1 (previous optimisation (simulation only)): the learned points it moves to, then the generated via points `via_<from>_<to>_<nn>` | written by `plan_rotation.py` |
-| `Data/Generated/SF1_Rotation_17_Sequence.script` | **Output.** c1's motion sequence of case 17, home → home | written by `plan_rotation.py` |
+| `Data/Generated/SF1_Rotation_17.urscript` | **Output.** c2 (delivered — tested on the real cell, owner, 2026-10-21): the learned points it moves to, then the generated via points `via_<from>_<to>_<nn>` | written by `plan_rotation.py` |
+| `Data/Generated/SF1_Rotation_17_Sequence.script` | **Output.** c2's motion sequence of case 17, home → home | written by `plan_rotation.py` |
 | `Data/Generated/variants/<variant>/` | The same two files for each of `taught`, `b_optimised`, `c1`, `c2` (delivered) and `c3` | written by `write_variants.py`; read by `replay_rotation.py` and `make_readme_figures.py` |
 | `Data/Generated/variants/comparison.csv`, `comparison.md` | The comparison table of the variants (the [Results](#results)) | written by `write_variants.py`; the CSV read by `make_readme_figures.py` |
 
@@ -664,7 +664,7 @@ most of these limits. It does not exist yet; the extracts are already cut by a s
 CAD/              the cell STL (visual) and Collision/: the convex pieces and their manifest
 Configuration/    Cell_SF1.yaml: base pose, tool and TCP, margins, overrides, workspace
 Data/Programs/    the input: verbatim extracts of the robot program, and the simplified taught case 17
-Data/Generated/   plan_rotation.py's path (c1) and variants/: every variant (c2 delivered) and the table
+Data/Generated/   plan_rotation.py's path (c2, delivered) and variants/: every variant and the table
 Example/          runnable scripts: viewers, planning, variants, figures, collision build
 Media/            the README images (generated)
 models/           vendored MuJoCo Menagerie UR10e and Robotiq 2F-85, pinned by hash

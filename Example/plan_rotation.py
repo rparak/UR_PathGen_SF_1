@@ -71,10 +71,12 @@ Description:
     program (the gripper states, the station lines, the station points) is derived from the case's
     lines (Resolve_Sequence).
 """
-# The job planned without --job (owner, 2026-10-18: case 17 of sf1_plc_v4.script, home -> home) and
-# the default output directory (SPEC 10.6).
+# The job planned without --job (owner, 2026-10-18: case 17 of sf1_plc_v4.script, home -> home; since
+# 2026-10-21 as c2, delivered and tested on the real cell), the job of the previous optimisation c1,
+# and the default output directory (SPEC 10.6).
 #   Unit [string]
 CONST_DEFAULT_JOB = 'sf1_plc_v4_case_17'
+CONST_C1_JOB = 'sf1_plc_v4_case_17_c1'
 CONST_OUTPUT_DIR = os.path.join(CONST_PROJECT_ROOT, 'Data', 'Generated')
 # The extract file names in a program folder (Example/extract_program.py, SPEC 10.1).
 #   Unit [string]
@@ -92,8 +94,9 @@ CONST_FILE_NAMES = ('SF1_Rotation_17.urscript', 'SF1_Rotation_17_Sequence.script
 CONST_VARIANT_DIR = os.path.join(CONST_OUTPUT_DIR, 'variants')
 CONST_VARIANTS = {'taught': 'the taught program (sf1_plc_v4, case 17)',
                   'b_optimised': 'previous optimisation (2026-10-18, 17.50 s), superseded by c1',
-                  'c1': 'previous optimisation (simulation only), = Data/Generated/: the pick\'s wrist 3 one turn lower, same poses',
-                  'c2': 'delivered - tested on the real cell (owner, 2026-10-21): the drop on branch S- E- W- (wrist flipped in S1)',
+                  'c1': 'previous optimisation (simulation only): the pick\'s wrist 3 one turn lower, same poses',
+                  'c2': ('delivered - tested on the real cell (owner, 2026-10-21), = Data/Generated/: the drop on branch S- E- W- '
+                         '(wrist flipped in S1)'),
                   'c3': 'proposal for re-teaching, not verified on the robot: the drop on branch S- E- W+ (home\'s branch)'}
 # Gripper opening after rq_set_pos_spd_for(0, ...): the full 85 mm stroke; the release opening of
 # 85 mm is real, the part is released into a magazine with free space (owner, 2026-10-18, SPEC 4.9).

@@ -5,7 +5,7 @@
 # another _q (SF1_Rotation_17.urscript).
 # Machine margin: generated segments keep 30.0 mm (Clearance.Environment 20.0 + Machine_Extra 10.0 mm) to machine_a
 # outside the station zone; source: owner accuracy estimate of the machine position, 2026-10-18.
-# Variant c1: previous optimisation (simulation only), = Data/Generated/: the pick's wrist 3 one turn lower, same poses.
+# Variant c1: previous optimisation (simulation only): the pick's wrist 3 one turn lower, same poses.
 # Simulation passed != safe on the robot: run it at reduced speed first.
 # Start at home (generated, r=0): the program's line blends (r=0.01) into S1, and a blend into a generated segment is not checked
 movej(home_q, a=1.3962634015954636, v=1.0471975511965976, r=0)

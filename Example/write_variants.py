@@ -53,8 +53,8 @@ from Scene.Core import Scene_Cls
 #   ../Planner/Core — the planner
 from Planner.Core import Plan_All, Make_Pool, Planner_Error_Cls
 #   ../Example/plan_rotation — the default job (case 17), its configured points and the writer
-from plan_rotation import (CONST_DEFAULT_JOB, CONST_PENALTY_WEIGHT, CONST_VARIANT_DIR, CONST_VARIANTS, CONST_FILE_NAMES, CONST_REPORT_DISTMAX,
-                           Job_Plan_Str, Load_Job_Plan, Opening, Check_Learned, Plan_Requests, Configured_Points, Write_Outputs)
+from plan_rotation import (CONST_DEFAULT_JOB, CONST_C1_JOB, CONST_PENALTY_WEIGHT, CONST_VARIANT_DIR, CONST_VARIANTS, CONST_FILE_NAMES,
+                           CONST_REPORT_DISTMAX, Job_Plan_Str, Load_Job_Plan, Opening, Check_Learned, Plan_Requests, Configured_Points, Write_Outputs)
 #   ../Example/replay_rotation — the variant files and their moves, as replayed
 from replay_rotation import Load_Variant, Build_Moves, Run_Floors, Move_Samples, Move_Str
 #   ../Example/write_taught_programs — the points a case moves to
@@ -64,11 +64,11 @@ from write_taught_programs import Case_Targets
 Description:
     Initialization of constants.
 """
-# The drop branch of each proposal for re-teaching (Solve_IK_Analytic's labels, measured
-# 2026-10-19): c2 keeps home's shoulder and elbow and flips the wrist; c3 keeps all three. Their
-# pick is the delivered one (c1).
+# The drop branch of the proposal for re-teaching (Solve_IK_Analytic's labels, measured 2026-10-19):
+# c3 keeps home's shoulder, elbow and wrist. Its pick is c1's. c2, which keeps home's shoulder and
+# elbow and flips the wrist (S- E- W-), is the default job since it was delivered (owner, 2026-10-21).
 #   Unit [Dict<string, string>]
-CONST_PROPOSAL_BRANCHES = {'c2': 'S- E- W-', 'c3': 'S- E- W+'}
+CONST_PROPOSAL_BRANCHES = {'c3': 'S- E- W+'}
 # The drop operation's points in order: each proposal point is the IK solution of its _p on the
 # branch nearest the point before it (drop_rotate_1: nearest home; Configured_Points).
 #   Unit [Tuple<string>]
@@ -108,23 +108,25 @@ def Proposal_Configurations(plan: Job_Plan_Str, branch: str) -> tp.List[tp.Tuple
                                                   for name in CONST_DROP_POINTS]
 
 
-def Variant_Points(plan: Job_Plan_Str, cfg: Cell_Configuration_Str) -> tp.Dict[str, tp.Dict]:
+def Variant_Points(plan: Job_Plan_Str, c1: Job_Plan_Str, cfg: Cell_Configuration_Str) -> tp.Dict[str, tp.Dict]:
     """
     Description:
         The points of every planned variant: b_optimised the program's (as before 2026-10-19), c1
-        the c1 job's (the pick's wrist 3 one turn lower), c2 and c3 the drop on another branch.
+        the c1 job's (the pick's wrist 3 one turn lower), c2 the default job's (the drop on S- E- W-,
+        delivered), c3 the drop on another branch with c1's pick.
 
     Args:
-        (1) plan [Job_Plan_Str(object)]: The c1 job.
-        (2) cfg [Cell_Configuration_Str(object)]: The cell configuration.
+        (1) plan [Job_Plan_Str(object)]: The default job (c2).
+        (2) c1 [Job_Plan_Str(object)]: The c1 job.
+        (3) cfg [Cell_Configuration_Str(object)]: The cell configuration.
 
     Returns:
         (1) parameter [Dict<string, Dict<string, Robot_Point_Str>>]: Variant -> its points.
     """
 
-    out = {'b_optimised': Configured_Points(plan, cfg, []), 'c1': Configured_Points(plan, cfg)}
+    out = {'b_optimised': Configured_Points(plan, cfg, []), 'c1': Configured_Points(c1, cfg), 'c2': Configured_Points(plan, cfg)}
     for variant, branch in CONST_PROPOSAL_BRANCHES.items():
-        out[variant] = Configured_Points(plan, cfg, Proposal_Configurations(plan, branch))
+        out[variant] = Configured_Points(c1, cfg, Proposal_Configurations(c1, branch))
     return out
 
 
@@ -511,8 +513,9 @@ def main():
         status), then comparison.csv and comparison.md. taught: the program's sequence. b_optimised,
         c1, c2, c3: S1 - S3 planned as Example/plan_rotation.py plans them (the same seeds, budget and
         penalty weight), on the program's points (b_optimised, as before 2026-10-19), the points with
-        the pick's wrist 3 one turn lower (c1, = Data/Generated/) and the drop on another IK branch (c2,
-        delivered and tested on the real cell; c3, a proposal for re-teaching). Nothing is written
+        the pick's wrist 3 one turn lower (c1, the job sf1_plc_v4_case_17_c1) and the drop on another IK
+        branch (c2, the default job, = Data/Generated/, delivered and tested on the real cell; c3, a
+        proposal for re-teaching). Nothing is written
         unless every segment is planned and verified.
 
             .venv/bin/python Example/write_variants.py [--workers N] [--out DIR]
@@ -533,7 +536,7 @@ def main():
         plan = Load_Job_Plan(CONST_DEFAULT_JOB)
         openings = {state: Opening(cfg, state, plan) for state in ('holding', 'open')}
         Check_Learned(cfg, plan.Points, os.path.basename(plan.Positions))
-        variant_points = Variant_Points(plan, cfg)
+        variant_points = Variant_Points(plan, Load_Job_Plan(CONST_C1_JOB), cfg)
     except (Configuration_Error_Cls, URScript_Error_Cls, Kinematics_Error_Cls, OSError) as error:
         print('[ERROR] %s' % error)
         return 1

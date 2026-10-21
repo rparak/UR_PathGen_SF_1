@@ -1,7 +1,10 @@
 ## =========================================================================== ##
 # Description:
 #   Planning job: case 17 of sf1_plc_v4.script, home -> ... -> home, the deliverable (owner,
-#   2026-10-18). Planned by Example/plan_rotation.py (the default job, or --job sf1_plc_v4_case_17).
+#   2026-10-18) as c2: delivered and tested on the real cell (owner, 2026-10-21), the drop on IK
+#   branch S- E- W- and the pick's wrist 3 one turn lower. Planned by Example/plan_rotation.py (the
+#   default job, or --job sf1_plc_v4_case_17) into Data/Generated/. The previous optimisation c1 is
+#   the job sf1_plc_v4_case_17_c1.
 #
 #   Read only by src/Configuration/Core.py (Load_Job); nothing writes it. Every field is
 #   REQUIRED: the loader fails, naming every missing or invalid field at once. A key the loader
@@ -38,10 +41,15 @@ Segments:
 # point's _p on the branch, nearest the _q of the point the output moves to just before it. The
 # robot's get_inverse_kin(<name>_p, qnear=<name>_q) of a station line to such a point takes the
 # solution nearest the new qnear, which the first run at reduced speed confirms (KNOWN_ISSUES).
-# The pick's three points use wrist 3 one turn lower, 4.739 - 2 pi = -1.544 rad: S3 turns wrist 3 by
-# 1.5 instead of 4.7 rad (home -> home 17.50 -> 14.66 s, estimate). REQUIRED (may be empty).
-# [-, -, 2 pi, -, text]
+# The drop's three points on branch S- E- W- (home's shoulder and elbow, the wrist flipped in S1;
+# nominal-DH IK of the taught poses, the _q generated): c2, the drop tested on the real cell (owner,
+# 2026-10-21); home -> home 14.66 -> 12.05 s, estimate. The pick's three points use wrist 3 one turn
+# lower, 4.739 - 2 pi = -1.544 rad: S3 turns wrist 3 by 1.5 instead of 4.7 rad (home -> home 17.50
+# -> 14.66 s, estimate). REQUIRED (may be empty). [-, -, 2 pi, -, text]
 Point_Configurations:
+  - {Point: drop_rotate_1, Branch: 'S- E- W-', Source: 'owner, 2026-10-21: c2, delivered and tested on the real cell'}
+  - {Point: Waypoint_4, Branch: 'S- E- W-', Source: 'owner, 2026-10-21: c2, delivered and tested on the real cell'}
+  - {Point: Waypoint_5, Branch: 'S- E- W-', Source: 'owner, 2026-10-21: c2, delivered and tested on the real cell'}
   - {Point: Waypoint_18, Joint: 6, Turns: -1, Source: 'owner, 2026-10-19: q6 representative chosen to avoid an unnecessary wrist-3 turn'}
   - {Point: pick_rotate_1, Joint: 6, Turns: -1, Source: 'owner, 2026-10-19: q6 representative chosen to avoid an unnecessary wrist-3 turn'}
   - {Point: Waypoint_6, Joint: 6, Turns: -1, Source: 'owner, 2026-10-19: q6 representative chosen to avoid an unnecessary wrist-3 turn'}
@@ -55,5 +63,5 @@ Output:
   Points: SF1_Rotation_17.urscript
   Sequence: SF1_Rotation_17_Sequence.script
   Title: rotation sequence
-  Status: Delivered.
+  Status: Delivered - tested on the real cell (owner, 2026-10-21).
   Stations: [drop, pick]

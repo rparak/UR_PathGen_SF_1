@@ -52,13 +52,16 @@ Description:
     The gripper opening of the deliverable's path comes from the configuration (case 17's
     Tool.Holding_Openings entry), and the open state is the full 2F-85 stroke.
 """
-# The delivered output's learned points by provenance (owner, 2026-10-19, SPEC 10.5): written
-# verbatim from the extract, or the extract's _p with wrist 3 one turn lower (the pick operation);
-# and the station lines among the latter.
+# The delivered output's (c2, owner 2026-10-21) learned points by provenance (SPEC 10.5): written
+# verbatim from the extract, or the extract's _p with another _q (the drop on branch S- E- W-, the
+# pick's wrist 3 one turn lower); and the station lines among the latter.
 #   Unit [Tuple<string>]
-CONST_VERBATIM = ('home', 'drop_rotate_1', 'Waypoint_4', 'Waypoint_5')
-CONST_OTHER_Q = ('Waypoint_18', 'pick_rotate_1', 'Waypoint_6')
-CONST_STATION_OTHER_Q = ('pick_rotate_1', 'Waypoint_6')
+CONST_VERBATIM = ('home',)
+CONST_OTHER_Q = ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5', 'Waypoint_18', 'pick_rotate_1', 'Waypoint_6')
+CONST_STATION_OTHER_Q = ('Waypoint_4', 'Waypoint_5', 'pick_rotate_1', 'Waypoint_6')
+# The variant files the two case-17 jobs reproduce, point and motion lines (owner, 2026-10-21).
+#   Unit [Dict<string, string>]
+CONST_JOB_VARIANTS = {'sf1_plc_v4_case_17': 'c2', 'sf1_plc_v4_case_17_c1': 'c1'}
 
 
 def _Plan_Module(root):
@@ -237,14 +240,14 @@ def test_a_parallel_run_writes_the_committed_output(root, tmp_path, cfg):
 def test_the_delivered_points_turn_only_the_picks_wrist_3(root, points, cfg):
     """
     Description:
-        Configured_Points of the default job (owner, 2026-10-19, SPEC 10.5): wrist 3 of Waypoint_18, pick_rotate_1 and
+        Configured_Points of the c1 job (owner, 2026-10-19, SPEC 10.5): wrist 3 of Waypoint_18, pick_rotate_1 and
         Waypoint_6 one turn lower (taught 4.739 rad), every other joint and every _p token the
         program's, every other point unchanged; the same arm pose (DH TCP equal to 1e-12 m and
         rad); the given points are not changed.
     """
 
     plan = _Plan_Module(root)
-    job = _Job(plan)
+    job = _Job(plan, 'sf1_plc_v4_case_17_c1')
     before = {name: list(point.Q_Tokens) for name, point in job.Points.items()}
     delivered = plan.Configured_Points(job, cfg)
     turned = ('Waypoint_18', 'pick_rotate_1', 'Waypoint_6')
@@ -264,10 +267,11 @@ def test_the_delivered_points_turn_only_the_picks_wrist_3(root, points, cfg):
 def test_the_delivered_headers_state_what_is_verbatim(root, points):
     """
     Description:
-        The delivered points file names the learned points written verbatim from the extract (home,
-        the drop's three) and those with the extract's _p and another _q (the pick's three, wrist 3
-        one turn lower), and both claims hold token for token; it claims nothing else verbatim. The
-        sequence file names the station lines whose points have another _q (the pick and the lift).
+        The delivered points file (c2) names the learned points written verbatim from the extract
+        (home) and those with the extract's _p and another _q (the drop's three on branch S- E- W-,
+        the pick's three with wrist 3 one turn lower), and both claims hold token for token; it claims
+        nothing else verbatim. The sequence file names the station lines whose points have another _q
+        (the drop's movel and retreat, the pick and the lift).
     """
 
     folder = os.path.join(root, 'Data', 'Generated')
@@ -324,18 +328,45 @@ def test_the_delivered_headers_state_the_machine_margin_and_its_source(root, cfg
 def test_a_branch_point_is_the_ik_nearest_the_point_before_it(root, cfg):
     """
     Description:
-        A Branch configuration (owner, 2026-10-21, the chain rule) gives the drop's three points of c2
-        exactly the joints written in Data/Generated/variants/c2/ (made 2026-10-19 by the earlier
-        Proposal_Points, before the rule was a job field), token for token, with the program's _p;
-        the IK solution nearest each point's own taught _q would differ by one turn of wrist 2.
+        The default job's Branch configurations (owner, 2026-10-21, the chain rule) give the drop's
+        three points exactly the joints of c2 in Data/Generated/variants/c2/ (made 2026-10-19 by the
+        earlier Proposal_Points, before the rule was a job field), token for token, with the
+        program's _p; the IK solution nearest each point's own taught _q would differ by one turn of
+        wrist 2.
     """
 
     plan = _Plan_Module(root)
     job = _Job(plan)
-    branch = [(name, -1, 0, 'S- E- W-', 'x') for name in ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5')]
-    points = plan.Configured_Points(job, cfg, list(job.Job.Point_Configurations) + branch)
+    points = plan.Configured_Points(job, cfg)
     with open(os.path.join(root, 'Data', 'Generated', 'variants', 'c2', 'SF1_Rotation_17.urscript'), encoding='utf-8') as handle:
         c2 = Read_URScript(handle.read()).Points
     for name in ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5', 'Waypoint_18', 'pick_rotate_1', 'Waypoint_6'):
         assert (points[name].P_Tokens, points[name].Q_Tokens) == (c2[name].P_Tokens, c2[name].Q_Tokens), name
     assert points['drop_rotate_1'].Q[4] - job.Points['drop_rotate_1'].Q[4] == pytest.approx(3.635, abs=0.001)
+
+
+def _Body(path):
+    # A file's lines but its header's status lines: those between the machine margin's second line
+    # and the safety line (the job's Output.Status or the variant's status).
+    with open(path, encoding='utf-8') as handle:
+        lines = handle.read().splitlines()
+    first = next(k for k, line in enumerate(lines) if line.startswith('# outside the station zone; source:'))
+    last = next(k for k, line in enumerate(lines) if line.startswith('# Simulation passed != safe'))
+    return lines[:first + 1] + lines[last:]
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize('job', sorted(CONST_JOB_VARIANTS))
+def test_each_case_17_job_reproduces_its_committed_variant(root, tmp_path, job):
+    """
+    Description:
+        The c2 job (the default) and the c1 job, each planned in full with 4 workers from an
+        unrelated directory, write their variant's points and motion lines byte for byte as
+        committed in Data/Generated/variants/<c2 | c1>/ (owner, 2026-10-21); the headers differ only
+        in their status lines.
+    """
+
+    result = _Run(root, tmp_path, '--job', job, '--workers', '4', '--out', str(tmp_path / 'out'))
+    assert result.returncode == 0, result.stdout + result.stderr
+    for name in ('SF1_Rotation_17.urscript', 'SF1_Rotation_17_Sequence.script'):
+        assert _Body(str(tmp_path / 'out' / name)) == _Body(os.path.join(root, 'Data', 'Generated', 'variants', CONST_JOB_VARIANTS[job], name))

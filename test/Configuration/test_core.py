@@ -261,20 +261,28 @@ def _Load_Job(tmp_path, data):
     return Load_Job(str(path))
 
 
-def test_the_shipped_default_job_loads():
+def test_the_shipped_case_17_jobs_load():
     """
     Description:
         The default job loads by its name without notes: program sf1_plc_v4, case 17, S1 - S3 as the
-        owner set them, wrist 3 of the pick's three points one turn lower, and its output names.
+        owner set them, as c2 (owner, 2026-10-21: delivered and tested on the real cell): the drop's
+        three points on branch S- E- W-, wrist 3 of the pick's three points one turn lower; its
+        output names. The c1 job is the same without the branch, with its own status.
     """
 
     job = Load_Job('sf1_plc_v4_case_17')
     assert job.Notes == []
     assert job.Program == os.path.join(CONST_PROJECT_ROOT, 'Data', 'Programs', 'sf1_plc_v4')
     assert job.Case == 17 and job.Segments == CONST_JOB_SEGMENTS
-    assert job.Point_Configurations == [(name, 5, -1, '', CONST_JOB_TURN) for name in ('Waypoint_18', 'pick_rotate_1', 'Waypoint_6')]
-    assert (job.Output_Points, job.Output_Sequence, job.Title, job.Stations) == (
-        'SF1_Rotation_17.urscript', 'SF1_Rotation_17_Sequence.script', 'rotation sequence', ['drop', 'pick'])
+    turns = [(name, 5, -1, '', CONST_JOB_TURN) for name in ('Waypoint_18', 'pick_rotate_1', 'Waypoint_6')]
+    assert job.Point_Configurations == [(name, -1, 0, 'S- E- W-', 'owner, 2026-10-21: c2, delivered and tested on the real cell')
+                                        for name in ('drop_rotate_1', 'Waypoint_4', 'Waypoint_5')] + turns
+    assert (job.Output_Points, job.Output_Sequence, job.Title, job.Status, job.Stations) == (
+        'SF1_Rotation_17.urscript', 'SF1_Rotation_17_Sequence.script', 'rotation sequence',
+        'Delivered - tested on the real cell (owner, 2026-10-21).', ['drop', 'pick'])
+    c1 = Load_Job('sf1_plc_v4_case_17_c1')
+    assert c1.Notes == [] and c1.Point_Configurations == turns and (c1.Case, c1.Segments) == (17, CONST_JOB_SEGMENTS)
+    assert c1.Status == 'Previous optimisation, simulation only (owner, 2026-10-21).'
 
 
 @pytest.mark.parametrize('field', CONST_JOB_REQUIRED)
