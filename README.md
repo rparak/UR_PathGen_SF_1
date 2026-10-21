@@ -253,6 +253,22 @@ run the optimisation, which plans S1–S3 of case 17 and writes c2, the delivere
 | 5 | c3: proposal, not verified on the robot |
 | 6 | all five in turn, with the strict comparison |
 
+**Plan another case.** What is planned is a job, `Configuration/Jobs/<name>.yaml`: the program
+folder, the case, the segments to optimise and the output names. Cut the case out of the program
+export, write a job (copy `sf1_plc_v4_case_17.yaml`), plan it and replay it:
+
+```bash
+.venv/bin/python Example/extract_program.py --program PATH/sf1_plc_v4.script --cases 17 18 --out Data/Programs/sf1_plc_v4/
+.venv/bin/python Example/plan_rotation.py --job <name> --workers 8 --out /tmp/<name>
+.venv/bin/mjpython Example/replay_rotation.py --job <name> --out /tmp/<name>
+```
+
+The case also needs a `Tool.Holding_Openings` entry (program, case, opening) in
+`Configuration/Cell_SF1.yaml`. Before planning, the case's taught moves are checked against the
+model; a taught move inside it stops the run (the whole procedure: **Another program, case or
+path** under [Inputs and outputs](#inputs-and-outputs)). `sf1_plc_v4_case_18.yaml` is an example
+job: it plans once the case-18 opening is configured.
+
 <details>
 <summary><b>All usage</b>: options, comparing runs, regenerating the variants, figures and inputs, the tests</summary>
 
@@ -286,15 +302,17 @@ default job, `Configuration/Jobs/sf1_plc_v4_case_17.yaml`):
 .venv/bin/python Example/plan_rotation.py --workers 8
 ```
 
-- **Reads:** the two program extracts, `Configuration/Cell_SF1.yaml`, the collision set and the
-  models.
+- **Reads:** the job (`--job NAME`, default `sf1_plc_v4_case_17`), its program's two extracts,
+  `Configuration/Cell_SF1.yaml`, the collision set and the models.
 - **Writes:** `Data/Generated/SF1_Rotation_17.urscript` and `SF1_Rotation_17_Sequence.script`,
   only after every segment has passed the final check. On any error it writes nothing and exits
   with 1.
-- **Prints:** the check of the learned points, the margins, and per segment the taught and the
+- **Prints:** the check of the learned points, the margins, the check of the case's taught moves
+  against the model, and per segment the taught and the
   optimised path (via points, estimated time, joint travel, closest distance, rule violations),
   with the home → home totals.
-- **Options:** `--out DIR` writes elsewhere, `--workers N` sets the planning processes (the output
+- **Options:** `--job NAME` plans another job (`Configuration/Jobs/NAME.yaml`, or a `.yaml` path),
+  `--out DIR` writes elsewhere, `--workers N` sets the planning processes (the output
   does not depend on N), `--penalty-weight W` sets the clearance weight (default 0.5 s/m),
   `--config FILE` sets the configuration.
 - **Time** (M2 Pro, 2026-10-21): about 3 minutes with 8 workers (2 min 43 s), about 10.5 minutes
@@ -476,6 +494,7 @@ them nothing can be planned, replayed or checked.
 |---|---|---|
 | `Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript` | **Input.** The program's 78 learned points as `global <name>_p` / `_q` lines (program lines 2453–2608) | every script that needs a learned point: `plan_rotation.py`, `write_variants.py`, `write_taught_programs.py`, `demo_visualize_position.py`, `demo_rotate_axis.py` |
 | `Data/Programs/sf1_plc_v4/sf1_plc_v4_cases_17_18.script` | **Input.** The program lines of cases 17 and 18 (lines 3397–3478 and 3480–3561), with their indentation, Polyscope markers and URCap code | `plan_rotation.py`, `write_variants.py`, `write_taught_programs.py` |
+| `Configuration/Jobs/<name>.yaml` | **Input.** A planning job: the program folder, the case, the segments, the point configurations, the output names | `plan_rotation.py --job`, `replay_rotation.py --job`; the default job also by `write_variants.py`, `write_taught_programs.py` and the viewers |
 | `Data/Programs/sf1_plc_v4/sf1_plc_v4_case_17.urscript`, `…_case_17_sequence.script` | The taught case 17, home → home, simplified: the points it moves to and its moves. Written by `write_taught_programs.py` | no script: a reference to compare the output with, line by line |
 | `Data/Generated/SF1_Rotation_17.urscript` | **Output.** c2 (delivered — tested on the real cell, owner, 2026-10-21): the learned points it moves to, then the generated via points `via_<from>_<to>_<nn>` | written by `plan_rotation.py` |
 | `Data/Generated/SF1_Rotation_17_Sequence.script` | **Output.** c2's motion sequence of case 17, home → home | written by `plan_rotation.py` |
@@ -527,9 +546,9 @@ gripper actions and everything else.
 </details>
 
 <details>
-<summary><b>What a run needs</b>, and what is fixed for case 17</summary>
+<summary><b>What a run needs</b>: the job, the configuration, and what is fixed in code</summary>
 
-**Inputs.** The two program extracts; `Configuration/Cell_SF1.yaml`; the collision set in
+**Inputs.** The job; its program's two extracts; `Configuration/Cell_SF1.yaml`; the collision set in
 `CAD/Collision/`, built with the configuration's current overrides (the scene refuses a set built
 with others); and the vendored models, matching their recorded hashes (`install.sh` checks them).
 
@@ -540,28 +559,36 @@ validated at load. All problems are named at once. For planning:
 |---|---|---|
 | Environment | `Collision_Set`, `Stand_Region`, `Assembly_Overrides`, `Component_Overrides`, `Added_Boxes` | the environment pieces, the stand, the corrections, the station boxes |
 | Robot | `Model`, `Base_Position`, `Base_Yaw`, `Joint_Position_Limits` | the robot in the cell, the planner's joint range |
-| Tool | `Model`, `Coupling`, `Mount_Yaw`, `TCP_Offset`, `Holding_Openings` (an entry for case 17) | the gripper geometry, the TCP, the opening while the part is held |
+| Tool | `Model`, `Coupling`, `Mount_Yaw`, `TCP_Offset`, `Holding_Openings` (an entry per program and case: sf1_plc_v4 case 17) | the gripper geometry, the TCP, the opening while the part is held |
 | Clearance | `Environment`, `Self`, `Self_Pair_Overrides`, `Station_Zone`, `Machine_Extra`, `Workspace` | the taught and generated rules |
 | Self_Collision | `Excluded_Pairs`, `Rigid_Groups` | which robot and gripper bodies are never checked against each other |
 | Kinematics | `FK_Sanity_Bound` | the check of every learned point at load |
 
-**Fixed in `Example/plan_rotation.py`, for case 17** (code constants, not configuration):
+**The job** (`Configuration/Jobs/<name>.yaml`, validated like the configuration):
 
-- the case number (17) and the extract files, read from `Data/Programs/sf1_plc_v4/`;
-- the points: home, the drop (`drop_rotate_1`, `Waypoint_4`, `Waypoint_5`) and the pick
-  (`Waypoint_18`, `pick_rotate_1`, `Waypoint_6`), which are the six fixed station points;
-- the three segments and their gripper states: S1 and S3 holding, S2 open at the full 85 mm;
-- the turn of wrist 3 at the pick's three points (c1, c2 and c3);
-- the seed (20261017) and the penalty weight (0.5 s/m, `--penalty-weight`);
-- the output names `SF1_Rotation_17.urscript` and `SF1_Rotation_17_Sequence.script`;
-- the shape of the station operations. The output is assembled for exactly this sequence:
-  `movel` down, gripper open, `movej` retreat, S2, `movej` pick, gripper close, `movel` up. Each of
-  these lines must occur once in the case.
+| Field | Meaning |
+|---|---|
+| Program | the program folder in `Data/Programs/`, with its two extracts |
+| Case | the case of the program's switch |
+| Segments | the segments to optimise, each `{Name, From, To}`: learned points the case moves to, in program order |
+| Point_Configurations | learned points written with another `_q`: a joint turn (`Joint`, `Turns`) or an IK branch (`Branch`), each with its source; the `_p` stays the program's |
+| Output | the two file names, the title and status written into the headers, and a name per station operation |
 
-Also fixed in code:
+The shipped jobs: `sf1_plc_v4_case_17` (the default, c2: the drop on branch S− E− W−, the pick's
+wrist 3 one turn lower), `sf1_plc_v4_case_17_c1` (c1) and `sf1_plc_v4_case_18` (an example; no
+opening is configured for its part).
 
-- the program's `movej` a and v, written into every generated move;
-- the `movel` a and v, for the time estimate only;
+**Derived from the program, never configured:** each segment's gripper state (from the case's
+gripper lines: holding after a close, open after an open), the station operations (every line
+between two segments, copied verbatim), the fixed station points of the clearance rule, the taught
+via points, and the station time (from those lines' own `a` and `v`).
+
+**Fixed in code:**
+
+- the seed (20261017; segment k of case c plans with 20261017 × 1000 + c × 10 + k) and the penalty
+  weight (0.5 s/m, `--penalty-weight`);
+- the program's `movej` a and v, written into every generated move; a job whose taught segment
+  moves use another a or v is refused;
 - the 30 mm penalty distance, the five-via-point limit and the planner's budgets;
 - the STL component that fills machine (a)'s interior (component 1638, labelled "model not valid
   here" in the viewers).
@@ -575,45 +602,45 @@ workspace top (the highest point of the taught case 17).
 <details>
 <summary><b>Another program, case or path</b>; another cell; re-validation</summary>
 
-There is no generic input yet. A new program, case or segment means changing the inputs and the
-constants above, then validating the result again. Follow the case that matches.
+A new program, case or path is a job and, for a new export, new extracts; no code changes. The
+steps:
 
-**A new export of the same program** (for example after re-teaching the c2 or c3 drop):
+1. **Extract.** `Example/extract_program.py --program PATH --cases N [N ...] --out
+   Data/Programs/<name>/` writes `<name>_positions.urscript` (every `global <name>_p` / `_q` line)
+   and `<name>_cases_<n>_<m>.script` (each case's whole branch), verbatim, with the program's line
+   ranges and sha256. It refuses a case the program does not have, a point with only `_p` or `_q`,
+   a duplicate name, and a case another cases file of the folder already holds. For a new export of
+   the same program (for example after re-teaching a drop), re-extract into the same folder; the
+   tests that compare the extracts with the program record the line ranges and the hash, so update
+   them too.
+2. **Write the job.** Copy `Configuration/Jobs/sf1_plc_v4_case_17.yaml` and set `Program`, `Case`,
+   `Segments` (the ends of each path to optimise, learned points the case moves to; a segment may
+   not contain a gripper action), `Point_Configurations` (empty unless a point needs another `_q`)
+   and `Output`. Every field states its meaning, unit and source; the loader names every problem at
+   once.
+3. **Configure the holding opening.** Add `{Program: <name>, Case: N, Opening: <m>, Source: <text>}`
+   to `Tool.Holding_Openings` in `Configuration/Cell_SF1.yaml`; without it the job is refused, never
+   given a default.
+4. **Plan.** `Example/plan_rotation.py --job <job> --out DIR`. Before planning, the case's taught
+   moves are replayed against the model. A taught move inside modelled geometry stops the run: the
+   error names the program line, the robot body, the piece and the depth. The station zone, the
+   station boxes and the workspace top are fitted to cases 17 and 18, so a stop near the station
+   means the model does not describe this case there; nothing is refitted automatically. Less room
+   than the taught margin, or a reach above the workspace top, is a warning.
+5. **Replay** with `Example/replay_rotation.py --job <job> --out DIR`, then re-validate (below) and
+   run the path on the real robot at reduced speed.
 
-1. Re-extract it with `Example/extract_program.py` (above). The tests that compare the extracts
-   with the program record the line ranges and the hash; update them too. The point names must stay the same.
-2. Run `write_taught_programs.py`, then `plan_rotation.py`, then `write_variants.py` and
-   `make_readme_figures.py`.
-3. Re-validate (below). The station boxes and the zone are fitted to the old taught points; check
-   that the new taught program still keeps 5 mm to them.
-
-**Another case of the same program:**
-
-1. The case's lines must be in the cases extract. Extend it if needed.
-2. In `Example/plan_rotation.py`, change the case number, the point names, the station points, the
-   taught via points, the segments and their gripper states, the wrist-3 turn (empty for a new case)
-   and the output file names.
-3. Add a `Tool.Holding_Openings` entry for the case.
-4. If the case's station operation does not have the shape above, the code that assembles the
-   output and estimates the station time must be changed. That is a code change, not a constant.
-5. If the case works elsewhere in the cell, the station zone, the station boxes and the workspace
-   top were not fitted to it. They have to be fitted again from that case's taught program.
-
-**Another path (other segment ends)** in case 17: the same constants (segments, station points,
-gripper states). A segment end must be a learned point that keeps the generated rule, and the
-output is still assembled around the one drop and one pick above; other segments change that code.
-
-**Another program:** a new folder `Data/Programs/<program>/` with the two extracts, and the three
-paths at the top of `Example/plan_rotation.py` (every other script takes them from there). If the
-program's `movej` a and v differ, change the planner's tokens (`src/Planner/Core.py`), and the
-`movel` a and v in `plan_rotation.py`. The output headers name `sf1_plc_v4.script`.
+Refused before planning, each with a sentence naming the segment and the program line: a segment
+end that is not a learned point or not reached in program order, a segment crossing a gripper
+action, a station line blending into a generated segment, a configured point the output does not
+move to, and taught segment moves at another `movej` a or v than SF1's.
 
 **Another cell**, in this order:
 
 1. **Cell geometry.** Put the cell's STL into `CAD/` (in the world frame the configuration uses)
    and run `Example/build_collision.py`. Read its report: pieces with a large excess (an open shell
    filled by its hull) need a component override or a configured box. Update the component id of
-   the machine interior in `Example/plan_rotation.py`.
+   the machine interior in `Example/plan_rotation.py` (code, not a job field).
 2. **Configuration:** every field of `Configuration/Cell_SF1.yaml` (above), each with its source.
 3. **TCP.** `Tool.TCP_Offset` is copied from the robot's TCP setting, never derived from the points.
 4. Then the program, as above.
@@ -633,12 +660,9 @@ are measured again, not copied.
 
 **Limits of the current procedure.**
 
-- One case and one program per run, chosen by editing code.
-- Exactly three transfer segments around one drop and one pick.
+- One job per run.
+- The generated moves use SF1's `movej` a and v.
 - The variants, the replay catalogue and the README figures are written for case 17.
-
-A job file (program, case, segments and gripper states as validated configuration) would remove
-most of these limits. It does not exist yet; the extracts are already cut by a script (above).
 
 </details>
 
@@ -662,10 +686,10 @@ most of these limits. It does not exist yet; the extracts are already cut by a s
 
 ```text
 CAD/              the cell STL (visual) and Collision/: the convex pieces and their manifest
-Configuration/    Cell_SF1.yaml: base pose, tool and TCP, margins, overrides, workspace
+Configuration/    Cell_SF1.yaml: base pose, tool and TCP, margins, overrides, workspace; Jobs/: what is planned
 Data/Programs/    the input: verbatim extracts of the robot program, and the simplified taught case 17
 Data/Generated/   plan_rotation.py's path (c2, delivered) and variants/: every variant and the table
-Example/          runnable scripts: viewers, planning, variants, figures, collision build
+Example/          runnable scripts: extraction, viewers, planning, variants, figures, collision build
 Media/            the README images (generated)
 models/           vendored MuJoCo Menagerie UR10e and Robotiq 2F-85, pinned by hash
 src/              Configuration, URScript, Kinematics, Collision, Scene, Planner

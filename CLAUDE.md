@@ -26,6 +26,8 @@ Never use a bare `python3` on this machine: miniforge's numpy is broken. Use `.v
 .venv/bin/python -m pytest                    # before a commit, about 14 min
 .venv/bin/python .claude/skills/project-style-rpx/scripts/check_style.py src Example test
 .venv/bin/python -m pytest .claude/skills/project-style-rpx/scripts/test_check_style.py
+.venv/bin/python Example/plan_rotation.py --job <name> --workers 8   # Configuration/Jobs/<name>.yaml
+.venv/bin/python Example/extract_program.py --program PATH --cases N [N ...] --out Data/Programs/<name>/
 .venv/bin/mjpython Example/demo_rotate_axis.py
 .venv/bin/python Example/make_readme_figures.py   # after the variants or a figure's input change
 ```
