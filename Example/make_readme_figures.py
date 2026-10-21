@@ -42,6 +42,8 @@ import mujoco
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import matplotlib.lines
+import matplotlib.patches
 # Custom Lib.:
 #   ../Configuration/Core — the cell configuration
 from Configuration.Core import Load_Configuration, Cell_Configuration_Str, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE, CONST_PROJECT_ROOT
@@ -100,34 +102,92 @@ CONST_DPI = 150.0
 # The renders show the environment as its collision model only (the convex pieces at their corrected
 # positions and the added boxes), never the visual STL: the STL is the original CAD without the
 # corrections (Visual_Mesh_Warning) and would show the robot apparently inside the machine. Size,
-# backdrop per page theme, headlight (the only light; no specular, so every surface is matte), and
-# per image the robot's point, the camera (look-at point in the world frame, distance, azimuth,
-# elevation), the environment's opacity, whether the robot's collision geometry is shown, and the
-# TCP paths drawn (variant, colour or None for the variant's own, radius).
-#   Unit [int] (px), [Vector<float> 1x3] (0 - 1), [Dict<string, Tuple>] (m, deg, 0 - 1, bool)
+# backdrop per page theme, headlight (the only light; no specular, so every surface is matte), the
+# radius of a variant's path and of the taught path drawn thin for reference, and the cameras
+# (look-at point in the world frame, distance, azimuth, elevation) shared by several renders.
+#   Unit [int] (px), [Vector<float> 1x3] (0 - 1), [float] (m), [Tuple] (m, m, deg, deg)
 CONST_RENDER_SIZE = (1280, 800)
 CONST_RENDER_BACKGROUND = {'light': (0.965, 0.965, 0.957), 'dark': (0.086, 0.106, 0.133)}
 CONST_HEADLIGHT = ((0.40, 0.40, 0.40), (0.75, 0.75, 0.75), (0.0, 0.0, 0.0))
-CONST_REFERENCE_PATH = (0.55, 0.55, 0.55)
-CONST_RENDERS = {
-    'cell_overview': ('home', (-0.55, 0.0, 0.85), 3.8, -135.0, -22.0, 1.0, False, ()),
-    'robot_home': ('home', (-0.10, 0.0, 1.25), 2.3, -150.0, -15.0, 1.0, False, ()),
-    'station_collision': ('Waypoint_5', (-0.69, -0.27, 1.20), 0.8, 160.0, -25.0, 0.35, True, ()),
-    'path_taught_vs_c1': ('home', (-0.40, 0.0, 1.55), 3.1, -150.0, -6.0, 1.0, False,
-                          (('taught', None, 0.008), ('c1', None, 0.008))),
-    'path_c3_proposal': ('home', (-0.40, 0.0, 1.55), 3.1, -150.0, -6.0, 1.0, False,
-                         (('taught', CONST_REFERENCE_PATH, 0.005), ('c3', None, 0.008))),
-}
-# The colours of the collision model: the environment one neutral grey, the station-zone pieces
-# (the holder boxes and the CAD pieces that meet the zone) orange, the robot's and gripper's
-# collision hulls red where shown.
+CONST_PATH_RADIUS, CONST_REFERENCE_RADIUS = 0.008, 0.004
+CONST_CAMERA_CELL = ((-0.55, 0.0, 0.85), 3.8, -135.0, -22.0)
+CONST_CAMERA_PATH = ((-0.40, 0.0, 1.55), 3.1, -150.0, -6.0)
+# The colours of the collision model: the environment one neutral grey; the station-zone pieces (the
+# holder boxes and the CAD pieces that meet the zone) orange where a render highlights them; the
+# robot's and gripper's collision hulls red where shown; in the collision-model figure each group in
+# its own colour and the zone box translucent orange.
 #   Unit [Vector<float> 1x3] (0 - 1), [Vector<float> 1x4] (0 - 1)
 CONST_ENV_RGB = (0.66, 0.68, 0.71)
 CONST_ZONE_RGBA = (0.92, 0.41, 0.20, 1.0)
+CONST_ZONE_BOX_RGBA = (0.92, 0.41, 0.20, 0.18)
 CONST_ROBOT_COLLISION_RGBA = (0.85, 0.22, 0.22, 0.45)
+CONST_ROBOT_GROUP_RGBA = (0.85, 0.22, 0.22, 1.0)
+CONST_STAND_RGB = (0.42, 0.45, 0.50)
+CONST_OTHER_RGB = (0.78, 0.79, 0.80)
+# The collision-model figure's name of each Environment.Assembly_Overrides object, and its colour;
+# an object not listed is named by its configuration name, in CONST_ENV_RGB.
+#   Unit [Dict<string, Tuple<string, Vector<float> 1x3>>] (-, 0 - 1)
+CONST_ASSEMBLY_GROUPS = {'machine_a': ('machine (a)', (0.52, 0.64, 0.80)),
+                         'side_cabinet': ('side cabinet (c)', (0.66, 0.56, 0.80))}
+# The status in the title of a path render.
+#   Unit [Dict<string, string>]
+CONST_RENDER_STATUS = {'taught': 'the taught program (reference)', 'b_optimised': 'previous optimisation, superseded by c1',
+                       'c1': 'delivered', 'c2': 'proposal — not verified on the robot',
+                       'c3': 'proposal — not verified on the robot'}
 # At most this many capsules per drawn path (the path is thinned evenly).
 #   Unit [int]
 CONST_PATH_CAPSULES = 600
+
+
+@dataclasses.dataclass
+class Render_Str:
+    """
+    Description:
+        One MuJoCo render of the README, written for the light and the dark page theme.
+    """
+
+    # The point of c1 the robot stands at.
+    #   Unit [string]
+    Point: str = 'home'
+    # The camera: look-at point (world frame), distance, azimuth, elevation.
+    #   Unit [Tuple<Vector<float> 1x3, float, float, float>] (m, m, deg, deg)
+    Camera: tp.Tuple = CONST_CAMERA_CELL
+    # The environment's opacity.
+    #   Unit [float] (0 - 1)
+    Opacity: float = 1.0
+    # How the environment and the robot are coloured: 'zone' (grey, the station-zone pieces orange,
+    # the robot by its visual meshes), 'neutral' (all grey), 'groups' (the collision-model figure:
+    # each group in its colour, the zone box, the robot by its collision hulls only).
+    #   Unit [string]
+    Colouring: str = 'zone'
+    # Whether the robot's collision hulls are drawn over its visual meshes (translucent red).
+    #   Unit [bool]
+    Robot_Collision: bool = False
+    # The TCP paths drawn: (variant, radius), each in the variant's graph colour.
+    #   Unit [Tuple<Tuple<string, float>>] (-, m)
+    Paths: tp.Tuple = ()
+    # The variant a path render is about ('' for none); a framed render gets a title, a legend and
+    # the estimate note, the others are the bare image.
+    #   Unit [string], [bool]
+    Variant: str = ''
+    Framed: bool = False
+
+
+# The renders, by file name.
+#   Unit [Dict<string, Render_Str>]
+CONST_RENDERS = {
+    'cell_overview': Render_Str(),
+    'robot_home': Render_Str(Camera=((-0.10, 0.0, 1.25), 2.3, -150.0, -15.0)),
+    'station_collision': Render_Str(Point='Waypoint_5', Camera=((-0.69, -0.27, 1.20), 0.8, 160.0, -25.0), Opacity=0.35,
+                                    Robot_Collision=True),
+    'collision_model': Render_Str(Colouring='groups', Framed=True),
+    'path_taught': Render_Str(Camera=CONST_CAMERA_PATH, Colouring='neutral', Paths=(('taught', CONST_PATH_RADIUS),),
+                              Variant='taught', Framed=True),
+}
+CONST_RENDERS.update({'path_%s' % v: Render_Str(Camera=CONST_CAMERA_PATH, Colouring='neutral',
+                                                Paths=(('taught', CONST_REFERENCE_RADIUS), (v, CONST_PATH_RADIUS)),
+                                                Variant=v, Framed=True)
+                      for v in CONST_ORDER[1:]})
 
 
 @dataclasses.dataclass
@@ -606,20 +666,105 @@ def Draw_Backdrop(scene: tp.Any, camera: tp.Any, background: tp.Sequence[float])
     scene.ngeom += 1
 
 
-def Render_Images(cfg: Cell_Configuration_Str, data: tp.Dict[str, Variant_Data_Str], out: str) -> tp.List[str]:
+def Environment_Groups(scene: Scene_Cls, cfg: Cell_Configuration_Str) -> tp.List[tp.Tuple[str, tp.Tuple, tp.List[int]]]:
+    """
+    Description:
+        The environment geoms of the collision-model figure in groups, each with its legend label
+        (naming the margin the planner keeps to it) and colour: the station zone (the zone pieces and
+        boxes, Scene_Cls.Zone_Pieces / Zone_Boxes), the robot stand (body env_stand), each
+        Environment.Assembly_Overrides object (its members in the manifest, CONST_ASSEMBLY_GROUPS)
+        and every other piece. A geom belongs to the first group that claims it, in that order.
+
+    Args:
+        (1) scene [Scene_Cls(object)]: The scene with the environment.
+        (2) cfg [Cell_Configuration_Str(object)]: The cell configuration (the margins).
+
+    Returns:
+        (1) parameter [List<Tuple<string, Vector<float> 1x4, List<int>>>]: Label, colour and geoms of
+                                                                            each group, in legend order.
+    """
+
+    m = scene.Model
+    environment = cfg.Clearance_Environment * 1e3
+    names = [mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_GEOM, g) or '' for g in range(m.ngeom)]
+    geom_of = {name: g for g, name in enumerate(names)}
+    left = {g for g in range(m.ngeom) if names[g].startswith('env_')}
+    zone = {geom_of['env_piece_%d' % i] for i in scene.Zone_Pieces} | {geom_of[CONST_ADDED_BOX_PREFIX + n] for n in scene.Zone_Boxes}
+    groups = [('station zone: holder and stub boxes, CAD pieces in the zone (%g mm)' % (cfg.Station_Zone_Environment * 1e3),
+               CONST_ZONE_RGBA, sorted(zone))]
+    left -= zone
+    stand = {g for g in left if m.body(m.geom_bodyid[g]).name == 'env_stand'}
+    groups.append(('robot stand (%g mm; the robot base stands on it)' % environment, tuple(CONST_STAND_RGB) + (1.0,), sorted(stand)))
+    left -= stand
+    components = scene.Piece_Components
+    for name, _, _, _ in cfg.Assembly_Overrides:
+        members = set(scene.Collision_Manifest.get('assembly_components', {}).get(name, []))
+        geoms = {g for g in left if names[g].startswith('env_piece_') and components[int(names[g][len('env_piece_'):])] in members}
+        label, rgb = CONST_ASSEMBLY_GROUPS.get(name, (name, CONST_ENV_RGB))
+        if name == cfg.Machine_Extra_Assembly:
+            label += ' (%g mm; %g mm for a generated path)' % (environment, environment + cfg.Machine_Extra_Margin * 1e3)
+        else:
+            label += ' (%g mm)' % environment
+        groups.append((label, tuple(rgb) + (1.0,), sorted(geoms)))
+        left -= geoms
+    groups.append(('other environment: the tables (b) (%g mm)' % environment, tuple(CONST_OTHER_RGB) + (1.0,), sorted(left)))
+    return groups
+
+
+def Frame_Render(image: np.ndarray, mode: str, title: str, subtitle: str, legend: tp.Sequence[tp.Tuple[str, tp.Any, str]],
+                 notes: tp.Sequence[str]) -> tp.Any:
+    """
+    Description:
+        A render with a title, a subtitle, a legend over its top left corner and footnotes, on the
+        render's own backdrop colour, so image and frame read as one panel.
+
+    Args:
+        (1) image [Matrix<uint8> HxWx3]: The render.
+        (2) mode [string]: 'light' or 'dark'.
+        (3 - 4) title, subtitle [string]: The heading.
+        (5) legend [List<Tuple<string, Vector<float> 1x3 or 1x4, string>>]: Label, colour and kind
+                                                                           ('line', 'thin' or 'patch').
+        (6) notes [List<string>]: The footnote lines.
+
+    Returns:
+        (1) parameter [Figure(object)]: The figure.
+    """
+
+    theme = dict(CONST_THEMES[mode], surface='#%02x%02x%02x' % tuple(int(round(c * 255)) for c in CONST_RENDER_BACKGROUND[mode]))
+    width, height = image.shape[1] / CONST_DPI, image.shape[0] / CONST_DPI
+    top, bottom = 0.62, 0.18 + 0.13 * len(notes)
+    fig, ax = New_Figure((width, height + top + bottom), theme, title, subtitle)
+    ax.set_position([0.0, bottom / (height + top + bottom), 1.0, height / (height + top + bottom)])
+    ax.imshow(image, interpolation='none')
+    ax.set_axis_off()
+    handles = []
+    for label, color, kind in legend:
+        if kind == 'patch':
+            handles.append(matplotlib.patches.Patch(facecolor=color, edgecolor='none', label=label))
+        else:
+            handles.append(matplotlib.lines.Line2D([], [], color=color, linewidth=3.0 if kind == 'line' else 1.5, label=label))
+    ax.legend(handles=handles, loc='upper left', fontsize=8.5, frameon=False, labelcolor=theme['text'], handlelength=1.8)
+    Footnote(fig, theme, notes)
+    return fig
+
+
+def Render_Images(cfg: Cell_Configuration_Str, data: tp.Dict[str, Variant_Data_Str], table: tp.Dict, out: str) -> tp.List[str]:
     """
     Description:
         The MuJoCo renders (CONST_RENDERS), each for the light and the dark page theme: the scene at
         the holding opening built without the visual STL, the environment drawn as its collision
-        model in CONST_ENV_RGB with the station-zone pieces in CONST_ZONE_RGBA, the robot by its
-        visual meshes (its collision hulls only where the render asks for them), the robot at a point
-        of c1, offscreen, lit by the headlight only (the model's own light is switched off, so the
-        surfaces are matte and the backdrop has its exact colour), the TCP paths drawn as capsules.
+        model (Render_Str.Colouring), the robot by its visual meshes or, in the collision-model
+        figure, by its collision hulls only, the robot at a point of c1, offscreen, lit by the
+        headlight only (the model's own light is switched off, so the surfaces are matte and the
+        backdrop has its exact colour), the TCP paths drawn as capsules in the graphs' colours. A
+        framed render gets its title, legend and notes (Frame_Render); a path render's subtitle gives
+        the variant's estimated time and highest robot point from comparison.csv.
 
     Args:
         (1) cfg [Cell_Configuration_Str(object)]: The cell configuration.
         (2) data [Dict<string, Variant_Data_Str>]: The variants' data (points and TCP paths).
-        (3) out [string]: The output directory.
+        (3) table [Dict<string, Dict<string, Dict<string, string>>>]: The comparison table (Read_Table_CSV).
+        (4) out [string]: The output directory.
 
     Returns:
         (1) parameter [List<string>]: The files written.
@@ -632,33 +777,67 @@ def Render_Images(cfg: Cell_Configuration_Str, data: tp.Dict[str, Variant_Data_S
     m.vis.headlight.ambient[:], m.vis.headlight.diffuse[:], m.vis.headlight.specular[:] = CONST_HEADLIGHT
     m.light_active[:] = 0
     renderer = mujoco.Renderer(m, height, width, max_geom=20000)
-    zone = {mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, n)
-            for n in ['env_piece_%d' % i for i in scene.Zone_Pieces] + [CONST_ADDED_BOX_PREFIX + n for n in scene.Zone_Boxes]}
+    groups = Environment_Groups(scene, cfg)
+    zone = set(groups[0][2])
     names = [mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_GEOM, g) or '' for g in range(m.ngeom)]
     environment = [g for g in range(m.ngeom) if names[g].startswith('env_')]
     robot_collision = [g for g in range(m.ngeom) if m.geom_group[g] == CONST_COLLISION_GROUP and not names[g].startswith('env_')]
-    option = mujoco.MjvOption()
-    for group in range(6):
-        option.geomgroup[group] = 1 if group in (2, CONST_COLLISION_GROUP) else 0
+    zone_lo, zone_hi = np.asarray(cfg.Station_Zone_Min), np.asarray(cfg.Station_Zone_Max)
     written = []
-    for name, (point, lookat, distance, azimuth, elevation, opacity, show_robot, paths) in CONST_RENDERS.items():
+    for name, render in CONST_RENDERS.items():
+        option = mujoco.MjvOption()
+        for group in range(6):
+            option.geomgroup[group] = 1 if group in ((CONST_COLLISION_GROUP,) if render.Colouring == 'groups' else (2, CONST_COLLISION_GROUP)) else 0
         for g in environment:
-            m.geom_rgba[g] = CONST_ZONE_RGBA if g in zone else list(CONST_ENV_RGB) + [opacity]
+            m.geom_rgba[g] = CONST_ZONE_RGBA if render.Colouring == 'zone' and g in zone else list(CONST_ENV_RGB) + [render.Opacity]
+        if render.Colouring == 'groups':
+            for _, rgba, geoms in groups:
+                for g in geoms:
+                    m.geom_rgba[g] = rgba
+        robot_rgba = CONST_ROBOT_GROUP_RGBA if render.Colouring == 'groups' else CONST_ROBOT_COLLISION_RGBA
         for g in robot_collision:
-            m.geom_rgba[g] = CONST_ROBOT_COLLISION_RGBA if show_robot else (0.0, 0.0, 0.0, 0.0)
-        scene.Set_Joints(data['c1'].Points[point].Q)
+            m.geom_rgba[g] = robot_rgba if render.Robot_Collision or render.Colouring == 'groups' else (0.0, 0.0, 0.0, 0.0)
+        scene.Set_Joints(data['c1'].Points[render.Point].Q)
         camera = mujoco.MjvCamera()
         camera.type = mujoco.mjtCamera.mjCAMERA_FREE
-        camera.lookat[:], camera.distance, camera.azimuth, camera.elevation = lookat, distance, azimuth, elevation
+        camera.lookat[:], camera.distance, camera.azimuth, camera.elevation = render.Camera
         for mode, background in CONST_RENDER_BACKGROUND.items():
             renderer.update_scene(scene.Data, camera=camera, scene_option=option)
-            for variant, color, radius in paths:
-                hex_color = CONST_VARIANT_COLORS[mode][variant].lstrip('#')
-                rgb = color if color is not None else [int(hex_color[k:k + 2], 16) / 255.0 for k in (0, 2, 4)]
-                Draw_Path(renderer.scene, data[variant].TCP, list(rgb) + [1.0], radius)
+            legend = []
+            for variant, radius in render.Paths:
+                hex_color = CONST_VARIANT_COLORS[mode][variant]
+                rgb = [int(hex_color[k:k + 2], 16) / 255.0 for k in (1, 3, 5)]
+                Draw_Path(renderer.scene, data[variant].TCP, rgb + [1.0], radius)
+                legend.append(('%s: %s' % (variant, 'taught path, reference' if radius == CONST_REFERENCE_RADIUS else CONST_RENDER_STATUS[variant]),
+                               hex_color, 'thin' if radius == CONST_REFERENCE_RADIUS else 'line'))
+            if render.Colouring == 'groups':
+                g = renderer.scene.geoms[renderer.scene.ngeom]
+                mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_BOX, (zone_hi - zone_lo) / 2.0, (zone_hi + zone_lo) / 2.0, np.eye(3).flatten(),
+                                    np.asarray(CONST_ZONE_BOX_RGBA, dtype=np.float32))
+                renderer.scene.ngeom += 1
             Draw_Backdrop(renderer.scene, camera, background)
+            image = renderer.render()
             path = os.path.join(out, '%s_%s.png' % (name, mode))
-            Write_PNG(renderer.render(), path)
+            if not render.Framed:
+                Write_PNG(image, path)
+            elif render.Colouring == 'groups':
+                legend = [('robot and gripper collision hulls (%g mm between them)' % (cfg.Clearance_Self * 1e3), CONST_ROBOT_GROUP_RGBA, 'patch')]
+                legend += [(label, rgba, 'patch') for label, rgba, _ in groups]
+                legend.append(('station-zone box: inside it the zone pieces keep %g mm' % (cfg.Station_Zone_Environment * 1e3),
+                               CONST_ZONE_RGBA[:3] + (0.35,), 'patch'))
+                Save_Figure(Frame_Render(image, mode, 'The collision model: the cell as the planner sees it',
+                                         'Convex pieces of the cell CAD and the added station boxes; the robot at home by its '
+                                         'collision hulls; each group with its margin',
+                                         legend, ['Not the CAD: machine (a) moved 150 mm away from the robot, the side cabinet 50 mm '
+                                                  'along −x, the station boxes fitted to the taught program.',
+                                                  'The planner checks every sample of a path against these pieces with the '
+                                                  'margins shown. Simulation passed ≠ safe on the robot.']), path)
+            else:
+                v = render.Variant
+                Save_Figure(Frame_Render(image, mode, '%s — %s' % (v, CONST_RENDER_STATUS[v]),
+                                         'TCP path home → home in the collision model; estimated %.2f s, highest robot point %.3f m'
+                                         % (Value(table, v, 'total', 't_est_s'), Value(table, v, 'total', 'max_robot_z_m')),
+                                         legend, [CONST_ESTIMATE_NOTE]), path)
             written.append(path)
     renderer.close()
     return written
@@ -714,7 +893,7 @@ def main():
             Save_Figure(draw(mode), path)
             written.append(path)
     if not args.graphs_only:
-        written += Render_Images(cfg, data, args.out)
+        written += Render_Images(cfg, data, table, args.out)
     for path in written:
         print('[INFO] Wrote %s.' % os.path.relpath(path, CONST_PROJECT_ROOT))
     print('[INFO] %d images. Simulation passed != safe on the robot.' % len(written))

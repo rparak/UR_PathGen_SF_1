@@ -10,7 +10,7 @@ workspace for flexible small-batch production with high process variability.
 <p align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="Media/cell_overview_dark.png">
-  <img src="Media/cell_overview_light.png" alt="Collision model of the SF1 cell in MuJoCo: the UR10e with the Robotiq 2F-85 on its stand, machine (a), the side tables, the operator panel and the station boxes in orange" width="85%">
+  <img src="Media/cell_overview_light.png" alt="Collision model of the SF1 cell in MuJoCo: the UR10e with the Robotiq 2F-85 on its stand, machine (a), the tables, the side cabinet and the station boxes in orange" width="85%">
 </picture>
 </p>
 
@@ -90,8 +90,8 @@ them show simulation estimates.
 The environment in every render is the collision model the planner checks against: the convex
 decomposition of the cell's CAD with the documented corrections (machine (a) moved 150 mm away from
 the robot, the side cabinet 50 mm along −x, the station bracket and stub added as boxes), not the
-original CAD. The environment is grey, the station-zone pieces orange; the robot is shown by its
-visual meshes.
+original CAD. In the two renders below, the environment is grey, the station-zone pieces orange
+and the robot is shown by its visual meshes.
 
 <table>
   <tr>
@@ -114,25 +114,56 @@ In the station close-up, machine (a) is drawn translucent so that the station-zo
 the configured bracket and stub boxes and the CAD pieces that meet the zone) and the robot's and
 gripper's collision hulls (red) show. The robot is at `Waypoint_5`, the retreat after the drop.
 
+### The collision model
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Media/collision_model_dark.png">
+  <img src="Media/collision_model_light.png" alt="The whole cell as the planner checks it: robot and gripper collision hulls red, machine (a) blue, the side cabinet purple, the robot stand dark grey, the tables light grey, the station boxes and zone pieces orange, the station-zone box translucent">
+</picture>
+
+This is everything the planner checks a path against, each group with the margin it must keep.
+The robot and the gripper are their collision hulls (the gripper at the 50 mm holding opening).
+Machine (a) and the side cabinet are moved from their CAD positions by the configured overrides.
+The station holder and stub are added boxes, fitted to the taught program. The small translucent
+box is the station zone: inside it, the zone pieces keep 5 mm instead of 20 mm.
+
+### The paths
+
+Each render shows one variant's TCP path home → home in its graph colour, with the taught path
+drawn thin in blue for reference. The station-zone pieces are grey here, so that no path colour is
+confused with them.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Media/path_taught_dark.png">
+  <img src="Media/path_taught_light.png" alt="TCP path of the taught program, home to home, drawn into the collision model of the cell">
+</picture>
+
 <table>
   <tr>
-    <th>Taught (blue) vs c1, delivered (green)</th>
-    <th>c3, proposal (pink) vs taught (grey)</th>
+    <td><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Media/path_b_optimised_dark.png">
+  <img src="Media/path_b_optimised_light.png" alt="TCP path of b_optimised against the taught path, drawn into the collision model of the cell">
+</picture></td>
+    <td><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Media/path_c1_dark.png">
+  <img src="Media/path_c1_light.png" alt="TCP path of c1, delivered, against the taught path, drawn into the collision model of the cell">
+</picture></td>
   </tr>
   <tr>
     <td><picture>
-  <source media="(prefers-color-scheme: dark)" srcset="Media/path_taught_vs_c1_dark.png">
-  <img src="Media/path_taught_vs_c1_light.png" alt="TCP paths of the taught program and c1 drawn into the collision model of the cell">
+  <source media="(prefers-color-scheme: dark)" srcset="Media/path_c2_dark.png">
+  <img src="Media/path_c2_light.png" alt="TCP path of the c2 proposal, not verified on the robot, against the taught path">
 </picture></td>
     <td><picture>
-  <source media="(prefers-color-scheme: dark)" srcset="Media/path_c3_proposal_dark.png">
-  <img src="Media/path_c3_proposal_light.png" alt="TCP path of the c3 proposal against the taught path, drawn into the collision model of the cell">
+  <source media="(prefers-color-scheme: dark)" srcset="Media/path_c3_dark.png">
+  <img src="Media/path_c3_light.png" alt="TCP path of the c3 proposal, not verified on the robot, against the taught path">
 </picture></td>
   </tr>
 </table>
 
-The taught program and c1 both swing high above the station (highest robot point 2.322 m and
-2.263 m). The c3 proposal stays low (1.780 m); it is not verified on the robot.
+The taught program, b_optimised and c1 all swing high above the station (highest robot point
+2.322, 2.263 and 2.263 m). The c2 and c3 proposals put the drop on another IK branch and stay low
+(1.818 and 1.780 m). They are proposals for re-teaching and are not verified on the robot.
 
 ### Comparison
 

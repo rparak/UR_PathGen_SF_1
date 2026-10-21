@@ -1004,6 +1004,19 @@ class Scene_Cls(object):
 
         return list(self.__zone_boxes)
 
+    @property
+    def Piece_Components(self) -> tp.List[int]:
+        """
+        Description:
+            The STL component of each collision-set piece (geom env_piece_<i>), in piece order; [] without
+            environment.
+
+        Returns:
+            (1) parameter [List<int>]: The component ids.
+        """
+
+        return list(self.__piece_components)
+
     def Station_TCPs(self, station_q: tp.Sequence[tp.Sequence[float]]) -> np.ndarray:
         """
         Description:

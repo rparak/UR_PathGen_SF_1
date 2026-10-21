@@ -44,7 +44,8 @@ Description:
 CONST_GRAPHS = ('cycle_time', 'path_length', 'max_height', 'clearance', 'joints', 'tcp_paths')
 # The MuJoCo renders, each written for the light and the dark page theme.
 #   Unit [Tuple<string>]
-CONST_RENDERS = ('cell_overview', 'robot_home', 'station_collision', 'path_taught_vs_c1', 'path_c3_proposal')
+CONST_RENDERS = ('cell_overview', 'robot_home', 'station_collision', 'collision_model', 'path_taught', 'path_b_optimised', 'path_c1',
+                 'path_c2', 'path_c3')
 
 
 def _Run(root, cwd, *args):
@@ -85,6 +86,47 @@ def test_the_graphs_are_the_committed_ones(root, tmp_path):
             assert written.read() == committed.read(), name
 
 
+def _Figures_Module(root, monkeypatch):
+    for folder in ('Example', 'src'):
+        if os.path.join(root, folder) not in sys.path:
+            monkeypatch.syspath_prepend(os.path.join(root, folder))
+    spec = importlib.util.spec_from_file_location('make_readme_figures', os.path.join(root, 'Example', 'make_readme_figures.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_collision_model_groups_cover_the_environment_once(root, cfg, scene, monkeypatch):
+    """
+    Description:
+        The collision-model figure's groups hold every environment geom exactly once: the station
+        zone the scene's zone pieces and boxes, the stand every other geom of body env_stand, each
+        Environment.Assembly_Overrides object the pieces of its manifest members outside the zone and
+        the stand, the rest the other environment; each label names the margin of its group from the
+        configuration (machine (a) also the generated-path margin).
+    """
+
+    module = _Figures_Module(root, monkeypatch)
+    groups = module.Environment_Groups(scene, cfg)
+    m = scene.Model
+    names = [module.mujoco.mj_id2name(m, module.mujoco.mjtObj.mjOBJ_GEOM, g) or '' for g in range(m.ngeom)]
+    environment = [g for g in range(m.ngeom) if names[g].startswith('env_')]
+    claimed = [g for _, _, geoms in groups for g in geoms]
+    assert sorted(claimed) == sorted(environment)
+    zone = {'env_piece_%d' % i for i in scene.Zone_Pieces} | {module.CONST_ADDED_BOX_PREFIX + n for n in scene.Zone_Boxes}
+    assert {names[g] for g in groups[0][2]} == zone
+    assert {names[g] for g in groups[1][2]} == {names[g] for g in environment
+                                                if m.body(m.geom_bodyid[g]).name == 'env_stand' and names[g] not in zone}
+    members = scene.Collision_Manifest['assembly_components']
+    for (name, _, _, _), (label, _, geoms) in zip(cfg.Assembly_Overrides, groups[2:]):
+        assert geoms and all(scene.Piece_Components[int(names[g][len('env_piece_'):])] in members[name] for g in geoms)
+        assert '%g mm' % (cfg.Clearance_Environment * 1e3) in label
+    assert '%g mm' % (cfg.Station_Zone_Environment * 1e3) in groups[0][0]
+    machine = groups[2 + [a[0] for a in cfg.Assembly_Overrides].index(cfg.Machine_Extra_Assembly)][0]
+    assert '%g mm for a generated path' % ((cfg.Clearance_Environment + cfg.Machine_Extra_Margin) * 1e3) in machine
+    assert len(groups) == 3 + len(cfg.Assembly_Overrides) and groups[-1][2]
+
+
 def test_the_renders_never_load_the_visual_stl(root, tmp_path, monkeypatch):
     """
     Description:
@@ -98,12 +140,7 @@ def test_the_renders_never_load_the_visual_stl(root, tmp_path, monkeypatch):
     def Refuse(path):
         raise AssertionError('the figure script loaded the visual STL %s' % path)
 
-    for folder in ('Example', 'src'):
-        if os.path.join(root, folder) not in sys.path:
-            monkeypatch.syspath_prepend(os.path.join(root, folder))
-    spec = importlib.util.spec_from_file_location('make_readme_figures', os.path.join(root, 'Example', 'make_readme_figures.py'))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = _Figures_Module(root, monkeypatch)
     monkeypatch.setattr(Scene.Core, 'Read_Binary_STL', Refuse)
     monkeypatch.setattr(sys, 'argv', ['make_readme_figures.py', '--out', str(tmp_path)])
     assert module.main() == 0
