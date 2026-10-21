@@ -33,6 +33,8 @@ import importlib.util
 import pytest
 # Math (Mathematical functions)
 import math
+# Re (Regular expressions)
+import re
 # Numpy (Array computing) [pip3 install numpy]
 import numpy as np
 # PyYAML (YAML parser and emitter) [pip3 install pyyaml]
@@ -445,3 +447,94 @@ def test_a_taught_move_above_the_workspace_top_is_a_warning_only(root, cfg):
     errors, warnings, _ = plan.Check_Taught_Model(job, low, scenes)
     assert errors == [] and warnings
     assert all('beyond Clearance.Workspace' in line for line in warnings)
+
+
+# Changes to the default job that it cannot hold, each with the refusal's words: a segment end that
+# is not a learned point, a segment crossing the release (program line 3425), a case no extract
+# holds, and a configured point the output does not move to (load3: a loading move).
+#   Unit [List<Tuple<string, Any, string>>]
+CONST_BAD_JOBS = [('Segments', [{'Name': 'S1', 'From': 'home', 'To': 'nowhere'}, {'Name': 'S2', 'From': 'Waypoint_5', 'To': 'Waypoint_18'},
+                                {'Name': 'S3', 'From': 'Waypoint_6', 'To': 'home'}], 'nowhere is not a learned point of the program'),
+                  ('Segments', [{'Name': 'S1', 'From': 'drop_rotate_1', 'To': 'Waypoint_5'}, {'Name': 'S2', 'From': 'Waypoint_18', 'To': 'home'}],
+                   'contains the gripper action at program line 3425'),
+                  ('Case', 99, 'plans case 99, which is in no cases extract of Data/Programs/sf1_plc_v4 \\(its cases: 17, 18\\)'),
+                  ('Point_Configurations', [{'Point': 'load3', 'Joint': 6, 'Turns': 1, 'Source': 'x'}],
+                   'configures load3, which the output does not move to')]
+
+
+@pytest.mark.parametrize('field, value, fragment', CONST_BAD_JOBS)
+def test_a_job_the_program_cannot_hold_is_refused(root, tmp_path, field, value, fragment):
+    """
+    Description:
+        A synthetic job (the default job with one field changed, as a file outside Configuration/Jobs/)
+        is refused by plan_rotation.py --job <file> with exit 1 and a sentence naming the segment, the
+        case or the point, before anything is planned or written.
+    """
+
+    with open(os.path.join(root, 'Configuration', 'Jobs', 'sf1_plc_v4_case_17.yaml'), encoding='utf-8') as handle:
+        data = yaml.safe_load(handle)
+    data[field] = value
+    if field == 'Segments':
+        data['Output']['Stations'] = ['drop', 'pick'][:len(value) - 1]
+    job = tmp_path / 'synthetic.yaml'
+    job.write_text(yaml.safe_dump(data), encoding='utf-8')
+    result = _Run(root, tmp_path, '--job', str(job), '--out', str(tmp_path / 'out'))
+    assert result.returncode == 1
+    assert re.search(r'^\[ERROR\] .*' + fragment, result.stdout, re.M), result.stdout
+    assert not (tmp_path / 'out').exists()
+
+
+def test_the_case_18_job_is_refused_without_its_holding_opening(root, tmp_path):
+    """
+    Description:
+        The case-18 job is shipped, but Tool.Holding_Openings has no entry for case 18 (its part's size
+        is not known, SPEC 8): --job sf1_plc_v4_case_18 is refused with exit 1, naming the entry to
+        add, and nothing is written; no opening is assumed.
+    """
+
+    result = _Run(root, tmp_path, '--job', 'sf1_plc_v4_case_18', '--out', str(tmp_path / 'out'))
+    assert result.returncode == 1
+    assert ('[ERROR] Tool.Holding_Openings has no entry for case 18 of sf1_plc_v4; add {Program: sf1_plc_v4, Case: 18, '
+            'Opening: <m>, Source: <text>}') in result.stdout
+    assert not (tmp_path / 'out').exists()
+
+
+@pytest.mark.slow
+def test_case_18_plans_without_code_changes(root, cfg, tmp_path):
+    """
+    Description:
+        The case-18 job plans with the code that plans case 17 (owner, 2026-10-21): with an assumed
+        holding opening of 50 mm (test only; no shipped entry) and a reduced budget (2 restarts), its
+        taught moves pass the model check, S1 home -> drop_rotate_2, S2 Waypoint_5 -> Waypoint_11
+        and S3 Waypoint_8 -> home are planned and verified (at most 5 via points each, every
+        generated segment keeping the generated rule), and both files are written: case 18's header,
+        its station lines verbatim from the program (typed from the extract), no point of case 17's
+        drop or pick, and a start that does not claim a blend (case 18's line to home has none).
+    """
+
+    plan = _Plan_Module(root)
+    job = _Job(plan, 'sf1_plc_v4_case_18')
+    assumed = dataclasses.replace(cfg, Holding_Openings={**cfg.Holding_Openings, ('sf1_plc_v4', 18): (0.050, 'test assumption')})
+    scenes = {state: Scene_Cls(dataclasses.replace(assumed, Opening=plan.Opening(assumed, state, job))) for state in ('holding', 'open')}
+    assert plan.Check_Taught_Model(job, assumed, scenes)[0] == []
+    budget = plan.Planner_Budget_Str(Restarts=2, RRT_Iterations=1000, Shortcut_Iterations=20, Refine_Candidates=1, Refine_Iterations=10)
+    plan.Plan_Job(job, assumed, str(tmp_path / 'out'), plan.CONST_PENALTY_WEIGHT, 1, budget)
+    points = Read_URScript((tmp_path / 'out' / 'SF1_Rotation_18.urscript').read_text(encoding='utf-8')).Points
+    sequence = (tmp_path / 'out' / 'SF1_Rotation_18_Sequence.script').read_text(encoding='utf-8')
+    assert sequence.startswith('# Case 18 of sf1_plc_v4.script, the rotation sequence home -> home, optimised')
+    for line in ('movel(Waypoint_7_p, a=1.2, v=0.25)', 'movel(Waypoint_8_p, a=1.2, v=0.25)',
+                 'movej(get_inverse_kin(Waypoint_5_p, qnear=Waypoint_5_q), a=1.3962634015954636, v=1.0471975511965976)',
+                 'movej(get_inverse_kin(pick_rotate_2_p, qnear=pick_rotate_2_q), a=1.3962634015954636, v=1.0471975511965976)',
+                 '# Start at home (generated, r=0), as the program\'s line (no blend)'):
+        assert line + '\n' in sequence, line
+    assert not {'drop_rotate_1', 'Waypoint_4', 'Waypoint_18', 'pick_rotate_1', 'Waypoint_6'} & set(points)
+    ends = {'S1': ('home', 'drop_rotate_2'), 'S2': ('Waypoint_5', 'Waypoint_11'), 'S3': ('Waypoint_8', 'home')}
+    station_q = [points[n].Q for n in ('drop_rotate_2', 'Waypoint_7', 'Waypoint_5', 'Waypoint_11', 'pick_rotate_2', 'Waypoint_8')]
+    for segment, (start, goal) in ends.items():
+        vias = sorted(n for n in points if n.startswith('via_%s_%s_' % (start, goal)))
+        assert len(vias) <= 5
+        path = [np.asarray(points[n].Q) for n in [start] + vias + [goal]]
+        scene = scenes['open' if segment == 'S2' else 'holding']
+        floors = scene.Station_Box_Floors(path[0], path[-1])
+        for a, b in zip(path[:-1], path[1:]):
+            assert scene.Check_Segment(a, b, kind='generated', station_q=station_q, box_floors=floors)[1] == [], segment

@@ -1,0 +1,37 @@
+## =========================================================================== ##
+# Description:
+#   Planning job: case 18 of sf1_plc_v4.script, home -> ... -> home: the second rotation of the
+#   program, kept to show that another case plans without code changes (owner, 2026-10-21). Not a
+#   deliverable: no output of it is committed, and Tool.Holding_Openings has no entry for case 18
+#   (its part's size is not known), so plan_rotation.py --job sf1_plc_v4_case_18 refuses until one is
+#   configured. The tests plan it with an assumed 50 mm and a reduced budget.
+#
+#   Read only by src/Configuration/Core.py (Load_Job); nothing writes it. Every field is
+#   REQUIRED (Configuration/Jobs/sf1_plc_v4_case_17.yaml describes each). Paths are relative to the
+#   repository root.
+## =========================================================================== ##
+
+# The program folder (Example/extract_program.py). REQUIRED. [path]
+Program: Data/Programs/sf1_plc_v4
+
+# The case of the program's switch, the body of its branch '(18 == switch_1)'. REQUIRED. [-]
+Case: 18
+
+# The segments planned, in program order: as case 17's, around case 18's drop (drop_rotate_2,
+# Waypoint_7, Waypoint_5) and pick (Waypoint_11, pick_rotate_2, Waypoint_8), read from its lines.
+# REQUIRED (at least one). [-, point, point]
+Segments:
+  - {Name: S1, From: home, To: drop_rotate_2}
+  - {Name: S2, From: Waypoint_5, To: Waypoint_11}
+  - {Name: S3, From: Waypoint_8, To: home}
+
+# No point is configured: every learned point keeps the program's _q. REQUIRED (may be empty).
+Point_Configurations: []
+
+# The output names and wording (as case 17's). REQUIRED, all five. [file, file, text, text, names]
+Output:
+  Points: SF1_Rotation_18.urscript
+  Sequence: SF1_Rotation_18_Sequence.script
+  Title: rotation sequence
+  Status: Not delivered - simulation only, the job that shows another case plans (owner, 2026-10-21).
+  Stations: [drop, pick]

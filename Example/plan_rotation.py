@@ -481,9 +481,10 @@ def Sequence_Entries(plan: Job_Plan_Str, vias: tp.Dict[str, tp.List[str]]) -> tp
 
     sequence, first = plan.Sequence, plan.Sequence.Segments[0]
     blend = CONST_BLEND.search(sequence.Lines[0].Raw)
-    entries = [('comment', 'Start at %s (generated, r=0): the program\'s line blends (r=%s) into %s, and a blend into a '
-                           'generated segment is not checked' % (first.From, blend.group(1) if blend else '0', first.Name)),
-               ('movej', first.From)]
+    start = ('Start at %s (generated, r=0): the program\'s line blends (r=%s) into %s, and a blend into a generated segment is '
+             'not checked' % (first.From, blend.group(1), first.Name) if blend else
+             'Start at %s (generated, r=0), as the program\'s line (no blend)' % first.From)
+    entries = [('comment', start), ('movej', first.From)]
     for k, segment in enumerate(sequence.Segments):
         entries += ([('comment', '%s (generated): %s -> %s' % (segment.Name, segment.From, segment.To))]
                     + [('movej', name) for name in vias[segment.Name]] + [('movej', segment.To)])
