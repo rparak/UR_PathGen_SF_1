@@ -18,8 +18,9 @@ workspace for flexible small-batch production with high process variability.
 machine (a), the tables, the side cabinet and, in orange, the regrasp station. The environment is
 the collision model with its configured corrections, not the original CAD.
 
-> **Simulation passed ≠ safe on the robot.** Every path in this repository is a proposal verified
-> in a simulation model. Run it on the real cell at reduced speed first.
+> **Simulation passed ≠ safe on the robot.** Every path in this repository is verified in a
+> simulation model; only c2 has been tested on the real cell (owner, 2026-10-21). Run any other
+> path on the real cell at reduced speed first.
 
 ## Contents
 
@@ -51,8 +52,8 @@ Case 17, home → home. All values are **simulation estimates**; every metric is
 |---|---|---:|---:|---:|
 | `taught` | the taught program (reference) | 23.37 | — | 2.322 |
 | `b_optimised` | previous optimisation, superseded by c1 | 17.50 | −25.1 % | 2.263 |
-| `c1` | **delivered** | 14.66 | −37.3 % | 2.263 |
-| `c2` | proposal for re-teaching, not verified on the robot | 12.05 | −48.4 % | 1.818 |
+| `c1` | previous optimisation (simulation only) | 14.66 | −37.3 % | 2.263 |
+| `c2` | **delivered — tested on the real cell (owner, 2026-10-21)** | 12.05 | −48.4 % | 1.818 |
 | `c3` | proposal for re-teaching, not verified on the robot | 13.86 | −40.7 % | 1.780 |
 
 <picture>
@@ -65,12 +66,13 @@ the taught program. An estimate: every move from rest to rest (r = 0); blends an
 not modelled.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="Media/path_c1_dark.png">
-  <img src="Media/path_c1_light.png" alt="The TCP path of c1 in green over the thin blue taught path: wide loops to the left of the station and above it, like b_optimised">
+  <source media="(prefers-color-scheme: dark)" srcset="Media/path_c2_dark.png">
+  <img src="Media/path_c2_light.png" alt="The TCP path of c2 in amber over the thin blue taught path: short, low moves next to the station instead of the taught program's high loops, labelled as delivered and tested on the real cell">
 </picture>
 
-**Figure 3:** c1 (green), delivered: as b_optimised, with the re-grip's wrist 3 one turn lower. Estimated
-14.66 s; highest robot point 2.263 m. The taught path is drawn thin in blue for reference.
+**Figure 3:** c2 (amber), delivered — tested on the real cell (owner, 2026-10-21): the drop on IK
+branch S− E− W−, so the transfers stay low. Estimated 12.05 s; highest robot point 1.818 m. The
+taught path is drawn thin in blue for reference.
 
 <details>
 <summary><b>All metrics</b>: the full comparison table and its notes</summary>
@@ -84,16 +86,17 @@ the program's blends and the gripper time are not modelled.
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
 | `taught` | the taught program (reference) | 23.37 | — | 5 | 45.440 | 7.062 | 2.322 | 8.4 | 3.4 (margin 5) |
 | `b_optimised` | previous optimisation, superseded by c1 | 17.50 | −25.1 % | 4 | 38.642 | 6.604 | 2.263 | 10.1 | 0.4 (margin 30) |
-| `c1` | **delivered** | 14.66 | −37.3 % | 4 | 35.395 | 6.446 | 2.263 | 10.1 | 0.4 (margin 30) |
-| `c2` | proposal for re-teaching, not verified on the robot | 12.05 | −48.4 % | 2 | 23.462 | 3.237 | 1.818 | 10.1 | 5.1 (margin 5) |
+| `c1` | previous optimisation (simulation only) | 14.66 | −37.3 % | 4 | 35.395 | 6.446 | 2.263 | 10.1 | 0.4 (margin 30) |
+| `c2` | **delivered — tested on the real cell (owner, 2026-10-21)** | 12.05 | −48.4 % | 2 | 23.462 | 3.237 | 1.818 | 10.1 | 5.1 (margin 5) |
 | `c3` | proposal for re-teaching, not verified on the robot | 13.86 | −40.7 % | 4 | 24.792 | 3.372 | 1.780 | 10.1 | 5.1 (margin 5) |
 
-- **The variants.** `b_optimised` re-plans S1–S3 on the taught points. `c1` (delivered, also in
-  `Data/Generated/`) does the same with the re-grip's wrist 3 one turn lower (the same poses), so S3
-  no longer turns wrist 3 by a full extra turn. `c2` and `c3` put the drop on another IK branch of
-  the same taught poses (S− E− W− and S− E− W+); with these drop points the planned transfers stay
-  low (highest robot point 1.818 and 1.780 m instead of 2.263 m). Their drop points are nominal-DH
-  solutions and must be re-taught on the robot.
+- **The variants.** `b_optimised` re-plans S1–S3 on the taught points. `c1` (previous optimisation
+  (simulation only), also in `Data/Generated/`) does the same with the re-grip's wrist 3 one turn
+  lower (the same poses), so S3 no longer turns wrist 3 by a full extra turn. `c2` and `c3` put the
+  drop on another IK branch of the same taught poses (S− E− W− and S− E− W+); with these drop points
+  the planned transfers stay low (highest robot point 1.818 and 1.780 m instead of 2.263 m). Their
+  drop points are nominal-DH solutions. `c2` was delivered and tested on the real cell (owner,
+  2026-10-21); `c3` must be re-taught and verified on the robot.
 - **Clearance.** Closest is the smallest robot–environment distance in the three transfer segments.
   Least room is that distance minus the margin of the pair concerned: taught segments are judged by
   the taught rule, generated ones by the generated rule (20 mm to the environment, 30 mm to
@@ -158,10 +161,10 @@ confused with them. The times and heights in the captions are simulation estimat
   </tr>
   <tr>
     <td><picture>
-  <source media="(prefers-color-scheme: dark)" srcset="Media/path_c2_dark.png">
-  <img src="Media/path_c2_light.png" alt="The TCP path of the c2 proposal in amber over the thin blue taught path: short, low moves next to the station, labelled as not verified on the robot">
+  <source media="(prefers-color-scheme: dark)" srcset="Media/path_c1_dark.png">
+  <img src="Media/path_c1_light.png" alt="The TCP path of c1 in green over the thin blue taught path: wide loops to the left of the station and above it, like b_optimised">
 </picture>
-<p><b>Figure 9:</b> c2 (amber), proposal, not verified on the robot: the drop on IK branch S− E− W−. Estimated 12.05 s; highest robot point 1.818 m.</p></td>
+<p><b>Figure 9:</b> c1 (green), previous optimisation (simulation only): as b_optimised, with the re-grip's wrist 3 one turn lower. Estimated 14.66 s; highest robot point 2.263 m.</p></td>
     <td><picture>
   <source media="(prefers-color-scheme: dark)" srcset="Media/path_c3_dark.png">
   <img src="Media/path_c3_light.png" alt="The TCP path of the c3 proposal in pink over the thin blue taught path: short, low moves next to the station, labelled as not verified on the robot">
@@ -198,12 +201,12 @@ zone, 5 mm inside it); simulation values.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="Media/joints_dark.png">
-  <img src="Media/joints_light.png" alt="Seven stacked panels over the estimated time: a timeline of each variant's sections with the station operations hatched, then the base, shoulder, elbow and three wrist joint angles in degrees for all five variants, the proposals c2 and c3 dashed">
+  <img src="Media/joints_light.png" alt="Seven stacked panels over the estimated time: a timeline of each variant's sections with the station operations hatched, then the base, shoulder, elbow and three wrist joint angles in degrees for all five variants, the proposal c3 dashed">
 </picture>
 
 **Figure 14:** The six joint angles of all five variants over the estimated time, under a timeline of each
 variant's sections (taught station operations hatched); a dotted line marks where each sequence
-ends, and the proposals c2 and c3 are dashed. The timing is an estimate: every move from rest to
+ends, and the proposal c3 is dashed. The timing is an estimate: every move from rest to
 rest (r = 0), blends and gripper time not modelled.
 
 <picture>
@@ -231,8 +234,9 @@ sudo apt install python3.11 python3.11-venv       # Ubuntu
 models and the collision set against their recorded hashes.
 
 **Run.** View a learned position with its clearance, replay a variant (case 17, home → home), and
-run the optimisation, which plans S1–S3 of case 17 and writes the delivered output to
-`Data/Generated/`. The viewer needs `mjpython` on macOS; on Linux use `.venv/bin/python`.
+run the optimisation, which plans S1–S3 of case 17 and writes c1, the previous optimisation, to
+`Data/Generated/` (the delivered c2 is in `Data/Generated/variants/c2/`). The viewer needs
+`mjpython` on macOS; on Linux use `.venv/bin/python`.
 
 ```bash
 .venv/bin/mjpython Example/demo_visualize_position.py --pos home_q   # view a learned position
@@ -244,8 +248,8 @@ run the optimisation, which plans S1–S3 of case 17 and writes the delivered ou
 |---|---|
 | 1 | taught |
 | 2 | b_optimised: previous optimisation |
-| 3 | c1: delivered |
-| 4 | c2: proposal, not verified on the robot |
+| 3 | c1: previous optimisation (simulation only) |
+| 4 | c2: delivered — tested on the real cell (owner, 2026-10-21) |
 | 5 | c3: proposal, not verified on the robot |
 | 6 | all five in turn, with the strict comparison |
 
@@ -275,7 +279,8 @@ clearance is checked against; the viewers print a warning naming the corrections
 .venv/bin/python Example/replay_rotation.py --path 3 --headless
 ```
 
-**Run the optimisation.** One command plans S1–S3 of case 17 and writes the delivered output:
+**Run the optimisation.** One command plans S1–S3 of case 17 and writes its output, c1 (the
+delivered c2 is written by `write_variants.py`, below):
 
 ```bash
 .venv/bin/python Example/plan_rotation.py --workers 8
@@ -304,11 +309,11 @@ diff /tmp/sf1_plan/SF1_Rotation_17.urscript Data/Generated/SF1_Rotation_17.urscr
 diff /tmp/sf1_plan/SF1_Rotation_17_Sequence.script Data/Generated/SF1_Rotation_17_Sequence.script
 ```
 
-The replay plays the variant folders in `Data/Generated/variants/` (`--path 3` is c1, the
-delivered output); it takes no other folder. To replay and tabulate a new plan, regenerate the
-variants. This re-plans b_optimised, c1, c2 and c3 into `Data/Generated/variants/`, overwriting
-the committed files (`git diff` shows what changed), and rewrites the comparison table. Then
-rewrite the figures:
+The replay plays the variant folders in `Data/Generated/variants/` (`--path 3` is c1, the output of
+`plan_rotation.py`; `--path 4` is c2, the delivered path); it takes no other folder. To replay and
+tabulate a new plan, regenerate the variants. This re-plans b_optimised, c1, c2 and c3 into
+`Data/Generated/variants/`, overwriting the committed files (`git diff` shows what changed), and
+rewrites the comparison table. Then rewrite the figures:
 
 ```bash
 .venv/bin/python Example/write_variants.py --workers 8        # about 6 minutes; --table-only re-measures
@@ -455,8 +460,8 @@ from them, and without them nothing can be planned, replayed or checked.
 |---|---|
 | `Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript` | **Input:** the program's 78 learned points (`global <name>_p` / `_q`) |
 | `Data/Programs/sf1_plc_v4/sf1_plc_v4_cases_17_18.script` | **Input:** the program lines of cases 17 and 18 |
-| `Data/Generated/SF1_Rotation_17.urscript`, `SF1_Rotation_17_Sequence.script` | **Output:** the delivered path (c1): its points and its motion sequence |
-| `Data/Generated/variants/` | **Output:** every variant in the same two files, and `comparison.csv` / `comparison.md` |
+| `Data/Generated/SF1_Rotation_17.urscript`, `SF1_Rotation_17_Sequence.script` | **Output:** c1, the output of `plan_rotation.py`: its points and its motion sequence |
+| `Data/Generated/variants/` | **Output:** every variant in the same two files, the delivered c2 among them, and `comparison.csv` / `comparison.md` |
 
 <details>
 <summary><b>Every file</b>, the two file formats and how the extracts were made</summary>
@@ -472,9 +477,9 @@ them nothing can be planned, replayed or checked.
 | `Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript` | **Input.** The program's 78 learned points as `global <name>_p` / `_q` lines (program lines 2453–2608) | every script that needs a learned point: `plan_rotation.py`, `write_variants.py`, `write_taught_programs.py`, `demo_visualize_position.py`, `demo_rotate_axis.py` |
 | `Data/Programs/sf1_plc_v4/sf1_plc_v4_cases_17_18.script` | **Input.** The program lines of cases 17 and 18 (lines 3397–3478 and 3480–3561), with their indentation, Polyscope markers and URCap code | `plan_rotation.py`, `write_variants.py`, `write_taught_programs.py` |
 | `Data/Programs/sf1_plc_v4/sf1_plc_v4_case_17.urscript`, `…_case_17_sequence.script` | The taught case 17, home → home, simplified: the points it moves to and its moves. Written by `write_taught_programs.py` | no script: a reference to compare the output with, line by line |
-| `Data/Generated/SF1_Rotation_17.urscript` | **Output.** The delivered path (c1): the learned points it moves to, then the generated via points `via_<from>_<to>_<nn>` | written by `plan_rotation.py` |
-| `Data/Generated/SF1_Rotation_17_Sequence.script` | **Output.** The delivered motion sequence of case 17, home → home | written by `plan_rotation.py` |
-| `Data/Generated/variants/<variant>/` | The same two files for each of `taught`, `b_optimised`, `c1`, `c2` and `c3` | written by `write_variants.py`; read by `replay_rotation.py` and `make_readme_figures.py` |
+| `Data/Generated/SF1_Rotation_17.urscript` | **Output.** c1 (previous optimisation (simulation only)): the learned points it moves to, then the generated via points `via_<from>_<to>_<nn>` | written by `plan_rotation.py` |
+| `Data/Generated/SF1_Rotation_17_Sequence.script` | **Output.** c1's motion sequence of case 17, home → home | written by `plan_rotation.py` |
+| `Data/Generated/variants/<variant>/` | The same two files for each of `taught`, `b_optimised`, `c1`, `c2` (delivered) and `c3` | written by `write_variants.py`; read by `replay_rotation.py` and `make_readme_figures.py` |
 | `Data/Generated/variants/comparison.csv`, `comparison.md` | The comparison table of the variants (the [Results](#results)) | written by `write_variants.py`; the CSV read by `make_readme_figures.py` |
 
 The other inputs are `Configuration/Cell_SF1.yaml`, the collision set in `CAD/Collision/` (built from
@@ -539,7 +544,7 @@ validated at load. All problems are named at once. For planning:
 - the points: home, the drop (`drop_rotate_1`, `Waypoint_4`, `Waypoint_5`) and the pick
   (`Waypoint_18`, `pick_rotate_1`, `Waypoint_6`), which are the six fixed station points;
 - the three segments and their gripper states: S1 and S3 holding, S2 open at the full 85 mm;
-- the delivered turn of wrist 3 at the pick's three points;
+- the turn of wrist 3 at the pick's three points (c1, c2 and c3);
 - the seed (20261017) and the penalty weight (0.5 s/m, `--penalty-weight`);
 - the output names `SF1_Rotation_17.urscript` and `SF1_Rotation_17_Sequence.script`;
 - the shape of the station operations. The output is assembled for exactly this sequence:
@@ -635,8 +640,8 @@ today.
 
 ## Limitations and safety
 
-- **Simulation passed ≠ safe on the robot.** Every output is a proposal; run it on the real cell at
-  reduced speed first.
+- **Simulation passed ≠ safe on the robot.** Every output except the delivered c2 is a proposal
+  that has not run on the robot; run it on the real cell at reduced speed first.
 - **Nominal DH, no calibration.** The kinematic error, DH FK · TCP against the robot's `_p`, is
   measured at all 78 learned points (at most 4.04 mm / 0.377°), and every learned point is checked
   at load. At the generated via points it is unmeasured.
@@ -644,8 +649,9 @@ today.
   regrasp station is fitted to the taught program, and the model is not valid inside machine (a).
 - **Not modelled.** The program's blends, the gripper time, the carried part beyond the pad ends and
   the cables.
-- **c1** turns the re-grip's wrist 3 one turn lower than taught; the robot's IK choice at those
-  lines is confirmed only by the first run. **c2 and c3** are proposals for re-teaching, never run.
+- **c2** was delivered and tested on the real cell (owner, 2026-10-21). **c1** (simulation only)
+  turns the re-grip's wrist 3 one turn lower than taught; the robot's IK choice at those lines is
+  confirmed only by the first run. **c3** is a proposal for re-teaching, never run.
 - The joint limits are the hardware range; the cell's Polyscope safety limits may be tighter.
 
 ## Repository layout
@@ -654,7 +660,7 @@ today.
 CAD/              the cell STL (visual) and Collision/: the convex pieces and their manifest
 Configuration/    Cell_SF1.yaml: base pose, tool and TCP, margins, overrides, workspace
 Data/Programs/    the input: verbatim extracts of the robot program, and the simplified taught case 17
-Data/Generated/   the delivered path (c1) and variants/: every variant and the comparison table
+Data/Generated/   plan_rotation.py's path (c1) and variants/: every variant (c2 delivered) and the table
 Example/          runnable scripts: viewers, planning, variants, figures, collision build
 Media/            the README images (generated)
 models/           vendored MuJoCo Menagerie UR10e and Robotiq 2F-85, pinned by hash

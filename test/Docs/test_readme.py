@@ -102,7 +102,9 @@ def test_the_results_table_is_comparison_csv(root):
         the taught one and the highest robot point. The full one (collapsed): those and the via
         points, the joint travel, the TCP path (the total row, as written), the closest distance and
         the least room above its margin over the transfer segments S1 - S3. In both, the five
-        variants appear in order, the proposals marked as not verified on the robot.
+        variants appear in order with the owner's statuses (2026-10-21): c2 delivered and tested on
+        the real cell, never called unverified; c1 the previous optimisation, simulation only; c3 a
+        proposal not verified on the robot.
     """
 
     tables, table = _Results_Tables(_Readme(root)), _Csv(root)
@@ -113,9 +115,9 @@ def test_the_results_table_is_comparison_csv(root):
         for variant in CONST_VARIANTS:
             expected = _Expected(table[variant], taught_total)
             assert rows[variant][2:] == [expected[k] for k in columns], variant
-        for variant in ('c2', 'c3'):
-            assert 'not verified on the robot' in rows[variant][1]
-        assert '**delivered**' in rows['c1'][1]
+        assert rows['c2'][1] == '**delivered — tested on the real cell (owner, 2026-10-21)**'
+        assert rows['c1'][1] == 'previous optimisation (simulation only)'
+        assert 'not verified on the robot' in rows['c3'][1]
 
 
 def test_every_image_the_readme_shows_exists(root):
