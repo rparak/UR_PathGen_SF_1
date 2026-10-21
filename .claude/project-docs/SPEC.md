@@ -909,16 +909,18 @@ robot's calibration. Two separate checks, with separate jobs:
      (`plan_rotation.Check_Learned`, the orientation bound from a robot-only scene at
      `Tool.Opening`, L_tool 176.7 mm → θ_max 3.245°). A point outside stops the script with
      `Kinematics_Error_Cls` and its numbers; the script prints the largest residual otherwise. A
-     point is never accepted silently. Measured 2026-10-20: all 78 points within it, the largest
-     4.04 mm / 0.377° (Waypoint_7, Waypoint_4).
+     point is never accepted silently. Measured 2026-10-21: all 78 points within it, the largest
+     4.04 mm (Waypoint_7) and 0.377° (Waypoint_1). *Corrected 2026-10-21: the orientation maximum
+     was attributed to Waypoint_4.*
 
-The measured 4.02 mm / 0.38° lies at 40 % / 12 % of the bound.
+The largest measured 4.04 mm / 0.377° lies at 40 % / 12 % of the bound.
 
-**Consistency with the clearance budget.** The kinematic error is known at two poses only, so its
-size along a path can only be assumed. The sanity bound allows up to 10 mm at a learned point. The
+**Consistency with the clearance budget.** The kinematic error is measured at all 78 learned
+points and checked at load; at generated via points, and between points along a path, it is
+unmeasured and can only be assumed. The sanity bound allows up to 10 mm at a learned point. The
 budget (§9.8) therefore shows both cases, the measured 4.0 mm and the bound's 10 mm, and
-`KNOWN_ISSUES.md` states that the error was measured at two poses only and may be larger elsewhere
-along the path.
+`KNOWN_ISSUES.md` states that the error is unmeasured at generated via points and between points
+and may be larger there. *Corrected 2026-10-21: the error was said to be known only at home and drop_rotate_1.*
 
 ### 9.5 Orientation comparison (requirement A)
 
@@ -1042,14 +1044,16 @@ along the path.
 
 | Item | Case A: measured | Case B: sanity bound | Basis |
 |---|---|---|---|
-| Kinematic error (nominal DH vs the calibrated robot) | 4.0 mm | 10.0 mm | A: max measured, at two poses only (§4.3). B: the most a learned point may have (§9.4) |
+| Kinematic error (nominal DH vs the calibrated robot) | 4.0 mm | 10.0 mm | A: max measured over all 78 learned points, 4.04 mm at Waypoint_7 (§9.4). B: the most a learned point may have (§9.4) |
 | Collision-set conservativeness | 1.0 mm | 1.0 mm | `eps` (§7.3) |
 | Coupling | 0 mm | 0 mm | measured on the robot, 14.0 mm = drawing (§4.4) |
 | **Remaining for cables** at the base and the tool (not modelled) | **15.0 mm** | **9.0 mm** | 20 − kinematic error − eps |
 
-The error was measured at two poses only. Case A is the expected case; case B is what the checks
-can guarantee for learned points. At generated via points the error cannot be measured, so neither
-case is guaranteed there (`KNOWN_ISSUES.md`).
+The error is measured at all 78 learned points (at most 4.04 mm at Waypoint_7, 0.377° at
+Waypoint_1) and every learned point is checked at load. Case A is the expected case; case B is what
+the checks can guarantee for learned points. At generated via points, and between points along a
+path, the error cannot be measured, so neither case is guaranteed there (`KNOWN_ISSUES.md`).
+*Corrected 2026-10-21: the error was said to be measured only at home and drop_rotate_1.*
 
 Not in the budget, because they are not small bounded errors. Each is listed in `KNOWN_ISSUES.md`:
 
@@ -1430,8 +1434,10 @@ milestone keeps the hard error of §9.7.
 
 **`KNOWN_ISSUES.md` at the skeleton** (only what the skeleton decided):
 
-1. Kinematic error was measured at two poses only (1.72 mm, 4.02 mm). It may be larger elsewhere
-   along the path; at generated via points it is unmeasured (§9.8).
+1. Kinematic error is measured at all 78 learned points (at most 4.04 mm at Waypoint_7, 0.377° at
+   Waypoint_1; home 1.72 mm, drop_rotate_1 4.02 mm) and checked at load. At generated via points,
+   and between points along a path, it is unmeasured and may be larger (§9.8). *Corrected
+   2026-10-21: it was said to be measured only at home and drop_rotate_1.*
 2. No `calibration.conf`: nominal DH.
 3. The carried 50 × 50 mm part is not modelled (accepted). The pad-span hull covers the space
    between the fingers; **a part protruding beyond the pad ends is not covered** (§9.6).
