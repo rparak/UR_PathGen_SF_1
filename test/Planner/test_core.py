@@ -49,7 +49,7 @@ from Scene.Core import Scene_Cls
 #   ../src/URScript/Core — the committed outputs and the program extracts
 from URScript.Core import Read_URScript, Read_Program_Excerpt, Make_Generated_Point, Make_Document, Write_URScript, Format_Generated
 #   ../src/Kinematics/Core — the informational _p of a via point
-from Kinematics.Core import TCP_Pose, Matrix_To_Pose
+from Kinematics.Core import TCP_Pose, Matrix_To_Pose, Pose_To_Matrix, IK_Branch
 
 """
 Description:
@@ -234,26 +234,37 @@ def test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end(r
                         segment, name, leg, k, distance, taught)
 
 
-def test_the_station_points_keep_their_tokens(root, program):
+def test_the_station_points_keep_their_tokens(root, program, cfg):
     """
     Description:
-        The output holds home and the station points, each the program's point token for token, except
-        wrist 3 of the pick's three points: one turn lower (4.739 - 2 pi, written as a generated token),
-        the owner's choice (SPEC 10.5); nothing of the loading moves; every other point is a generated
+        The output (c2, delivered and tested on the real cell, owner 2026-10-21) holds home and the
+        station points, each with the program's _p token for token: home with the program's _q; the
+        pick's three with wrist 3 one turn lower (4.739 - 2 pi, a generated token, SPEC 10.5); the
+        drop's three with a generated _q on IK branch S- E- W- whose DH TCP is the _p pose (1e-9) and
+        whose joints lie within pi of the point the output moves to before it (the chain rule: home,
+        drop_rotate_1, Waypoint_4). Nothing of the loading moves; every other point is a generated
         via point.
     """
 
     points, lines = program
     document, _ = _Output(root)
     fixed = {'home'} | set(CONST_CASE.values())
+    previous = {'drop_rotate_1': 'home', 'Waypoint_4': 'drop_rotate_1', 'Waypoint_5': 'Waypoint_4'}
     for name, point in document.Points.items():
-        if name in fixed:
-            expected = list(points[name].Q_Tokens)
-            if name in CONST_TURNED:
-                expected[CONST_TURNED_JOINT] = Format_Generated(points[name].Q[CONST_TURNED_JOINT] - 2.0 * math.pi)
-            assert (point.P_Tokens, point.Q_Tokens) == (points[name].P_Tokens, expected), name
-        else:
+        if name not in fixed:
             assert name.startswith('via_')
+            continue
+        assert point.P_Tokens == points[name].P_Tokens, name
+        if name in previous:
+            assert point.Q_Tokens != points[name].Q_Tokens and IK_Branch(point.Q) == 'S- E- W-', name
+            assert np.max(np.abs(TCP_Pose(point.Q, cfg.TCP_Offset) - Pose_To_Matrix(points[name].P))) < 1e-9, name
+            near = np.asarray(document.Points[previous[name]].Q)
+            assert all(abs(a - b) <= math.pi for k, (a, b) in enumerate(zip(point.Q, near)) if k != 2), name
+            continue
+        expected = list(points[name].Q_Tokens)
+        if name in CONST_TURNED:
+            expected[CONST_TURNED_JOINT] = Format_Generated(points[name].Q[CONST_TURNED_JOINT] - 2.0 * math.pi)
+        assert point.Q_Tokens == expected, name
     assert fixed <= set(document.Points)
 
 
