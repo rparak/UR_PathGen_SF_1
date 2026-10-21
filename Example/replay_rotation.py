@@ -47,7 +47,7 @@ import numpy as np
 import mujoco
 # Custom Lib.:
 #   ../Configuration/Core — the cell configuration
-from Configuration.Core import Load_Configuration, Cell_Configuration_Str, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE
+from Configuration.Core import Load_Configuration, Cell_Configuration_Str, Configuration_Error_Cls, CONST_DEFAULT_CONFIG_FILE, CONST_PROJECT_ROOT
 #   ../URScript/Core — the motion sequences and their points
 from URScript.Core import Read_URScript, Read_Motion_Sequence, Motion_Str, URScript_Error_Cls
 #   ../Kinematics/Core — the TCP path of a movel
@@ -57,7 +57,7 @@ from Scene.Core import Scene_Cls, CONST_COLLISION_GROUP, CONST_GRIPPER_PREFIX, C
 #   ../Planner/Core — the duration estimates and their profile
 from Planner.Core import Segment_Duration, Linear_Duration, Profile_Fraction
 #   ../Example/plan_rotation — the case, the openings, the outputs and the clearance labels
-from plan_rotation import (CONST_DEFAULT_JOB, CONST_VARIANT_DIR, CONST_VARIANTS, CONST_FILE_NAMES,
+from plan_rotation import (CONST_DEFAULT_JOB, CONST_OUTPUT_DIR, CONST_VARIANT_DIR, CONST_VARIANTS, CONST_FILE_NAMES,
                            CONST_MACHINE_INTERIOR, CONST_LABEL_CLEAR, CONST_LABEL_VIOLATED, CONST_LABEL_INVALID, CONST_REPORT_DISTMAX,
                            Job_Plan_Str, Load_Job_Plan, Segments, Opening, Check_Learned)
 
@@ -80,9 +80,11 @@ CONST_CATALOGUE = {
 # The note shown with a proposal that has not run on the robot.
 #   Unit [Dict<string, string>]
 CONST_NOTES = {'c3': 'proposal - not verified on the robot'}
-# The gripper state at home: holding the part. Owner, 2026-10-18: the robot holds the part from the
-# start of the case, places it into the magazine and releases it, picks it up again and returns home
-# holding it; the gripper is open only between the release and the re-pick (S2).
+# The gripper state at home of the variants (case 17): holding the part. Owner, 2026-10-18: the robot
+# holds the part from the start of the case, places it into the magazine and releases it, picks it up
+# again and returns home holding it; the gripper is open only between the release and the re-pick
+# (S2). The default job's first segment state, derived from the program (test_replay.py pins them
+# equal); a --job replay starts in its own job's.
 #   Unit [string]
 CONST_ENTRY_STATE = 'holding'
 # Frames per second of the replay; the playback time of a move is its estimated duration / speed.
@@ -144,25 +146,27 @@ def Catalogue_Text() -> str:
     return '\n'.join('  %d  %s' % (number, entry[1]) for number, entry in sorted(CONST_CATALOGUE.items()))
 
 
-def Load_Variant(folder: str) -> tp.Tuple[tp.List[Motion_Str], tp.Dict]:
+def Load_Variant(folder: str, names: tp.Tuple[str, str] = CONST_FILE_NAMES) -> tp.Tuple[tp.List[Motion_Str], tp.Dict]:
     """
     Description:
         The operations of one variant and its points (the variant's own points file).
 
     Args:
         (1) folder [string]: The variant's directory (CONST_VARIANT_DIR/<variant> for the committed ones).
+        (2) names [Tuple<string, string>]: The points and the sequence file names (a job's Output names).
 
     Returns:
         (1) parameter [Tuple<List<Motion_Str>, Dict<string, Robot_Point_Str>>]: Operations and points.
     """
 
-    with open(os.path.join(folder, CONST_FILE_NAMES[0]), encoding='utf-8') as handle:
+    with open(os.path.join(folder, names[0]), encoding='utf-8') as handle:
         points = Read_URScript(handle.read()).Points
-    with open(os.path.join(folder, CONST_FILE_NAMES[1]), encoding='utf-8') as handle:
+    with open(os.path.join(folder, names[1]), encoding='utf-8') as handle:
         return Read_Motion_Sequence(handle.read()), points
 
 
-def Build_Moves(operations: tp.List[Motion_Str], points: tp.Dict, cfg: Cell_Configuration_Str) -> tp.List[Move_Str]:
+def Build_Moves(operations: tp.List[Motion_Str], points: tp.Dict, cfg: Cell_Configuration_Str,
+                entry_state: str = CONST_ENTRY_STATE) -> tp.List[Move_Str]:
     """
     Description:
         The moves of a path from its operations. The path starts at its first target (the robot
@@ -176,13 +180,14 @@ def Build_Moves(operations: tp.List[Motion_Str], points: tp.Dict, cfg: Cell_Conf
         (1) operations [List<Motion_Str>]: The operations in order.
         (2) points [Dict<string, Robot_Point_Str>]: The points of the variant.
         (3) cfg [Cell_Configuration_Str(object)]: The cell configuration (the TCP).
+        (4) entry_state [string]: The gripper state at the start ('holding' or 'open').
 
     Returns:
         (1) parameter [List<Move_Str>]: The moves and gripper actions, the start excluded.
     """
 
     q = np.asarray(points[operations[0].Target].Q, dtype=float)
-    state, moves = CONST_ENTRY_STATE, []
+    state, moves = entry_state, []
     for o in operations[1:]:
         if o.Kind == 'gripper':
             state = 'open' if o.Target == 'open' else 'holding'
@@ -202,6 +207,24 @@ def Build_Moves(operations: tp.List[Motion_Str], points: tp.Dict, cfg: Cell_Conf
                               duration, distance, o.A, o.V, o.Section))
         q = target
     return moves
+
+
+def Entry_State(moves: tp.Sequence[Move_Str]) -> str:
+    """
+    Description:
+        The gripper state at the start of a path: its first move's, or the opposite of its first
+        gripper action's result.
+
+    Args:
+        (1) moves [List<Move_Str>]: The moves (Build_Moves).
+
+    Returns:
+        (1) parameter [string]: 'holding' or 'open'.
+    """
+
+    if moves[0].Kind != 'gripper':
+        return moves[0].State
+    return 'holding' if moves[0].State == 'open' else 'open'
 
 
 def Move_Samples(scene: Scene_Cls, move: Move_Str) -> tp.List[np.ndarray]:
@@ -519,7 +542,7 @@ def Print_Steps(playlist: tp.List, openings: tp.Dict[str, float], speed: float) 
     """
 
     for variant, start, moves, frames in playlist:
-        print('[INFO] %s: start at %s (gripper %s).' % (variant, start, CONST_ENTRY_STATE))
+        print('[INFO] %s: start at %s (gripper %s).' % (variant, start, Entry_State(moves)))
         print('[INFO] Variant %s.' % Variant_Title(variant, moves))
         elapsed = 0.0
         for k, move in enumerate(moves):
@@ -583,7 +606,7 @@ def Play(viewer: tp.Any, playlist: tp.List, scenes: tp.Dict[str, Scene_Cls], ope
     view = scenes['holding']
     for variant, _, moves, frames in playlist:
         elapsed, current = 0.0, -1
-        Show_Gripper(view, scenes[CONST_ENTRY_STATE])
+        Show_Gripper(view, scenes[Entry_State(moves)])
         for k, t in frames:
             if not viewer.is_running():
                 return
@@ -740,9 +763,11 @@ def Choose_Path(path: int) -> int:
 def main():
     """
     Description:
-        Replay a path of the catalogue in one viewer window: movej joint-linear, movel on its
-        straight TCP line, at the estimated real time times --speed, the gripper switching between
-        case 17's holding opening and open at the gripper actions. Every move is labelled by the
+        Replay a path of the catalogue, or with --job a job's output (its Output files in --out,
+        Data/Generated/ by default; owner, 2026-10-21), in one viewer window: movej joint-linear,
+        movel on its straight TCP line, at the estimated real time times --speed, the gripper
+        switching between the case's holding opening and open at the gripper actions, from the
+        gripper state of the job's first segment. Every move is labelled by the
         rule of its kind (taught lines: taught rule; generated movej: generated rule); a move inside
         machine (a) is labelled "model not valid here" (KNOWN_ISSUES). The variants are read from
         Data/Generated/variants/ (Example/write_variants.py); the overlay names each with its
@@ -753,6 +778,7 @@ def main():
             List:    .venv/bin/python Example/replay_rotation.py --list
             Images:  .venv/bin/python Example/replay_rotation.py --path 3 --screenshots DIR
             Tests:   .venv/bin/python Example/replay_rotation.py --path 3 --headless [--skip-check]
+            A job:   .venv/bin/mjpython Example/replay_rotation.py --job sf1_plc_v4_case_17 [--out DIR]
 
         The scene is built without the visual STL and the viewer starts with the collision geometry
         (geom group 3) shown; --with-stl loads the STL (geom group 1) as well, with a [WARNING] that it is
@@ -768,6 +794,8 @@ def main():
     parser.add_argument('--screenshots', default='', help='write PNG files to this directory instead of the viewer')
     parser.add_argument('--headless', action='store_true', help='replay without a viewer, printing every move')
     parser.add_argument('--skip-check', action='store_true', help='do not check clearance (moves are labelled "not checked")')
+    parser.add_argument('--job', default='', help='replay a job\'s output (Configuration/Jobs/<JOB>.yaml) instead of a catalogue path')
+    parser.add_argument('--out', default=CONST_OUTPUT_DIR, help='with --job: the directory of its output (default: %(default)s)')
     args = parser.parse_args()
     if args.list:
         print('[INFO] Paths:\n%s' % Catalogue_Text())
@@ -775,24 +803,35 @@ def main():
     if not (math.isfinite(args.speed) and args.speed > 0.0):
         print('[ERROR] --speed must be a finite number greater than 0 (1.0 = estimated real time), not %r.' % args.speed)
         return 1
-    number = Choose_Path(args.path)
-    if not number:
+    if args.job and args.path:
+        print('[ERROR] Give either --path (a catalogue entry) or --job (a job\'s output), not both.')
         return 1
-    variants, name = CONST_CATALOGUE[number]
+    number = 0 if args.job else Choose_Path(args.path)
+    if not number and not args.job:
+        return 1
     print('[WARNING] Simulation passed != safe on the robot.')
     try:
         cfg = Load_Configuration(args.config)
-        plan = Load_Job_Plan(CONST_DEFAULT_JOB)
+        plan = Load_Job_Plan(args.job or CONST_DEFAULT_JOB)
         openings = {state: Opening(cfg, state, plan) for state in ('holding', 'open')}
-        loaded = {variant: Load_Variant(os.path.join(CONST_VARIANT_DIR, variant)) for variant in variants}
+        if args.job:
+            segments = plan.Sequence.Segments
+            variants, name = (plan.Job.Name,), '%s, case %d %s -> %s (%s)' % (plan.Job.Name, plan.Job.Case, segments[0].From,
+                                                                               segments[-1].To, os.path.relpath(args.out, CONST_PROJECT_ROOT))
+            loaded = {plan.Job.Name: Load_Variant(args.out, (plan.Job.Output_Points, plan.Job.Output_Sequence))}
+        else:
+            variants, name = CONST_CATALOGUE[number]
+            loaded = {variant: Load_Variant(os.path.join(CONST_VARIANT_DIR, variant)) for variant in variants}
         for variant, (_, points) in loaded.items():
             Check_Learned(cfg, points, 'variant %s' % variant)
-        paths = {variant: (operations[0].Target, Build_Moves(operations, points, cfg)) for variant, (operations, points) in loaded.items()}
+        paths = {variant: (operations[0].Target, Build_Moves(operations, points, cfg, plan.Sequence.Segments[0].State))
+                 for variant, (operations, points) in loaded.items()}
     except (Configuration_Error_Cls, URScript_Error_Cls, Kinematics_Error_Cls, OSError) as error:
         print('[ERROR] %s' % error)
         return 1
-    print('[INFO] Path %d: %s. Gripper: holding %.1f mm (%s), open %.1f mm.'
-          % (number, name, openings['holding'] * 1e3, cfg.Holding_Openings[(plan.Program_Name, plan.Job.Case)][1], openings['open'] * 1e3))
+    print('[INFO] %s: %s. Gripper: holding %.1f mm (%s), open %.1f mm.'
+          % ('Job' if args.job else 'Path %d' % number, name, openings['holding'] * 1e3,
+             cfg.Holding_Openings[(plan.Program_Name, plan.Job.Case)][1], openings['open'] * 1e3))
     # The visual STL is the original CAD without the collision model's corrections: say so when it is asked for.
     if args.with_stl:
         print('[WARNING] %s' % Visual_Mesh_Warning(cfg))
@@ -810,7 +849,7 @@ def main():
         if args.screenshots:
             Write_Screenshots(args.screenshots, number, paths, scenes, [loaded[variants[0]][1][n].Q for n in plan.Sequence.Station_Points])
         return 0
-    return Show_In_Viewer(playlist, scenes, openings, '%d: %s' % (number, name), args.speed, with_visual)
+    return Show_In_Viewer(playlist, scenes, openings, name if args.job else '%d: %s' % (number, name), args.speed, with_visual)
 
 
 if __name__ == '__main__':

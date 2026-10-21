@@ -242,3 +242,53 @@ def test_with_stl_warns_that_the_stl_is_not_the_collision_model(root, tmp_path, 
     result = _Run(root, tmp_path, '--path', '1', '--headless', '--skip-check', '--with-stl')
     assert result.returncode == 0, result.stdout + result.stderr
     stl_warning(result.stdout, True)
+
+
+def test_a_jobs_output_is_replayed_with_its_own_moves(root, tmp_path):
+    """
+    Description:
+        --job sf1_plc_v4_case_17 --headless replays the job's output in Data/Generated/ (c2, the
+        delivered path), not a catalogue entry: one step per line of its sequence file in order (the
+        start excluded), starting holding the part (its first segment's state), each move labelled
+        clear by the rule of its kind, estimated 12.05 s as c2 in the comparison table.
+    """
+
+    result = _Run(root, tmp_path, '--job', 'sf1_plc_v4_case_17', '--headless')
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert '[INFO] Job: sf1_plc_v4_case_17, case 17 home -> home (Data/Generated).' in result.stdout
+    assert '[INFO] sf1_plc_v4_case_17: start at home (gripper holding).' in result.stdout
+    assert 'estimated 12.05 s' in result.stdout
+    with open(os.path.join(root, 'Data', 'Generated', 'SF1_Rotation_17_Sequence.script'), encoding='utf-8') as handle:
+        written = []
+        for line in handle.read().splitlines():
+            move, gripper = CONST_FILE_MOVE.match(line), CONST_FILE_GRIPPER.match(line)
+            written += [move.group(2)] if move else [gripper.group(1)] if gripper else []
+    steps = [m.group(2) or m.group(6) for m in (CONST_STEP.match(line) for line in result.stdout.splitlines()) if m]
+    assert steps == written[1:]
+    assert all('clearance kept' in line for line in result.stdout.splitlines() if line.startswith('[INFO] Step') and '->' in line)
+
+
+def test_a_job_replay_is_refused_with_a_path_or_without_its_output(root, tmp_path):
+    """
+    Description:
+        --job with --path is refused (one or the other), and --job whose --out holds no output of the
+        job is refused naming the missing file; both exit 1.
+    """
+
+    both = _Run(root, tmp_path, '--job', 'sf1_plc_v4_case_17', '--path', '3', '--headless')
+    assert both.returncode == 1 and '[ERROR] Give either --path' in both.stdout
+    missing = _Run(root, tmp_path, '--job', 'sf1_plc_v4_case_17', '--out', str(tmp_path / 'empty'), '--headless')
+    assert missing.returncode == 1 and '[ERROR]' in missing.stdout and 'SF1_Rotation_17.urscript' in missing.stdout
+
+
+def test_the_variants_start_in_the_default_jobs_first_state(root):
+    """
+    Description:
+        The catalogue's variants (case 17) start holding the part (CONST_ENTRY_STATE), the gripper
+        state the default job derives for its first segment from the program.
+    """
+
+    sys.path.insert(0, os.path.join(root, 'Example'))
+    import replay_rotation
+    assert replay_rotation.CONST_ENTRY_STATE == 'holding'
+    assert replay_rotation.Load_Job_Plan(replay_rotation.CONST_DEFAULT_JOB).Sequence.Segments[0].State == 'holding'
