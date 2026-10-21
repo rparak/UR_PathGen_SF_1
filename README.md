@@ -42,34 +42,6 @@ tight, but the transfer motions between them take most of the cycle (an estimate
 - Several **strategies compared** on the same model: the taught program, the optimised transfers,
   another wrist-3 representative at the re-grip, and other IK branches at the drop.
 
-<details>
-<summary><b>More about the cell and the problem</b></summary>
-
-This project was developed within internal research at JIC Smart Factory for **SF1 (Smart Factory 1)**,
-a flexible robotic cell for low-volume, high-variability production. The cell is a machine-tending
-cell: a Universal Robots UR10e with a Robotiq 2F-85 gripper loads and unloads a machine and turns
-the part over in a regrasp station. Wherever "SF1" appears in file and variable names
-(`Cell_SF1.yaml`, `SF1_Environment.stl`, `SF1_Rotation_17.urscript`), it refers to this cell.
-
-**The problem.** The regrasp is a complex motion: the robot places the part into a holder, releases
-it, moves around and re-grips it from the other side. The cell operator designed this motion by hand
-on the teach pendant (case 17 of the robot program). The station operations are tight; the transfer
-motions between them take most of the cycle (an estimated 21.06 of 23.37 s home → home).
-
-**The approach.**
-
-- A **MuJoCo digital twin** of the cell: the vendored UR10e and 2F-85 models, corrected to the
-  official UR10e DH parameters, placed in the cell's CAD model.
-- A **validated collision model**: the cell STL decomposed into convex pieces that contain the
-  original surface, with recorded corrections where the CAD does not match the cell.
-- A **joint-space planner** that re-plans only the three transfer segments (S1 home → drop, S2
-  retreat → approach for the re-grip, S3 lift → home), keeps every taught station operation line for line, and
-  minimises the estimated duration under explicit clearance margins.
-- Several **strategies compared** on the same model: the taught program, the optimised transfers,
-  an alternative wrist-3 representative at the re-grip, and alternative IK branches at the drop.
-
-</details>
-
 ## Results
 
 Case 17, home → home. All values are **simulation estimates**; every metric is in
