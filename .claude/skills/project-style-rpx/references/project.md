@@ -142,6 +142,12 @@ Tool:
   (SPEC §7.1).
 - Machine-specific values: the project has none; no override convention is defined (*Unsettled*).
 
+## Units
+
+SI in code: lengths [m], angles [rad] (orientations as rotation vectors [rad] or matrices), times
+[s]. Degrees appear only in `Cell_SF1.yaml` fields marked `[deg]` and are converted once by
+`Load_Configuration`. The Polyscope files carry m and rad already (urscript.md).
+
 ## Errors
 
 `Configuration_Error_Cls`, `URScript_Error_Cls`, `Kinematics_Error_Cls`, `Collision_Error_Cls`,
@@ -172,6 +178,10 @@ stubs `uname`, `python3.11` and a `python3` that fails the test if called).
   collision manifest's recorded STL hash against `CAD/SF1_Environment.stl`. A mismatch fails naming
   the file. **Models are never downloaded**: they are vendored and committed (mjcf.md).
 - Option: `--detect-only`.
+- Prerequisite: Python 3.11 (`brew install python@3.11`; Ubuntu `python3.11` and `python3.11-venv`),
+  checked by the installer's presence check.
+- `requirements.txt`: direct dependencies pinned `==`, grouped under comments naming what needs
+  them; no lock file.
 
 ## Tests
 
