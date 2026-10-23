@@ -2,7 +2,8 @@
 
 The README decisions of this repository. The generic skill is user level
 (`~/.claude/skills/readme-writer/`); this file overrides it where they differ. This folder has no
-`SKILL.md` on purpose: a project skill of the same name would shadow the user-level one.
+`SKILL.md` on purpose: a personal skill wins over a project skill of the same name (Claude Code
+docs, *Resolve skills that share a name*), so a copy here would be ignored and drift.
 
 Conventions for code, Markdown and commits come from `project-style-rpx` and `feature-manager`.
 Run every Python command with `.venv/bin/python` (never a bare `python3`, `CLAUDE.md`).
@@ -67,10 +68,9 @@ The owner's statuses (2026-10-21), the same words in the tables, prose, figure l
 
 ## Rules
 
-- **Root layout**: the root holds only `README.md`, `LICENSE`, `CLAUDE.md`, `src`, `test`,
-  `Example`, `Data`, `CAD`, `Configuration`, `models`, `install.sh`, `requirements.txt`,
-  `.gitignore`, `Media`, `pytest.ini` and `.claude`. `pytest.ini` is the one exception to "only
-  what the README describes" (the test runner needs it at the root).
+- **Root layout**: the root entries and their one exception (`pytest.ini`) are a style rule, listed
+  in `.claude/skills/project-style-rpx/references/project.md` > Root. The README's Repository layout
+  describes every entry but `pytest.ini`.
 - **Never mentioned in the README**: the internal docs (`.claude/project-docs/`), the skills,
   `CLAUDE.md`'s content. User-facing output names no internal document either.
 - **Safety alert** directly after Figure 1, as a GitHub alert:
