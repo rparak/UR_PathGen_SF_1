@@ -114,9 +114,6 @@ proposal that is run there at reduced speed first. The tool never claims more th
 - 2F-85: the inner silicone-face gap is 85.16 mm at control 0 and 0.88 mm at 255. This matches the
   85 mm stroke and validates the measurement method. 50.000 mm is reached at driver angle 0.3509 rad.
   The Menagerie root `base_mount` is a Ø75 × 13.9 mm disc, i.e. a coupling-like part (§4.4).
-- Rev. 1 of this file claimed "pad tip ≈ 161 mm, 11–21 mm gap to the TCP". That was a measurement
-  error: it used the pad centre and a collision-box centre, not the end of the pad mesh. The
-  corrected numbers are in §4.4.
 
 ### 4.3 FK vs `_p` with nominal DH (*measured*)
 
@@ -165,12 +162,7 @@ error. This is why the TCP is not derived.
   parts." Fig. 3-2 shows the dowel pin next to the coupling cable and the wrist connector. The angle
   between the finger opening direction and the dowel pin is **not stated numerically**.
 
-**Comparison 1 — diagnostic TCP vs configured TCP:** the TCP derived from home,
-(1.11, −0.04, 172.69) mm, vs the configured (0, 0, 174.0) mm differs by **1.72 mm** (Δz = −1.31 mm)
-and **0.26°**. Derived from drop_rotate_1, the difference is 4.02 mm and 0.38°. These are the
-kinematic errors of §4.3 seen from the other side.
-
-**Comparison 2 — fingertip distances.** All values are along the flange z axis, measured from the
+**Fingertip distances.** All values are along the flange z axis, measured from the
 **DH flange face** (frame 6, §9.1), Menagerie gripper geometry, settled in simulation:
 
 | Point | (a) Menagerie as is (`base_mount` 13.9 mm) | (b) manual coupling (16.9 mm, gripper datum at 14.0 mm) | manual chain (14.0 + gripper dim.) |
@@ -212,6 +204,9 @@ Distances are `mj_geomDistance` between convex hulls, the minimum over the geoms
 body pairs: robot↔robot and robot↔gripper with a 5 mm margin; robot (except `base`)↔`env_stand`
 with a 20 mm margin. "Fraction < margin" counts samples inside the pair's margin.
 
+The A and B columns of the `env_stand` rows were measured at `Base_Yaw` = 0, before it was set to
+180° (§4.6); the robot pairs do not depend on the yaw.
+
 | Pair | Margin | Min [mm] | p5 [mm] | Fraction < margin | Fraction < 0 | A [mm] | B [mm] |
 |---|---|---|---|---|---|---|---|
 | **base – upper_arm_link** | 5 | **2.3** | 2.4 | **0.175** | **0.000** | 20.6 | 20.6 |
@@ -232,15 +227,13 @@ All other pairs fall into two groups:
   persistent near-contact.
 
 The only other pair with a positive minimum inside its margin is base – wrist_2_link: min 2.3 mm,
-in 0.1 % of samples. It is noted under Q9; at that rate the 5 mm margin stays. Sampling took 39 s.
+in 0.1 % of samples; at that rate the 5 mm margin stays.
 
-- **Structural violation: one pair, `base – upper_arm_link`.** It is inside 5 mm in 17.5 % of
-  samples, yet never below 2.3 mm. The hulls pass close but never touch. Excluding the pair would
-  hide it, so it is **not** excluded. Proposal (Q9): a pair-specific self margin of 0 mm (contact
-  only) for exactly this pair. A test would justify it with a dense sweep of `shoulder_pan` ×
-  `shoulder_lift` showing the minimum stays > 0, since only these two joints move the upper arm
-  relative to the base. Alternatives: keep 5 mm and forbid ≈ 17 % of joint space, or lower
-  `Clearance.Self` globally.
+- **Structural near pair: `base – upper_arm_link`.** It is inside 5 mm in 17.5 % of samples, yet
+  never below 2.3 mm: the hulls pass close but never touch. Excluding the pair would hide it, so it
+  is **not** excluded; it alone has a 0 mm self margin (owner, Q9 (a); `Self_Pair_Overrides`, §8),
+  justified by its true minimum, 2.3237 mm, found by a sweep of `shoulder_pan` × `shoulder_lift`
+  (the only joints that move the upper arm relative to the base) and pinned (§17).
 - The stand and self-collision fractions above are not structural: they are random poses that
   really collide, the minima are deeply negative, and the A/B values are clear.
 - At A and B every pair is outside its margin (smallest: base – upper_arm 20.6 mm, forearm –
@@ -263,7 +256,7 @@ collides two static (jointless, world-welded) bodies.** That matters for the sce
 | Item | Result |
 |---|---|
 | Visual STL through the MuJoCo file loader | **refused**: `ValueError: Error: stl_decoder: number of faces should be between 1 and 200000 in STL file '…/CAD/SF1_Environment.stl'; perhaps this is an ASCII file?` |
-| Visual STL as `uservert`/`userface` from trimesh (891 504 vertices, 1 757 948 faces), `contype=conaffinity=0`, shell inertia | compiles; **no hull stored** (`mesh_graphadr = −1`) |
+| Visual STL as `uservert`/`userface` (891 504 vertices, 1 757 948 faces), `contype=conaffinity=0`, shell inertia | compiles; **no hull stored** (`mesh_graphadr = −1`) |
 | Compile time with / without the visual mesh | **1.3 s** / 0.1 s |
 | Reading, splitting and hulling the STL | 5.5 s |
 | Stand components inside `Stand_Region` | 839, of which **270 are degenerate** (planar: no 3-D hull, MuJoCo refuses them) |
@@ -401,8 +394,10 @@ comes within 20 mm of a sill-frame piece; the post's face (x −0.762) lies outs
 **Checks.** Without the station boxes, every taught segment of cases 17 and 18 keeps the global
 margins everywhere (the generated rule without station points). With the zone the taught sequence
 keeps its margins as taught, and as generated without the station-box floors. Every taught sample
-under 20 mm has its TCP within 13.5 mm of a station point (measured before the stub was added), so
-`Endpoint_Radius` (50 mm) stays.
+of cases 17 and 18 under 20 mm (615 samples, at `Segment_Samples` spacing) has its TCP within
+41.2 mm of a station point of its job (the farthest: case 18, the movel to Waypoint_8, 12.3 mm to
+the stub; case 17 at most 38.2 mm), so `Endpoint_Radius` (50 mm) covers them (measured 2026-10-23;
+13.5 mm before the stub was modelled).
 
 ### 4.13 Station stub box (*measured*, 2026-10-18)
 
@@ -427,14 +422,14 @@ drop → Waypoint_4 / 7 10.1 / 8.8, → Waypoint_5 (85 mm) 11.4 / 11.2, Waypoint
 - The viewer: `mujoco.viewer.launch_passive` runs under `mjpython` on macOS and under `python` on
   Linux. The demo detects the case and, on macOS without `mjpython`, exits with an `[ERROR]` line
   that gives the command to use. A `--headless` mode runs without a viewer (used by the tests).
-- The 1.76 M-triangle visual mesh is passed to MuJoCo as `uservert`/`userface` read by trimesh,
-  because the MuJoCo STL loader refuses more than 200 000 faces (§4.5). Its geom has
+- The 1.76 M-triangle visual mesh is passed to MuJoCo as `uservert`/`userface`, read by the project's
+  numpy STL reader (`Read_Binary_STL`, `src/Collision/Core.py`), because the MuJoCo STL loader refuses more than 200 000 faces (§4.5). Its geom has
   `contype=conaffinity=0` and shell inertia, so MuJoCo stores no hull for it. A test pins this.
 - Pinned versions (installed 2026-10-17, re-checked at implementation): `mujoco==3.16.0`,
   `numpy==2.4.6`, `scipy==1.17.1`, `trimesh==5.1.1`, `coacd==1.0.14`, plus `pyyaml`, `pytest`,
   `rtree` (exact pins in `requirements.txt`); `matplotlib==3.11.2` (2026-10-20) for the README
-  figures only. CoACD and trimesh are used only by the decomposition
-  build script, never by the tests.
+  figures only. CoACD and trimesh are imported only by the decomposition
+  build (`Build_Collision_Set`), never by the tests.
 
 ## 6. Repository structure
 
@@ -444,7 +439,7 @@ CLAUDE.md                 short: where the internal docs and the skills are, tes
 LICENSE                   MIT, Copyright (c) 2026 JIC Smart Factory
 install.sh                macOS + Ubuntu, OS detection
 requirements.txt          pinned
-.gitignore                .venv, __pycache__, _source_skills/, .pytest_cache
+.gitignore                .venv, __pycache__, *.pyc, .pytest_cache, _source_skills/, .DS_Store
 .claude/settings.json
 .claude/project-docs/SPEC.md              this file
 .claude/project-docs/KNOWN_ISSUES.md      accepted risks and known limitations
@@ -456,10 +451,13 @@ CAD/SF1_Environment.stl                       source, unchanged (visual mesh)
 CAD/Collision/SF1_Environment_Collision.npz   convex pieces (vertices, faces, piece → component, body)
 CAD/Collision/SF1_Environment_Collision.json  manifest (§7.6)
 Configuration/Cell_SF1.yaml                   cell configuration (§8)
-Configuration/Jobs/<name>.yaml                planning jobs (§8.6): sf1_plc_v4_case_17, the default
+Configuration/Jobs/<name>.yaml                planning jobs (§8.6): sf1_plc_v4_case_17 (the default, c2,
+                                              delivered), sf1_plc_v4_case_17_c1, sf1_plc_v4_case_18
+                                              (not a deliverable)
 Data/Programs/sf1_plc_v4/                     extracts of the owner's program, verbatim, with its sha256:
-                                              its 156 global _p/_q lines, and the whole cases 17 and 18
-                                              (§10.1, ground truth); the simplified taught program of
+                                              sf1_plc_v4_positions.urscript (its 156 global _p/_q lines)
+                                              and sf1_plc_v4_cases_17_18.script (cases 17 and 18, §10.1);
+                                              the simplified taught program of
                                               case 17 home → home, sf1_plc_v4_case_17.urscript +
                                               _sequence.script (§10.4)
 models/MANIFEST.json                          Menagerie commit, licence, sha256 of every vendored file
@@ -473,9 +471,11 @@ src/Kinematics/Core.py      UR10e DH FK, rotvec ↔ matrix (Matrix_To_Rotvec), G
 src/Collision/Core.py       Build_Collision_Set, Write_Collision_Set, Read_Collision_Set (the only npz/manifest reader/writer)
 src/Scene/Core.py           Scene_Cls (built through MjSpec), Set_Joints, Check_Clearance, the taught / generated rule
 src/Planner/Core.py         Planner_Cls (direct, RRT-Connect, shortcut, refinement), Verify_Path, duration estimates
-Example/plan_rotation.py    plans S1 - S3 of case 17, writes Data/Generated/, prints the report
+Example/plan_rotation.py    plans a job (--job, default sf1_plc_v4_case_17) into --out (default
+                            Data/Generated/) after its taught model check (§9.7), prints the report
 Example/replay_rotation.py  viewer replay of a numbered catalogue of taught and optimised paths, or of a job's output (--job) (§10.7); screenshots
-Data/Generated/             SF1_Rotation_17.urscript (points) and SF1_Rotation_17_Sequence.script (home → home)
+Data/Generated/             the delivered c2: SF1_Rotation_17.urscript (points) and SF1_Rotation_17_Sequence.script
+                            (home → home)
 Data/Generated/variants/    taught, b_optimised, c1, c2, c3 in the same two files each, and comparison.csv / .md
 Example/write_variants.py   writes Data/Generated/variants/ and the comparison table (§10.6)
 Example/make_readme_figures.py  writes every README image into Media/ from comparison.csv and the variant files
@@ -489,7 +489,10 @@ test/<Domain>/test_<module>.py mirroring src/, with further files where a domain
                             (test/Scene/test_station.py, test_margin.py, test_program.py;
                             test/Collision/test_conservativeness.py, test_excess.py); test/Install/test_install.py;
                             test/Example/test_<script>.py for the scripts; test/Docs/test_readme.py (the README
-                            table against comparison.csv, its images, the root)
+                            table against comparison.csv, its images, the root); test/conftest.py puts src/ on the
+                            path and holds shared fixtures; test/URScript/data/SF1_Positions_original.urscript
+                            (the robot's export of A and B, §10.3); test/Scene/data/sf1_plc_v4_segments.json
+                            (the penetration reference of all 21 cases, §4.11)
 pytest.ini                  import mode and the slow marker; the one configuration file at the root
 ```
 
@@ -509,28 +512,27 @@ never used for collision; it stays the visual geom (`contype=conaffinity=0`).
   collision vertex in any configuration. It is the sum of the body-origin offsets along the chain
   after the shoulder, plus the largest vertex radius of the outermost bodies (gripper included),
   plus the environment clearance, plus 0.05 m. It is computed from the scene, not configured, and
-  recorded in the manifest. Expected ≈ 1.7 m.
+  recorded in the manifest (SF1: 2.026 m, every component kept, §17).
 - A component is kept whole if any of its vertices lies inside the sphere. Triangles are never cut.
 - Reported: components kept / dropped, triangles kept.
 
 ### 7.2 Hull first, decompose only where the hull is too coarse
 
 1. A convex hull per kept connected component. A **degenerate** component (planar or collinear, no
-   3-D hull; 270 of 839 in the stand alone, §4.5) is thickened by ±0.5 mm along the normal of its
+   3-D hull; SF1: 503 of 2756, all planar, §17) is thickened by ±0.5 mm along the normal of its
    plane, from the SVD of its centred vertices (smallest singular vector). A mean face normal is not
    used, because the winding is inconsistent and normals can cancel. A collinear component is
    thickened by ±0.5 mm along two directions orthogonal to its line. The result contains the original, so it stays conservative and adds
    ≤ 0.5 mm of excess. Every collision mesh gets shell inertia, because the bodies are static.
 2. Hull **excess** per component: the maximum distance from the hull surface (its vertices plus
    area-uniform samples, fixed seed) to the original component surface.
-3. Excess ≤ `Hull_Excess_Max` (build-script parameter, default 10 mm, recorded in the manifest) →
+3. Excess ≤ `CONST_HULL_EXCESS_MAX` (10 mm, `Example/build_collision.py`, recorded in the manifest) →
    the hull is the collision piece.
 4. Otherwise run CoACD on that component only (`preprocess_mode="auto"` for open shells, fixed
    seed, parameters recorded) and re-measure. If the CoACD pieces fail the conservativeness check
    (§7.3), the component falls back to its hull. Conservativeness beats tightness.
-5. Optional merge pass (only if the piece count makes collision queries too slow): bbox-touching
-   neighbours whose joint hull stays within `Hull_Excess_Max` become one piece. *Unsettled* — it is
-   used only if the measured query time asks for it.
+5. A merge pass (bbox-touching neighbours whose joint hull stays within the excess threshold become
+   one piece) is not implemented: the measured query time did not need it (§17).
 
 Reported: pieces by method (hull / CoACD / fallback), runtime of each stage, total runtime.
 
@@ -557,7 +559,7 @@ When a configuration violates a margin against the full environment set, the pai
 ### 7.4 Open shells filling space the robot needs
 
 A hull of an open shell (sheet-metal housings, frames, especially in object (a)) fills its
-interior. The build report lists every piece with excess > `Hull_Excess_Max` after fallback, with
+interior. The build report lists every piece with excess > `CONST_HULL_EXCESS_MAX` after fallback, with
 its bbox and the object it belongs to. A test asserts that neither the TCP nor any robot body at A
 or B lies inside such a piece. Whether the planner later needs to enter such a region is flagged in
 `KNOWN_ISSUES.md`, not silently accepted.
@@ -572,8 +574,8 @@ checked against the stand.
 ### 7.6 Storage and manifest
 
 `CAD/Collision/` is committed. The manifest holds: the sha256 of the source STL; the crop centre
-and radius; `Hull_Excess_Max`, `eps`, CoACD version and parameters, seed; counts and runtimes; both
-metrics. `Read_Collision_Set` refuses a set whose recorded STL hash differs from the file on disk
+and radius; the excess threshold, `eps`, the CoACD version (`unknown` when the package does not
+report one, as for the committed set) and parameters, seed; counts and runtimes; both metrics. `Read_Collision_Set` refuses a set whose recorded STL hash differs from the file on disk
 (`Collision_Error_Cls`, with the sentence "rerun Example/build_collision.py"). Tests read the set and
 never run CoACD.
 
@@ -582,8 +584,7 @@ real cell contradicts, each with a rigid translation (≤ 150 mm) and its source
 the component's own vertex copy before the crop and the decomposition, so a neighbour sharing a
 vertex is not moved, and the conservativeness check runs against the translated surface. The
 manifest records the overrides (`component_overrides`); the scene refuses a set whose record differs
-from the configuration (`Scene_Error_Cls`, "Rebuild it with …"). A set built before overrides existed
-records none. The visual mesh is never changed, so at an overridden component the viewer shows the
+from the configuration (`Scene_Error_Cls`, "Rebuild it with …"). The visual mesh is never changed, so at an overridden component the viewer shows the
 original surface and the collision set the corrected one.
 
 **Assembly overrides.** `Environment.Assembly_Overrides` translates a whole STL object (§4.1: the
@@ -726,7 +727,7 @@ a solution of a learned `_p` is nominal-DH, millimetres from what the robot's ca
    Polyscope TCP of SF1, identical to the Robotiq value (§4.4, §16). The YAML comment above the field
    cites both sources. Every FK check uses `FK_DH(q) · TCP_config`.
 2. The derived TCP (`FK_DH(q)⁻¹ · T(p)`) is a **diagnostic only**. `Derive_TCP_Offset` exists to
-   print it (§4.3, §4.4 comparison 1). It never writes the configuration, never feeds a check, and
+   print it (§4.3). It never writes the configuration, never feeds a check, and
    is held only by the regression pin (§9.4).
 3. Gripper geometry: the Menagerie `base_mount` mesh geoms (visual and collision) are removed in
    MjSpec. They are replaced by a cylinder of `Tool.Coupling.Diameter` × `Tool.Coupling.Thickness`
@@ -776,12 +777,8 @@ robot's calibration. Two separate checks, with separate jobs:
 
 The largest measured 4.04 mm / 0.377° lies at 40 % / 12 % of the bound.
 
-**Consistency with the clearance budget.** The kinematic error is measured at all 78 learned
-points and checked at load; at generated via points, and between points along a path, it is
-unmeasured and can only be assumed. The sanity bound allows up to 10 mm at a learned point. The
-budget (§9.8) therefore shows both cases, the measured 4.0 mm and the bound's 10 mm, and
-`KNOWN_ISSUES.md` states that the error is unmeasured at generated via points and between points
-and may be larger there.
+**Consistency with the clearance budget.** The sanity bound allows up to 10 mm at a learned point,
+so the budget (§9.8) shows both the measured 4.0 mm and the bound's 10 mm.
 
 ### 9.5 Orientation comparison (requirement A)
 
@@ -1065,8 +1062,9 @@ S1 – S3 are optimised for time, not for clearance: the delivered c2 takes 12.0
 against the taught 23.37 s (estimates, `Data/Generated/variants/comparison.md`), using the space
 the estimated machine shift frees while keeping 30 mm to machine (a) outside the zone (§9.7). The
 taught S2 does not keep the generated rule's station-box floor: its last leg, Waypoint_3 →
-Waypoint_18, comes 8.3 mm to the station stub, below the floor of 10.1 mm (Waypoint_18's own
-distance), on 51 samples (`Example/plan_rotation.py` report). Under the taught rule it is clear.
+Waypoint_18, comes 8.4 mm to the station stub (open, 85 mm), below the floor of 10.1 mm
+(Waypoint_18's own distance), on 51 samples (`Example/plan_rotation.py` report). Under the taught
+rule it is clear.
 
 **Segments** (the job, §8.6; the default `sf1_plc_v4_case_17`, case 17, §1). S1 home →
 drop_rotate_1 (holding: case 17's `Tool.Holding_Openings` entry, 50 mm), S2 Waypoint_5 →
@@ -1228,28 +1226,33 @@ replayed home → home paths stay far from it; the position viewer shows the lab
 
 ## 11. Tests
 
-| Test file | What it pins |
+One sentence of scope per file; each test's docstring states what it pins. *slow* tests are
+deselected by `-m "not slow"`.
+
+| Test file | What it covers |
 |---|---|
-| `test/URScript/test_core.py` | exact float values of all 24 numbers; byte-identical round trip; `.238`, `-.175`, `E-5` tokens; strict errors (malformed, missing pair, duplicate, wrong length, line number in message); generated-point format; no wrapping (4.0 rad); `movej` line uses `_q` and `r=0`; renamed file tokens == original export; the case extract reads in program order (the whole case), equals its source lines 3397–3478 / 3480–3561 — the whole body of each case's branch — when `SF1_PLC_V4_SCRIPT` is set (otherwise skipped), and a malformed excerpt is refused; `Program_Entries` keeps movej/movel verbatim, comments the gripper and drops every other line; `Resolve_Sequence` resolves case 17 with the owner's segments to home → … → home (program lines 3407 – 3463, the moves typed), S1 and S3 holding and S2 open, the program's taught via points, two station operations and six station points, and refuses a segment end that is not a learned point, a segment containing the gripper action (line 3425), an end not reached in program order and a station line blending into the next segment (line 3433); `Read_Motion_Sequence` reads program movej/movel, generated movej, gripper comments with a, v, r and sections, the header naming no section, and refuses any other line by number; the `sf1_plc_v4` positions extract is read strictly with every token, and equals its source lines 2453–2608 byte for byte with the recorded sha256 when `SF1_PLC_V4_SCRIPT` names the program (otherwise skipped, never passed); `Replace_Joints` keeps the `_p` tokens and every unchanged `_q` token, writes the changed one as a generated token, and requires six values |
-| `test/Configuration/test_core.py` | shipped file loads; each REQUIRED field missing → named failure; invalid values (wrong length, limits outside ±360°, min ≥ max, coupling spigot depth ≥ thickness, negative clearance or sanity bound, an assembly or component override beyond 150 mm, without a source or named twice, an added box with Min ≥ Max, without a source or named twice, an empty list of added boxes accepted, a zone margin above `Clearance.Environment`, a zone box with Min ≥ Max, a zero endpoint radius, a holding opening without its program) fail; all problems listed at once; unknown key → WARNING; case 17 of two programs is two entries. Jobs (§8.6): the default job loads by name, typed; each REQUIRED job field missing → named failure; invalid job values (program folder, case, empty or repeated segments, a segment from a point to itself, a joint outside 1 – 6, zero turns, a malformed branch, a non-ASCII status or source, a point configured twice, output names, a station count not one fewer than the segments) fail; two problems at once; an unknown job key → WARNING; an unknown job name lists the jobs |
-| `test/Kinematics/test_core.py` | `Solve_IK_Analytic` of 50 seeded configurations (away from the singularities) returns at most 8 solutions on distinct branches, each reaching the TCP (1e-9 m / rad), one the configuration itself modulo 2π on the branch `IK_Branch` names, some pose with all 8; case 17's home and station points lie on their measured branches (home and the pick S− E− W+, the drop S+ E+ W−), each pose with 8 solutions; `Nearest_Representative` turns every joint but the elbow to within π of the reference; `Solve_IK_Near` returns, from 0.05 rad away, the configuration of 20 seeded targets (1e-9 m / rad, same branch) and refuses a target 3 m away; `Linear_Path` of the drop and lift movel keeps every TCP on the straight line (1e-9 m) in order, ≤ 5 mm apart, turning evenly, from the start's `_q` to the target's `_q` exactly; `FK_DH(q) · TCP_config` vs `_p`: regression pin (§9.4) of 1.72 mm / 0.261° and 4.02 mm / 0.376° (±0.01 mm / ±0.001°); diagnostic derived TCP pinned the same way and never read by any check; both points within the sanity bound; a pose turned 5° about the tool z (position within the bound) refused on the orientation bound alone; `Check_Learned_Point` rejects a point beyond it (perturbed `_q`) with the numbers in the message; configured TCP == (0, 0, 0.174, 0, 0, 0); geodesic angle 0 between r and its π-equivalent; `Matrix_To_Rotvec` rule incl. near-π |
-| `test/Scene/test_core.py` | `Environment_Clearance` names the closest pair as `Environment_Distance` finds it and the least room under the rule's margin (zone 5 mm taught, 20 mm generated far from a station; machine (a) 20 mm taught, 30 mm generated even near a station); `Robot_Top` equals the highest point of the collision geometry computed from the compiled model in the test (mesh vertices, box corners, cylinder rims; 1e-12 m), above the TCP, and with the arm straight up above the DH chain; `Components_Within` names component 1638 at `load3` (−74.1 mm ± 1 mm, §4.11), nothing at `home`, and refuses a threshold above `Clearance.Environment`; scene compiles; base body world position == `Base_Position` exactly and yaw == `Base_Yaw`; **at `Base_Yaw` = 90° (a temporary copy of the configuration) `home`'s TCP lands at `Base_Position` + (−y, x, z) of its `_p` within 3 mm, in MuJoCo and through the base frame (the file is in degrees; read as radians the test fails)**; **MuJoCo flange FK (after the MjSpec offset override) == DH flange FK within 1e-9 m / 1e-9 rad (atan2 geodesic, §9.5) for 1000 seeded random joint vectors within the limits**, plus A and B; pad-span hull present in the gripper rigid group; fingers open along the configured `Mount_Yaw` (flange ±x at 0); visual mesh has no hull (`mesh_graphadr = −1`); base↔env build check runs; loader rejects an elbow limit beyond ±180°; gripper opening == `Tool.Opening` ± 0.5 mm, equality residual < 0.1 mm; coupling cylinder present (visual + collision), Menagerie `base_mount` mesh geoms absent, vendored files byte-identical to `models/MANIFEST.json`; pad end from the flange face 163.3 mm open and 176.8 mm closed (± 0.5 mm, manual chain) and the 50 mm values 154.39 / 173.23 mm (± 0.05 mm, regression); exclusion set == configuration expansion + `base–env_stand`, filterparent disabled; joint ranges == `Joint_Position_Limits`; **placement (§4.6): `pick_obj_1..8` on the pallet table, `unload_obj_1..8` on the side table (between the plate top and the highest part), `bench_drop_1..8` inside object (a) shifted by the owner's 150 mm; the same check at `Base_Yaw` = 0 refuses all 24**; A and B pass `Check_Clearance`, and **any violation fails the test, listing every pair with its distance and margin** (no report-only path); `hover_unload_2` (clear) pushed into the side table is reported as a collision; a collision set whose recorded assembly or component overrides differ from the configuration is refused; an added box is a convex mesh of `env` whose vertices are its eight configured corners, with the environment margin, a zone piece only when it meets the zone box; the station zone applies to a generated configuration only within `Endpoint_Radius` of a station point (DH distances); a segment kind other than taught/generated is refused; a generated configuration with the tool pointing up above 2.35 m violates the workspace (excursion = the pad end's, from DH), the taught rule does not apply the box; the van der Corput order is a permutation of the samples |
-| `test/Scene/test_station.py` | the taught rotation sequence of cases 17 and 18 (home → … → home, typed from the program, 50 mm holding / 85 mm open) checked as taught has no violation: no penetration, the zone margin at the zone pieces, the global margins elsewhere; every taught segment also keeps the generated rule (it comes within 20 mm of the station only within 50 mm of a station point), and Waypoint_18 → pick_rotate_1 (open, 5.5 mm to the holder) is clear as generated only with the station points; the holder box is a zone piece in both scenes, every taught sample keeps the zone margin to it and comes within the global margin, and MuJoCo's contact at the closest sample has the exact distance; the manifest records exactly the two assembly shifts and no component override, which are the configured ones; `Environment_Distance` equals the exact distance in the 20 – 30 mm band (start of pick_rotate_1 → Waypoint_6); the zone holds the holder and exactly the sill-frame pieces 181, 1062, 2701, 2702, 2704, none of the post, top profile, machine body, right window profile, tables or machine-interior hull; without the holder every taught segment of both cases keeps the global margins everywhere; the early-exit check agrees with the full check on 72 seeded segments from the taught points (both verdicts occur); `Station_Box_Floors` is the closer end's exact distance capped at the margin (S2: holder 15.1 mm; home -> Waypoint_1: 20 mm), and with S2's floors pick_rotate_1 violates the station-box rule naming the holder, without floors or under the taught rule it does not; on Waypoint_6 -> home a generated sample 25 mm (exact) from a machine-(a) piece outside the zone violates with the 30 mm margin, 35 mm does not, and the taught rule keeps 20 mm |
-| `test/Scene/test_program.py` | **slow** (≈ 70 s; `-m "not slow"` deselects it): every unique segment of the 21 cases of the program (125, `test/Scene/data/sf1_plc_v4_segments.json`), joint-linear on the samples of §9.7, at 50 and 85 mm: no segment the reference records as clear penetrates the environment, no recorded one (63: the machine-interior hull 1638 and the grasp contacts) is more than 0.5 mm deeper than recorded, no robot body penetrates another; with `SF1_PLC_V4_SCRIPT` set the segment list equals the program's (otherwise skipped) |
-| `test/Planner/test_core.py` | `Plan_All` of three segments (two searched, one direct) gives the same paths byte for byte, origin, restarts found, duration and penalty without a pool and with 2 spawned workers, one result per segment in both; a failing segment (no path; an end breaking the rule) is named in both; `Profile_Fraction` is 0 at the start, 1 at the estimated duration (triangle and trapezoid, movej and movel), 0.5 at half time, a t²/2 early, never decreasing; duration estimates against hand-computed values (triangle, trapezoid, leading joint, path sum, movel); the committed paths of case 17 pass `Verify_Path`, S2 with fewer via points than taught, S1 and S3 no more; home and the station points keep their tokens, except wrist 3 of the pick's three points, one turn lower (§10.5), no loading point is written; the sequence file is case 17 home → home, its motion lines in program order (the blended start at home generated with r=0; generated movej with the program's a, v and r=0; station lines verbatim; gripper comments; the safety sentence); aligned with the simplified taught program, it differs only in S1 – S3 and the start at home, every added line a generated movej, the gripper comments identical; within the global margin no generated sample comes closer to a station box than the segment's closer taught end, and every sample keeps the generated rule's margin to it (exact distances); `Plan` sets the station-box floors of its own ends for every edge (an approach to the holder valid before a plan is refused after planning home -> Waypoint_1, floor 20 mm), and `Verify_Path` refuses a path closer to a station box than its ends (Waypoint_18 -> pick_rotate_1 -> Waypoint_18); one reduced planning run (S1, whose direct segment fails) is byte-identical twice; RRT-Connect alone is byte-identical twice on a seed that draws from both sample sources (box around the ends, whole range), counted by a stand-in generator; an impossible plan raises (inflated margin, no iterations, six via points, a via point 0.01 rad beyond the base joint's upper limit); the penalty counts only far from the station (a grasp approach of case 1 counts, the open approach to the pick, 5.5 mm from the holder, does not) |
-| `test/Scene/test_margin.py` | margin accuracy on **mesh hull vs mesh hull** (robot geom on a joint, so not static): a robot link hull at 3 orientations vs a box-hull face, and box-hull edge vs edge; at 10 mm a violation is reported, at 30 mm none; on seeded configurations near the station (6 station points × 4, σ 0.05 rad, both openings) every robot – environment geom pair whose exact distance (`mj_geomDistance`) is below `Clearance.Environment` gets a contact within 0.5 mm of it, covering the gripper pads (boxes) and the meshes against the set's pieces and the added boxes; reported distance error < 0.5 mm (prototype: 0.000 mm, §4.5) |
-| `test/Collision/test_core.py` | `Build_Collision_Set` on three synthetic cubes, hull only (no CoACD): an assembly override moves the touching pair, a component override adds on top, the manifest records the members `[0, 1]` and both overrides with their sources, each piece translated by exactly its sum, the third cube untouched; manifest STL hash == sha256 of the file; the STL splits into three objects of 1749 / 951 / 56 components, an assembly named by the machine body moves exactly object (a) with a component override added on top, and the manifest records the configured assemblies' members; the configured overrides move every component of (a) by −150 mm and of (c) by −50 mm along x, and nothing of (b); `R_crop` ≥ the bound recomputed from the current scene, and no robot collision vertex leaves the sphere over 1000 seeded random `q`; conservativeness violations == 0 at `eps` (vertices + 1 sample/cm² for CoACD components, hull-only exempt); degenerate components thickened and containing the original; excess metrics present and equal to a recomputation on a fixed sample; no robot body at A/B inside a flagged open-shell piece; mismatched hash → `Collision_Error_Cls` |
-| `test/Collision/test_conservativeness.py` | the point–triangle distance agrees with an independent formula in every Voronoi region (1e-12 m); on the ten components with the largest distances and three ordinary CoACD components the pruned `Union_Distances` equals the exhaustive computation point by point (1e-6 mm); a union missing its largest part is the same violation for both; recomputing every accepted CoACD component with its recorded seed gives exactly the recorded maxima and threshold counts (nothing capped) |
-| `test/Collision/test_excess.py` | `Surface_Distance` (pruned by a k-d tree) equals the distance to every triangle, also when the vertex array holds the whole STL; for the largest-excess pieces (incl. the 235 mm fallback hull) the recomputed excess equals the recorded one within half the sum of both sample spacings, and the flag above 10 mm matches |
-| `test/Example/test_demo.py` | headless demo runs N steps without exception; only the chosen joint changes, monotonically between turning points; it stays within `Joint_Position_Limits`; the pre-check runs on the dense segment samples of §9.7; the label equals the check result ("clearance checked" iff no violation, otherwise "VISUAL ONLY — UNCHECKED"); the shipped motion's label is pinned |
-| `test/Example/test_write_variants.py` | the five variants each have their two files (hidden files such as `.DS_Store` ignored), each naming its status and the safety sentence; a learned point of the extract outside the FK sanity bound stops the writer with its numbers, nothing written; in every planned variant the header's verbatim and other-`_q` points are true token for token, and every file says once that simulation is not safety; the taught variant is the simplified taught program of `Data/Programs/` line for line after the header (kept twice on purpose: input and comparison); c2 is the output of `Data/Generated/` (points token for token, the same motion lines); a proposal's drop points keep the program's `_p`, lie on the proposal's branch and reach that pose (1e-9), every other point c1's; `comparison.csv` lists every variant's sections and total in order, the totals the planner reported (23.37 / 17.50 / 14.66 s) and the writer measured (12.05 / 13.86 s), no sample breaking its rule; *slow*: measured again from the files, the table is `comparison.csv` and `comparison.md` byte for byte |
-| `test/Example/test_extract_program.py` | the script, run from an unrelated directory, writes a synthetic program's two extracts exactly as typed in the test (two line ranges, the sha256, each case the whole body of its branch, a nested `if` included); it refuses, writing nothing, a case the program does not have, a point with only its `_p`, a name defined twice, and a case already held by another cases file of the folder; with `SF1_PLC_V4_SCRIPT` set, re-extracting cases 17 and 18 reproduces both committed extracts byte for byte (skipped otherwise) |
-| `test/Example/test_write_taught_programs.py` | the simplified program is, after its header, exactly case 17 home → home as the owner states it (§1, typed in the test) and one contiguous run of the program: each movej/movel the program's line without indentation (home `r=0.01`), a gripper comment naming the program line at each gripper action, nothing else; its points file holds exactly those targets in first-use order with the extract's tokens; the script writes exactly the committed two files, byte for byte |
-| `test/Example/test_plan_rotation.py` | `--workers 0` is refused before anything is written; a learned point of the extract outside the FK sanity bound (drop_rotate_1's base joint +0.05 rad, in a copy of the repository) is refused with its numbers and nothing written; the delivered (c2) headers name the points written verbatim (home) and those with the extract's `_p` and another `_q` (the drop's three, the pick's three), both true token for token, and the station lines to the latter; `Provenance` refuses a written point with another `_p`; both delivered headers and the report of the full run state the machine margin (30 mm) with the configured source; *slow*: the full run with 4 workers, from an unrelated directory, writes both files byte for byte as committed (written by the sequential run); *slow*: the c2 job (the default) and the c1 job, each run in full, write their variant's points and motion lines as committed in `variants/c2` and `variants/c1`, the headers differing only in their status lines; the holding opening is the configured value of sf1_plc_v4 case 17 (not another case's, not another program's case 17, not `Tool.Opening`), open is 85 mm; a configuration without it is refused; `Sequence_Entries` of the default job is home → … → home only: a generated start at home (the program blends, r=0.01), S1 – S3 generated, the station lines verbatim, no loading move; `Configured_Points` of the c1 job turns only wrist 3 of the pick's three points one turn lower, the same pose (DH TCP equal to 1e-12), every other token the program's; the default job's Branch configurations of the drop's three points (S− E− W−, the chain rule) give exactly the `_q` tokens of the committed `variants/c2`; the variant file names are the default job's output names; the station time is the sum typed from the station lines (2.31 s); an unknown `--job` is refused before anything is written; the taught model check: case 17's 15 taught moves (the first four typed with their gripper states) pass with no error and no warning, a test-only box around Waypoint_2's TCP stops the run before planning with an error naming the move's program line and the box and writes nothing, and a workspace top lowered to 2.0 m gives warnings only; synthetic jobs (the default job with one field changed, `--job <file>`) are refused before anything is written: a segment end that is not a learned point, a segment crossing the release (line 3425), case 99 (no extract holds it), a configured point the output does not move to; `--job sf1_plc_v4_case_18` is refused naming the missing holding-opening entry; *slow*: case 18 plans without code changes (an assumed 50 mm, 2 restarts): the model check passes, both files are written with case 18's header and station lines, no point of case 17's drop or pick, every segment at most 5 via points and re-checked by the generated rule |
-| `test/Example/test_visualize_position.py` | headless: a learned point of the extract outside the FK sanity bound is refused with its numbers before a scene is built, whichever point is shown; `home_q` reports "clearance kept (taught rule)" and `load3` "model not valid here", each at case 17's configured 50 mm with its source; `home_p` and an unknown name are refused (exit 1, no scene built); `--list` prints every position of the extract in order |
-| `test/Example/test_replay.py` | a learned point of a variant file outside the FK sanity bound (c1's home) is refused with its numbers before a scene is built; every catalogue entry (case 17 home → home; headless, `--skip-check`) visits the moves of its files in order (patterns typed in the test), each by the rule of its kind, the gripper switching at the actions (85 mm open, 50 mm closed) and every move run in the state after them, each movel on its TCP line (≥ 9 steps), starting at home; `--speed 4` plays in a quarter of the estimated time, `1.0` in the estimated time, within a frame per move; a path outside the catalogue (given or typed), and a speed that is 0, negative or NaN, are refused before a scene is built; `--list` prints the six entries; path 3 (c1) with the dense check and screenshots, without `--with-stl`: built without the visual STL (same geoms), its 11 moves each keep the rule of their kind (generated movej the generated rule, program lines the taught rule); path 6 names the five variants in order with their estimated times, c2 and c3 as proposals not verified on the robot; `--job sf1_plc_v4_case_17 --headless` replays `Data/Generated/` (c2): one step per line of its sequence file, starting holding, every move clear, 12.05 s; `--job` with `--path`, and `--job` with an empty `--out`, are refused; the catalogue's start state is the default job's first segment state |
-| `test/Install/test_install.py` | `bash -n`; sourced steps under a hermetic `PATH`: OS detection (Darwin arm64, Linux), each printing its INFO line, Python 3.11 resolution (`python3` never called), hash verification fails on a tampered model file, every log line in the log format |
-| `.claude/skills/project-style-rpx/scripts/test_check_style.py` | the checker itself (outside `test/`) |
+| `test/URScript/test_core.py` | The variable-file reader and writer (exact values, byte-identical round trip, Polyscope tokens, strict errors, generated format, no wrapping), the program excerpt and its case extracts (against the program when `SF1_PLC_V4_SCRIPT` is set), `Program_Entries`, `Resolve_Sequence` of case 17 and its refusals, `Read_Motion_Sequence`, and `Replace_Joints`. |
+| `test/Configuration/test_core.py` | `Load_Configuration` and `Load_Job`: the shipped files load typed; every missing REQUIRED field and invalid value is named, all at once; an unknown key is a WARNING; an unknown job name lists the jobs. |
+| `test/Kinematics/test_core.py` | DH FK, `Solve_IK_Analytic` / `IK_Branch` / `Nearest_Representative` / `Solve_IK_Near`, `Linear_Path`, the taught points' measured branches, the regression pin of §9.4 (residuals ±0.01 mm / ±0.001°, derived TCP ±0.001 mm, never read by a check), the sanity bound (position and orientation, `Check_FK_Consistency`), the configured TCP, the geodesic angle and `Matrix_To_Rotvec` near π. |
+| `test/Scene/test_core.py` | The scene: base pose and yaw (a 90° copy pins degrees), MuJoCo FK == DH FK (1e-9), the coupling, gripper and pad-span hull geometry against the manual chain, the exclusion set and joint ranges, the placement of the taught grasp points (§4.6), A and B clear, the added boxes, the taught / generated / workspace rules, `Check_Learned_Point` refusing a point with its numbers, `Environment_Clearance`, `Robot_Top`, `Components_Within`, and every `Self_Pair_Overrides` entry's true minimum (2.3237 mm). |
+| `test/Scene/test_station.py` | The taught rotation sequence of cases 17 and 18 against the station model: clear as taught, and as generated without the station-box floors; the station boxes (holder and stub) are zone pieces; the zone holds the boxes and exactly the sill-frame pieces; without the boxes every taught segment keeps the global margins; the early exit agrees with the full check; the station-box floors and the machine margin. |
+| `test/Scene/test_program.py` | *slow*: every unique segment of the 21 cases (125) at 50 and 85 mm against the recorded penetration reference (`test/Scene/data/sf1_plc_v4_segments.json`): nothing new or more than 0.5 mm deeper, no self-penetration. |
+| `test/Scene/test_margin.py` | MuJoCo's contacts against the exact distance: mesh hull vs mesh hull at 10 and 30 mm, and every geom pair near the station (pads, meshes, set pieces, added boxes) within 0.5 mm. |
+| `test/Planner/test_core.py` | The planner: `Plan_All` equal with and without a pool, the duration and profile estimates, the committed paths pass `Verify_Path`, the delivered files' tokens and sequence, the station-box rule in `Plan` and `Verify_Path`, byte-identical reduced runs, the refusals, and the penalty counting only far from the station. |
+| `test/Collision/test_core.py` | `Build_Collision_Set` on synthetic cubes (assembly and component overrides, the manifest record), the STL's three objects, the configured overrides, the crop bound, conservativeness, thickening, excess, and the STL hash refusal. |
+| `test/Collision/test_conservativeness.py` | The pruned conservativeness computation equals the exhaustive one, and the recorded maxima are recomputed exactly (§17). |
+| `test/Collision/test_excess.py` | The pruned surface distance equals the exhaustive one, and the recorded excess and flags of the largest pieces are recomputed. |
+| `test/Example/test_demo.py` | The headless demo: only the chosen joint moves, within its limits, pre-checked on the dense samples; the label follows the check, and the shipped motion's label ("clearance checked") is pinned. |
+| `test/Example/test_extract_program.py` | `extract_program.py` on a synthetic program, its refusals, and (with `SF1_PLC_V4_SCRIPT`) the committed extracts reproduced byte for byte. |
+| `test/Example/test_write_taught_programs.py` | The simplified taught program is case 17 home → home as the owner states it, and the script writes the committed files byte for byte. |
+| `test/Example/test_plan_rotation.py` | `plan_rotation.py`: refusals before anything is written, the delivered headers' provenance and machine margin, the holding opening per program case, `Sequence_Entries`, `Configured_Points`, the station time, the taught model check, synthetic jobs refused; *slow*: the full run, the c1 and c2 jobs reproducing their committed files, and case 18 planning without code changes at an assumed 50 mm and a reduced budget. |
+| `test/Example/test_write_variants.py` | The five variants' files, statuses and provenance, c2 equal to `Data/Generated/`, the proposals' drop branches, and `comparison.csv`; *slow*: the table re-measured byte for byte. |
+| `test/Example/test_visualize_position.py` | The position viewer, headless: the FK refusal, the taught-rule and "model not valid here" labels, refused names, `--list`. |
+| `test/Example/test_replay.py` | The replay, headless: the FK refusal, every catalogue entry's moves, gripper states and movel lines, the timing, the refusals, path 6 (c3 marked a proposal), and `--job` replaying the default job's output (12.05 s). |
+| `test/Example/test_make_readme_figures.py` | The figure script names its output from any directory; the collision-model groups cover the environment once; the renders never load the visual STL; *slow*: the graphs are the committed ones byte for byte. |
+| `test/Docs/test_readme.py` | The README's results tables equal `comparison.csv`, every image it shows exists (and every `Media/` file is shown), each figure has an alt text and a numbered caption, and the root holds only what the README describes. |
+| `test/Install/test_install.py` | `bash -n`, the OS detection, the Python 3.11 resolution (`python3` never called), the hash verification and the log format, under a hermetic `PATH`. |
+| `.claude/skills/project-style-rpx/scripts/test_check_style.py` | The style checker itself (outside `test/`). |
 
 Expected numbers from the tests are taken from the measurements above or from the configuration,
 never from the code under test.
@@ -1281,13 +1284,13 @@ path: written, tested only against stubs, **unverified**.
 | # | Risk | Handling |
 |---|---|---|
 | 1 | Mesh collision = convex hull | crop → hull per component → CoACD only where coarse; surface metrics (§7) |
-| 2 | Units / frames | STL in m (measured); base pose and yaw REQUIRED fields; Menagerie 180° verified (§4.2); base-position test; a 90° yaw test pins degrees in the file; the placement test of the taught points (§4.6) catches a wrong world yaw, which FK vs `_p` cannot (it caught the earlier 0°) |
+| 2 | Units / frames | STL in m (measured); base pose and yaw REQUIRED fields; Menagerie 180° verified (§4.2); base-position test; a 90° yaw test pins degrees in the file; the placement test of the taught points (§4.6) catches a wrong world yaw, which FK vs `_p` cannot |
 | 3 | Models | Menagerie pinned commit, BSD-3/BSD-2, vendored, hash manifest; Menagerie offsets patched to DH (16.5 mm flange error found) |
 | 4 | Sim vs real kinematics | DH truth; configured TCP (Polyscope = Robotiq manual), derived TCP diagnostic only (§9.3); coupling from the manual, measured on the robot (§9.3); regression pin + sanity bound (§9.4); no calibration file → residual in the clearance budget (§9.8) |
-| 5 | A→B configuration change (base ~167°, elbow −120° → +83.8°) | `movej` only, joint targets only; `movel` is never emitted |
+| 5 | A→B configuration change (base ~167°, elbow −120° → +83.8°) | generated moves are `movej` to joint targets only; no generated `movel` (the station's taught `movel` lines are copied verbatim, §10.4) |
 | 6 | Check vs real motion | joint-linear dense sampling with a displacement bound; `r=0` fixed |
-| 7 | Self-collision, limits, gripper | explicit exclusions, filterparent off; elbow ±180° as the precondition of the upper_arm–forearm exclusion; others ±360° (Polyscope limits possibly tighter); structural pair base–upper_arm not excluded, 0 mm self margin (Q9 (a)); gripper fixed at 50 mm with a pad-span hull; part beyond the pad ends not covered |
-| 8 | ≤ 5 via points | planner (next feature) must report failure, never return a longer or colliding path |
+| 7 | Self-collision, limits, gripper | explicit exclusions, filterparent off; elbow ±180° as the precondition of the upper_arm–forearm exclusion; others ±360° (Polyscope limits possibly tighter); structural pair base–upper_arm not excluded, 0 mm self margin (Q9 (a)); gripper rigid at the segment's opening (holding or open 85 mm) with a pad-span hull; part beyond the pad ends not covered |
+| 8 | ≤ 5 via points | `Plan` and `Verify_Path` raise `Planner_Error_Cls` beyond 5 via points or without a path, never return a longer or colliding path |
 | — | Open shells over-filling space | flagged per piece (§7.4) |
 | — | 88 MB STL, 1.76 M triangles as visual mesh | MuJoCo's STL loader refuses > 200 000 faces → passed as `uservert`/`userface`, no hull stored, compile 1.3 s (§4.5) |
 
