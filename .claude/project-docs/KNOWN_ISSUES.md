@@ -40,7 +40,7 @@ At `Base_Yaw` = 180° the taught rotation sequence (cases 17 and 18, home → �
 the original STL although the real robot runs it. Machine (a) is shifted −150 mm along x as an
 assembly (the owner's estimate, below). With that the left window profile 2710 needs no fit: the
 taught sequence keeps ≥ 39.1 mm to it (SPEC §4.11). *Until 2026-10-18 (machine at −100 mm) the
-post was translated a further −15.7 mm, fitted so that the sequence kept 5 mm (SPEC §4.9).* The post
+post was translated a further −15.7 mm, fitted so that the sequence kept 5 mm (git history of SPEC §4.9).* The post
 now stands 34.3 mm behind that fit: **nothing in the program constrains where it is; its position is
 only the owner's estimate.** The visual mesh is unchanged, so the viewer shows the original post and
 machine front, not the collision geometry.
@@ -73,8 +73,8 @@ the full 20 mm.
   largest the taught program allows (34.6 mm proud of the post; the taught program keeps 5.03 mm
   to it). The real stub may be smaller; it cannot be larger without contradicting the taught
   program. Run the robot near the drop at reduced speed first.
-- **Evidence:** SPEC §4.7 (first fit), §4.9 (−100 mm and the post fit), §4.10 (holder, stub), §4.11
-  (−150 mm, the fit removed, the per-segment table), §4.12 (the zone shrunk to the holder).
+- **Evidence:** SPEC §4.10 (holder), §4.11 (−150 mm, no fit, the per-segment table), §4.12 (the
+  zone), §4.13 (stub).
 - **Pinned by:** `test/Scene/test_station.py` (the replay of both cases as taught and as generated,
   the recorded overrides, the zone pieces, the holder) and
   `test/Planner/test_core.py::test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end`.
@@ -131,7 +131,7 @@ the grasp and unload points reach into the modelled parts on the pallet and side
   (closest: S2; re-planned 2026-10-18, every third sample), and component 1638 is outside the
   station zone.
 - **Evidence:** replay of all 125 unique segments of the 21 cases (the 4 home → first target entries
-  included), joint-linear, 50 and 85 mm openings, on the set of each date (SPEC §4.9, §4.11).
+  included), joint-linear, 50 and 85 mm openings, on the current set (SPEC §4.11).
 - **Pinned by:** `test/Scene/test_program.py::test_no_program_segment_penetrates_more_than_recorded`
   (the 63 penetrating segments and their depths are its reference: none may be added or deepen).
 - **What would close it:** a decomposition of component 1638 that passes the conservativeness check

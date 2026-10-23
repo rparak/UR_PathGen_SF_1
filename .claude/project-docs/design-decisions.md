@@ -397,8 +397,8 @@ neighbourhood only (entry "The station zone holds the holder only"; until 2026-1
 started at world x = −0.80 m, so the machine-interior fallback hull, component 1638, stayed
 outside it).
 *Corrected 2026-10-18: before the owner's assembly estimate, the fit was 2710 by (−114.8, −6.2,
-−0.6) mm and 1154 by (−32.6, −11.6, +3.6) mm (SPEC §4.7); the post now totals −115.7 mm along x,
-consistent with it (SPEC §4.9).*
+−0.6) mm and 1154 by (−32.6, −11.6, +3.6) mm (git history of SPEC §4.7); the post now totals −115.7 mm along x,
+consistent with it (git history of SPEC §4.9).*
 
 **Why.** No measurement is available, and the real robot runs the whole program without collision
 (owner): the program is the only evidence of where the cell is not. A rigid translation per
@@ -406,7 +406,7 @@ component changes the least geometry for that evidence. The machine's placement 
 estimate, kept apart from the fit as an assembly override; only the post, which the taught drop
 contradicts, is fitted on top, along −x, which matches the owner's description and is only 0.2 mm
 longer than the free direction. No segment of any of the 21 cases gets new or deeper penetration
-(SPEC §4.9). The approved box (x from −0.85 m) also caught
+(git history of SPEC §4.9). The approved box (x from −0.85 m) also caught
 the 235 mm-excess interior hull and about 30 small parts behind the machine front; at −0.80 m the
 zone holds the station frame only and the taught replay still keeps every margin.
 
@@ -644,7 +644,7 @@ outside the station neighbourhood the optimised S2 passes at 30.0 / 29.7 mm agai
 inside it in case 18 (penalty 0.002 m).
 
 **Alternatives.** Keeping the 2026-10-17 paths: they keep the generated rule on the current scene
-(SPEC 4.9), but they were planned for another model. Keeping the taught S2: 3.8 s slower per case
+(git history of SPEC §4.9), but they were planned for another model. Keeping the taught S2: 3.8 s slower per case
 (estimate), 12.5 mm more clearance.
 
 *Updated 2026-10-18: with the deliverable narrowed to case 17 and the machine at −150 mm, S1 – S3

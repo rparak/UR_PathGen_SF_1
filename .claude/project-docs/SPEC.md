@@ -311,67 +311,16 @@ vertical ray through the STL triangles:
 | `bench_drop_1..8` | (−1.12, −0.08, 1.08): inside machine (a) | x 1.12, beyond the STL (x max 0.934) |
 
 At 180° every point lands where it handles a part; at 0° none does. The owner also sees the robot
-at home facing the machine. With 180°, the regrasp at the rotation station collides with the model
-(`KNOWN_ISSUES.md`): the STL does not match the cell there. The grasp points themselves are inside
-the margin of the modelled parts they grasp (−12 to −20 mm), and the machine drops are 150 mm inside
-the hull of machine (a): both are expected for points that handle parts, and neither is a learned
-point of the planner.
+at home facing the machine. The grasp points lie inside the margin of the modelled parts they grasp
+(−12 to −20 mm), and the machine drops inside the filled interior of machine (a) (§4.11): both are
+expected for points that handle parts, and neither is an end point of a planned segment. Where the
+STL contradicted the taught rotation sequence at 180°, the machine shift and the station boxes
+(§4.10 – §4.13) model the cell.
 
-### 4.7 Station correction fitted to the taught program (*measured*, 2026-10-17)
+### 4.7 Station correction fitted to the taught program (removed)
 
-*Superseded 2026-10-18 by §4.9: fitted without the machine assembly shift. Kept as the record of the
-first fit.*
-
-No measurement of the cell is available. The ground truth is the owner's statement that every
-segment of `sf1_plc_v4.script` runs on the real robot without collision. At `Base_Yaw` = 180° the
-rotation sequence of cases 17 and 18 (home → … → home, movel checked joint-linear, 50 mm opening
-while holding, 85 mm open — assumption: full 85 mm stroke for `rq_set_pos_spd_for(0, ...)`;
-conservative; owner did not confirm (the URCap sets `set_open_mm(50.0, 1)`)) came within 5 mm of two STL
-components only: 2710, the left window profile (one hull piece, −59.3 mm), and 1154, the machine
-body (21 pieces; only the flagged front pieces were touched, −29.2 mm).
-
-**Fit.** For each component, the smallest rigid translation (≤ 150 mm) that keeps every segment of
-the sequence ≥ 5 mm clear: 400 directions (Fibonacci sphere), bisection on the length, then 300
-seeded shrinking steps (seed 20261017); distances by `mj_geomDistance` from every robot collision
-geom at the segment's opening.
-
-| Component | Translation (world) | Worst before | Worst after |
-|---|---|---|---|
-| 2710 (post) | (−114.8, −6.2, −0.6) mm; only directions near −x are feasible (36 of 400) | −59.3 mm | +5.3 mm |
-| 1154 (machine body, whole component) | (−32.6, −11.6, +3.6) mm | −29.2 mm | +5.2 mm |
-
-After the shift the post spans world x [−0.817, −0.727]: nearly flush with the machine front
-instead of 108 mm proud of it. The real robot sweeps the post's STL volume at three heights
-(station, 1.42 m, 1.7 m), so the post cannot stand there; a y shift or a z trim does not work (the
-station is on one side, the gripper sweeps the other).
-
-**All cases.** Every unique segment of all 21 cases (121), joint-linear, both openings, before and
-after: no segment gets new or deeper penetration, neither in its worst value nor in its distance to
-1154 or to 2710 alone; every distance to 1154 grows, and the closest distance to 2710 outside cases
-17/18 falls from 67.0 to 39.9 mm (load3 → load_hower). The whole-component shift of 1154 is
-therefore used, not a split of the component (owner's condition, 2026-10-17).
-
-**Rotation sequence after the rebuild** (minimum robot – environment distance; the station zone,
-§9.7, contains the post, four 1154 front pieces and the window's top profile):
-
-| Segment | Case 17 | Case 18 |
-|---|---|---|
-| home → Waypoint_1 | ≥ 20 mm | ≥ 20 mm |
-| Waypoint_1 → drop | −27.4 → 6.5 mm | −28.4 → 5.8 mm |
-| drop → movel target (Waypoint_4 / 7) | −28.2 → 5.7 mm | −29.2 → 5.2 mm |
-| movel target → Waypoint_5 | −27.7 → 6.6 mm | −29.0 → 5.3 mm |
-| Waypoint_5 → Waypoint_1 | −20.0 → 14.9 mm | −20.0 → 14.9 mm |
-| Waypoint_1 → Waypoint_2 | −52.6 → 15.3 mm (top profile) | −52.6 → 15.3 mm |
-| Waypoint_2 → Waypoint_3 | −54.6 → ≥ 20 mm | −54.6 → ≥ 20 mm |
-| Waypoint_3 → Waypoint_18 / 11 | −8.9 → 19.2 mm | −2.1 → ≥ 20 mm |
-| → pick | −18.6 → 11.3 mm | −16.3 → 13.6 mm |
-| pick → movel target (Waypoint_6 / 8) | −20.1 → 5.7 mm | −19.0 → 6.8 mm |
-| movel target → Waypoint_2 | −59.3 → 9.5 mm | −58.6 → 12.4 mm |
-| Waypoint_2 → home | ≥ 20 mm | ≥ 20 mm |
-
-Checked as taught, every segment keeps its margins. Checked as generated (station points as the
-fixed points), only Waypoint_1 → Waypoint_2 violates: the top profile at 15.3 mm with the TCP about
-300 mm from every station point.
+The component fits of 2026-10-17 (the post 2710 and the machine body 1154) no longer exist: machine
+(a) moves as one assembly (§4.11) and no component is fitted. The number is kept because it is cited.
 
 ### 4.8 Owner photos and tape readings (2026-10-18)
 
@@ -388,201 +337,101 @@ Their depth toward the robot is not visible.
 
 **Tape readings** (owner, rough; the owner asked that nothing be fitted to them):
 
-| Reading | Tape | STL | After §4.9 |
+| Reading | Tape | STL | Model (machine at −150 mm, §4.11) |
 |---|---|---|---|
-| base axis → machine front at window height | ~700 mm | 612 mm (window profiles) | 712 mm (right profile), 728 mm (left profile, fitted) |
-| robot-table edge (x −0.340) → lower cabinet front, low | ~300 mm | 127 mm | 226 mm |
+| base axis → machine front at window height | ~700 mm | 612 mm (window profiles) | 762 mm (both profiles) |
+| robot-table edge (x −0.340) → lower cabinet front, low | ~300 mm | 127 mm | 276 mm |
 
-### 4.9 Machine (a) shifted, post refitted (*measured*, 2026-10-18)
+### 4.9 Owner facts: the machine assembly, the gripper, the release (2026-10-18)
 
-*Superseded later on 2026-10-18 by §4.11: the machine a further 50 mm, the post fit removed. Kept as
-the record of the −100 mm state.*
-
-**Owner facts.**
-
-- Machine (a) stands about 100 mm further from the robot than the STL, normal to its front (world
-  −x). The machine body, the front column with the window frame and the closed lower cabinet move as
-  one rigid assembly. This is an estimate, not a measurement.
-- `Tool.Mount_Yaw` = 0° is confirmed on the robot. On 2026-10-18 the owner first stated 90° and then
-  withdrew it.
-- The release opening of 85 mm is real: the part is released into a magazine with free space below
-  and above.
-
-**Selection.** Grouping components by touching bounding boxes (1 mm) gives exactly three objects:
-
-- (a) the machine, 1749 components, x −1.609 … −0.466 m;
-- (b) the robot stand, pallet and side tables, 951 components;
-- (c) the side cabinet, 56 components, y ≥ 0.555 m.
-
-Object (a) is the assembly (`machine_a`, the object of component 1154). Its front strip is its 232
-components ahead of x = −0.70 m: posts 2709/2710, top members 2711/2699, the cabinet panel 180 and
-frame 2696 – 2708. The owner confirmed the selection on renders. Both fits of §4.7 are replaced.
-
-**Post refit.** With the shift alone, the taught sequence penetrates the post 2710 by 10.4 mm. The
-smallest further translation of 2710 that keeps every segment of cases 17 and 18 at least 5 mm clear
-(exact distances, every sample, each segment at its opening):
-
-- **15.7 mm along −x** (bisection, 0.15 mm), configured: it is the machine front's normal;
-- 15.5 mm in the free direction, (−15.3, −2.6, +1.2) mm, among 400 directions.
-
-The post totals 115.7 mm behind its STL position, consistent with the first fit (−114.8, −6.2,
-−0.6 mm, §4.7). Its front is at x = −0.728, 74 mm ahead of the shifted body front; the STL draws it
-90 mm ahead. The machine body 1154 needs nothing beyond the shift: the closest taught sample of
-cases 17 and 18 is 60.3 mm from it.
-
-**Rebuild** (`machine_a` −100 mm, 2710 a further −15.7 mm): 6716 pieces, every count, method and body
-as before; conservativeness max 0.769 mm; excess max 234.8 mm, p95 11.27 mm (was 11.30 mm); 398
-pieces flagged (was 396: borderline excess samples of translated components); 1109 s. The manifest
-records both overrides and the 1749 members of the assembly.
-
-**All 21 cases** (125 unique segments, joint-linear, 50 and 85 mm, against the 2026-10-17 state):
-
-- no segment gets new or deeper penetration;
-- penetrating segments: 63 before, 63 after;
-- the machine-interior penetrations shrink by about 9 mm (deepest: Waypoint_19 → bench_drop_8,
-  −154.1 → −145.0 mm, component 1638);
-- no self-collision.
-
-Cases 17 and 18 as taught (minimum distance, mm, its own opening per segment; all to the post 2710
-or nothing within 50 mm):
-
-| Segment | Case 17 | Case 18 |
-|---|---|---|
-| Waypoint_1 → drop | 6.5 | 5.7 |
-| drop → Waypoint_4 / 7 | 5.7 | **5.1** |
-| Waypoint_4 / 7 → Waypoint_5 (85 mm) | 7.2 | 6.0 |
-| Waypoint_5 → Waypoint_1 | 21.3 | 21.3 |
-| Waypoint_1 → Waypoint_2 | ≥ 50 | ≥ 50 |
-| Waypoint_2 → Waypoint_3 | 30.8 | 30.8 |
-| Waypoint_3 → Waypoint_18 / 11 | 36.2 | 42.1 |
-| approach → pick | 15.9 | 17.0 |
-| pick → Waypoint_6 / 8 | 10.0 | 10.3 |
-| Waypoint_6 / 8 → Waypoint_2 | 11.5 | 13.3 |
-
-Every segment keeps its margins as taught and keeps the generated rule too: wherever it comes within
-20 mm of the station, its TCP lies within 50 mm of a station point. Before the shift, Waypoint_1 →
-Waypoint_2 passed the window's top profile at 15.3 mm far from the station; the top profile moved
-with the machine.
-
-**The station zone stays** (5 mm). The drop and release points keep 5.5 – 7.4 mm, by construction
-of the post fit, below the global 20 mm. The zone now holds 12 pieces (14 before the shift).
-
-**Committed S1 – S3** (generated rule): all six pass unchanged. They are not re-planned, and
-`Data/Generated/` stays as committed. They keep at least 181.2 mm to the machine-interior and pallet
-pieces.
+- **Machine (a) is one rigid assembly**: the machine body, the front column with the window frame
+  and the closed lower cabinet. Grouping the STL components by touching bounding boxes (1 mm) gives
+  exactly three objects: (a) the machine, 1749 components, x −1.609 … −0.466 m; (b) the robot stand,
+  pallet and side tables, 951 components; (c) the side cabinet, 56 components, y ≥ 0.555 m.
+  `machine_a` is the object of component 1154; the owner confirmed the selection on renders. Its
+  placement: §4.11.
+- **`Tool.Mount_Yaw` = 0° is confirmed** on the robot: the fingers open along flange ±x.
+- **The release opening of 85 mm is real**: the part is released into a magazine with free space
+  below and above.
 
 ### 4.10 Station holder box (*measured*, 2026-10-18)
 
-The holder of §4.8 is one world-axis-aligned box, `Environment.Added_Boxes` `station_bracket`
-(exact distances, every taught sample of cases 17 and 18 at its opening, the release included):
+The holder of §4.8 is one world-axis-aligned box, `Environment.Added_Boxes` `station_bracket`,
+x −0.770 … −0.645 m, y −0.340 … −0.260 m, z 0.955 … 1.112 m (exact distances, every taught sample
+of cases 17 and 18 at its opening, the release included, the boxes as convex meshes):
 
-- x −0.735 … −0.645 m: from the post face (x −0.728, the box starting 8 mm inside the post) to
-  90 mm in front of it, an assumed depth;
-- y −0.340 … −0.260 m and the bottom at 0.955 m: from the photo;
-- **top 1.112 m:** the highest at which every taught sample keeps 5 mm (1.1126 m, the open finger).
-  That is 17 mm above the photo's estimate of 1.095 m, where the clearance is 21.1 mm. The box keeps
-  5 mm from the taught release, where the magazine has free space below and above the part.
+- front x −0.645 m: an assumed depth, 90 mm in front of the post face the taught program
+  constrained before the machine shift; back x −0.770 m, 8 mm into the post face at x −0.762, since
+  the holder is mounted on the post (at no clearance cost). It stays where the robot places the part
+  (world-fixed) when the machine moves;
+- y and the bottom from the photo;
+- **top 1.112 m:** the highest at which every taught sample keeps 5 mm (limit 1.1125 m, the open
+  finger). That is 17 mm above the photo's estimate of 1.095 m, where the clearance is 21.05 mm (the
+  20 mm top would be 1.0961 m; the owner kept the fitted top). The box keeps 5 mm from the taught
+  release, where the magazine has free space below and above the part.
 
-The committed S1 – S3 keep the generated rule with the box, and within 20 mm of it no generated
-sample comes closer than its segment's closer taught end.
+Closest taught sample: 5.53 mm (case 17 Waypoint_18 → pick_rotate_1, the open finger).
 
-**The stub is not modelled** (owner, 2026-10-18). At its estimated position (y −0.330 … −0.270,
-z 1.093 … 1.264 m) the most a box could stand proud of the post face is 0.3 mm: flush with the
-face, the taught drop's holding pad already passes at 5.3 mm. With such a plate, case 17 S2 would
-come 1.2 mm closer to it than its taught end. The photo's stub therefore contradicts the taught drop
-at its estimated position; its real position is unknown (`KNOWN_ISSUES.md`).
+### 4.11 Machine (a) at −150 mm, side cabinet −50 mm, no component fit (*measured*, 2026-10-18)
 
-### 4.11 Machine (a) at −150 mm, side cabinet −50 mm, post fit removed (*measured*, 2026-10-18)
+**Owner facts (estimates, not measured).** Machine (a) stands 150 mm further along −x than the STL
+draws it, at the 150 mm bound of an override. **Owner's judgement (2026-10-18): the −150 mm position
+matches the real cell better than −100 mm**, and generated paths may use the space it frees. Its
+accuracy, ±10 mm (owner), is `Clearance.Machine_Extra` (§9.7). The side cabinet, object (c) (body
+2643), stands 50 mm along −x, a separate assembly with its own source. The robot stand and the
+tables, object (b), stay. The collision set records both assemblies, their 1749 and 56 members and
+no component override (§17).
 
-**Owner facts (estimates, not measured).** Machine (a) stands a further 50 mm along −x: 150 mm in
-all, at the 150 mm bound of an override. **Owner's judgement (2026-10-18): the −150 mm position
-matches the real cell better than −100 mm**, and generated paths may use the space it frees (the
-delivered c2 is planned on it). It remains an estimate, not a measurement; its accuracy is not
-yet stated. The side cabinet, object (c) (56 components, named by its
-body 2643), stands 50 mm along −x, a separate assembly with its own source. The robot stand and the
-tables, object (b), stay. The holder stays where the robot places the part (world-fixed); it is
-mounted on the post, so its back is extended to the shifted post face.
+**Post 2710: no fit.** The post alone keeps **≥ 39.1 mm** to every taught sample of cases 17 and 18
+(case 18 drop_rotate_2 → Waypoint_7), so the program does not constrain it: its face at x −0.762
+rests only on the owner's estimate.
 
-**Rebuild** (`machine_a` −150 mm, `side_cabinet` −50 mm, no component override): 6718 pieces (6716),
-by method hull 2125, thickened 503, CoACD 4089, fallback 1; conservativeness max 0.769 mm
-(unchanged); excess max 234.8 mm, p95 11.27 mm; 396 pieces flagged (398); 1119 s. The manifest
-records both assemblies, their 1749 and 56 members, and no component override. Every number below
-was first measured by translating the committed pieces in scratch and then again on the rebuilt
-set; the two agree to 0.1 mm.
+Cases 17 / 18 as taught (minimum distance to the STL and the holder, mm, its own opening per
+segment; ≥ 60 not listed; the distances to the stub are in §4.13):
 
-**Post 2710: the fit is removed.** With the machine at −150 mm the post alone keeps **≥ 39.1 mm** to
-every taught sample of cases 17 and 18 (case 18 drop_rotate_2 → Waypoint_7; at −100 mm with its fit:
-5.1 mm), so the smallest extra translation that keeps 5 mm is zero. The post now stands 34.3 mm
-behind its earlier fit (−115.7 mm), its face at x −0.762; the program no longer constrains it, so
-that position rests only on the owner's estimate.
+| Segment | Case 17 / 18 |
+|---|---|
+| Waypoint_1 → drop | 40.4 / 39.8 (post) |
+| drop → Waypoint_4 / 7 | 39.5 / 39.1 (post) |
+| Waypoint_4 / 7 → Waypoint_5 (85 mm) | 40.6 / 39.8 (post) |
+| Waypoint_5 → Waypoint_1 | 50.0 / 50.0 (post) |
+| Waypoint_2 → Waypoint_3 | ≥ 60 |
+| Waypoint_3 → Waypoint_18 / 11 | 15.1 / 27.2 (holder) |
+| approach → pick (85 mm) | 5.5 / 14.4 (holder) |
+| pick → Waypoint_6 / 8 | 17.8 / 27.8 (holder) |
+| Waypoint_6 / 8 → Waypoint_2 | 45.0 / 47.6 (post) |
 
-Cases 17 / 18 as taught (minimum distance, mm, its own opening per segment; ≥ 60 not listed exactly):
+Every segment keeps its margins as taught, and the generated rule without the station-box floors
+(§9.7). **Only the station boxes come within 20 mm** of a taught sample (the holder 5.53 mm, §4.10;
+the stub 5.03 mm, §4.13); every STL piece keeps ≥ 39.1 mm, and every station point keeps ≥ 39.1 mm
+to every STL piece. To the holder: pick_rotate_1 open 5.5 mm, pick_rotate_2 open 14.4, Waypoint_18
+open 15.1, pick_rotate_1 holding 17.8 mm.
 
-| Segment | −100 mm, post fitted (§4.9) | −150 mm, no fit |
-|---|---|---|
-| Waypoint_1 → drop | 6.5 / 5.7 | 40.4 / 39.8 (post) |
-| drop → Waypoint_4 / 7 | 5.7 / 5.1 | 39.5 / 39.1 (post) |
-| Waypoint_4 / 7 → Waypoint_5 (85 mm) | 7.2 / 6.0 | 40.6 / 39.8 (post) |
-| Waypoint_5 → Waypoint_1 | 21.3 / 21.3 | 50.0 / 50.0 (post) |
-| Waypoint_2 → Waypoint_3 | 30.8 / 30.8 | ≥ 60 |
-| Waypoint_3 → Waypoint_18 / 11 | 15.1 / 27.2 (holder) | 15.1 / 27.2 (holder) |
-| approach → pick (85 mm) | 5.5 / 14.4 (holder) | 5.5 / 14.4 (holder) |
-| pick → Waypoint_6 / 8 | 10.0 / 10.3 (post) | 17.8 / 27.8 (holder) |
-| Waypoint_6 / 8 → Waypoint_2 | 11.5 / 13.3 (post) | 45.0 / 47.6 (post) |
+**All 21 cases** (`test/Scene/test_program.py`, 125 unique segments, 50 and 85 mm): 63 segments
+penetrate, recorded as the test's reference. The machine-interior penetrations reach −74.2 mm
+(load2 ↔ load3) and −140.4 mm at the deepest (Waypoint_19 → bench_drop_8, component 1638); no
+self-collision. No segment comes within 50 mm of the side cabinet (c): the program neither confirms
+nor contradicts its shift.
 
-Every segment keeps its margins as taught and keeps the generated rule. **Only the holder still
-comes within 20 mm** of a taught sample; every STL piece keeps ≥ 39.1 mm, and every station point
-keeps ≥ 39.1 mm to every STL piece. To the holder: pick_rotate_1 open 5.5 mm, pick_rotate_2 open
-14.4, Waypoint_18 open 15.1, pick_rotate_1 holding 17.8 mm.
+**Placement** (§4.6): the bench_drop points lie at x ≈ −1.12 m, inside machine (a) both where the
+STL draws it and shifted. `load3` → 1638: −74.1 mm.
 
-**Holder.** Its taught clearance is unchanged, 5.5 mm (case 17 Waypoint_18 → pick_rotate_1, the open
-finger). With the post face at x −0.762 the earlier box (back at x −0.735, 8 mm into the fitted post)
-would leave a 27 mm gap to the post; its back is extended to x −0.770 (8 mm into the shifted face),
-at no clearance cost (5.5 mm either way). The highest top at which every taught sample keeps 20 mm
-would be 1.0962 m; the photo's 1.095 m gives 21.1 mm (owner's choice: the fitted 1.112 m stays).
-*Re-measured 2026-10-18 with the added boxes as convex meshes (§8): 5.53 mm, 21.05 mm, the 5 mm top
-1.1125 m and the 20 mm top 1.0961 m - unchanged within the bisection step; the exact distances were
-right, only MuJoCo's box-box contacts were missing.*
+### 4.12 Station zone: the station boxes' neighbourhood (*measured*, 2026-10-18)
 
-**Stub** (§4.10; modelled since §4.13). At its estimated position (y −0.330 … −0.270, z 1.093 … 1.264 m) on
-the shifted post face, a box could stand up to 34.6 mm proud of it and every taught sample would
-keep 5 mm (closest: case 17 pick_rotate_1 → Waypoint_6, the holding pad). The argument of §4.10 that
-the stub contradicts the taught drop held only for the fitted post.
+**Owner decision (2026-10-18).** The program does not constrain the post (≥ 39.1 mm, §4.11), so its
+position rests only on the owner's estimate, and a generated path keeps the full 20 mm from it. The
+zone (§9.7) holds only the station boxes, the geometry the taught program comes closer to than
+20 mm.
 
-**Station zone** (box unchanged in this step): 8 pieces, components 180, 181, 1065, 2699, 2701, 2702,
-2704, 2710, plus the holder; the machine body 1154 has left it (12 pieces before). Shrunk in §4.12.
+**Box** `[-0.755, -0.36, 0.94]` – `[-0.62, -0.24, 1.13]` m: the holder and stub boxes and the
+sill-frame pieces they sit on, components 181, 1062, 2701, 2702, 2704 (5 pieces). No taught sample
+comes within 20 mm of a sill-frame piece; the post's face (x −0.762) lies outside the box.
 
-**All 21 cases** (`test/Scene/test_program.py`, 125 unique segments, 50 and 85 mm): no segment gets
-new or deeper penetration against the −100 mm reference; 63 penetrating segments before and after;
-the machine-interior penetrations shrink by up to 25.3 mm (load2 ↔ load3 −99.5 → −74.2 mm; deepest
-Waypoint_19 → bench_drop_8 −145.0 → −140.4 mm), the grasp contacts not at all; no self-collision.
-No segment comes within 50 mm of the side cabinet (c), before or after: the program neither confirms
-nor contradicts its shift. The reference is re-recorded at −150 mm.
-
-**Placement** (§4.6): unchanged; the bench_drop points lie at x ≈ −1.12 m, inside machine (a) both
-where the STL draws it and shifted. `load3` → 1638: −74.1 mm (−99.5 mm at −100 mm).
-
-**Committed S1 – S3** (case 17): all three still pass `Verify_Path` on the new scene. S3's direct
-segment now keeps the generated rule (it did not at −100 mm).
-
-### 4.12 Station zone shrunk to the holder's neighbourhood (*measured*, 2026-10-18)
-
-**Owner decision (2026-10-18), option S.** After the shift the program no longer constrains the
-post (≥ 39.1 mm, §4.11), so the post's extra 34 mm beyond its earlier fit (−115.7 mm) rests only on
-the owner's estimate; a generated path must keep the full 20 mm from it. The zone (§9.7) therefore
-holds only the holder, the one geometry the taught program comes closer to than 20 mm (5.5 mm).
-
-**Box** `[-0.755, -0.36, 0.94]` – `[-0.62, -0.24, 1.13]` m (was `[-0.80, -0.40, 1.00]` –
-`[-0.55, -0.20, 1.85]`): the holder box (and, since §4.13, the stub box) and the sill-frame pieces they sit on, components 181, 1062,
-2701, 2702, 2704 (5 pieces; 8 before, with the post 2710, the top profile 2699 / 1065 and the
-machine front 180). No taught sample comes within 20 mm of a sill-frame piece; the post's face
-(x −0.762) lies outside the box.
-
-**Checks.** With the holder removed, every taught segment of cases 17 and 18 keeps the global
-margins everywhere (the generated rule without station points): the zone is needed for the holder
-only. With the shrunk zone the taught sequence keeps its margins as taught and as generated. Every
-taught sample under 20 mm has its TCP within 13.5 mm of a station point (44 mm before the shift), so
-`Endpoint_Radius` (50 mm) stays. The committed S1 – S3 still pass `Verify_Path`.
+**Checks.** Without the station boxes, every taught segment of cases 17 and 18 keeps the global
+margins everywhere (the generated rule without station points). With the zone the taught sequence
+keeps its margins as taught, and as generated without the station-box floors. Every taught sample
+under 20 mm has its TCP within 13.5 mm of a station point (measured before the stub was added), so
+`Endpoint_Radius` (50 mm) stays.
 
 ### 4.13 Station stub box (*measured*, 2026-10-18)
 
@@ -784,8 +633,8 @@ field without a reader.
 | `Environment.Collision_Set` | the `.npz`, repository-relative | path | REQUIRED |
 | `Environment.Stand_Region.Min/Max` | box selecting the stand components (§7.5) | m | REQUIRED |
 | `Environment.Assembly_Overrides` | rigid translations of whole STL objects before the build: `{Name, Object_Of (a component of the object), Translation [x, y, z] (world, ≤ 150 mm), Source}` each; may be empty (§7.6). Shipped: `machine_a`, object (a), −150 mm along x, and `side_cabinet`, object (c), −50 mm along x (owner estimates, 2026-10-18, not measured; §4.11) | –, –, m, text | REQUIRED |
-| `Environment.Component_Overrides` | rigid translations of STL components before the build, added to any assembly translation: `{Component, Translation [x, y, z] (world, ≤ 150 mm), Source}` each; may be empty (§7.6). Shipped: none (the post fit of §4.9 was removed, §4.11) | –, m, text | REQUIRED |
-| `Environment.Added_Boxes` | obstacles missing from the STL, added to body `env` as convex meshes of their eight corners (world-axis-aligned boxes; not box primitives, whose contacts with the gripper's box pads are missed inside the margin) with the environment margin: `{Name, Min [x, y, z], Max [x, y, z] (world), Source}` each; a box meeting `Clearance.Station_Zone` is a zone piece; may be empty. Shipped: `station_bracket`, the holder (§4.10; its back at the shifted post, §4.11). The collision set is not rebuilt for them | –, m, m, text | REQUIRED |
+| `Environment.Component_Overrides` | rigid translations of STL components before the build, added to any assembly translation: `{Component, Translation [x, y, z] (world, ≤ 150 mm), Source}` each; may be empty (§7.6). Shipped: none (no component is fitted, §4.11) | –, m, text | REQUIRED |
+| `Environment.Added_Boxes` | obstacles missing from the STL, added to body `env` as convex meshes of their eight corners (world-axis-aligned boxes; not box primitives, whose contacts with the gripper's box pads are missed inside the margin) with the environment margin: `{Name, Min [x, y, z], Max [x, y, z] (world), Source}` each; a box meeting `Clearance.Station_Zone` is a zone piece; may be empty. Shipped: `station_bracket`, the holder (§4.10), and `station_stub` (§4.13); both are zone pieces. The collision set is not rebuilt for them | –, m, m, text | REQUIRED |
 | `Robot.Model` | `models/universal_robots_ur10e/ur10e.xml` | path | REQUIRED |
 | `Robot.Base_Position` | Polyscope base origin in the STL/world frame: `[0.0, 0.0, 0.7152]` | m | REQUIRED |
 | `Robot.Base_Yaw` | rotation of the Polyscope base frame about world z: `180.0` (owner, 2026-10-17; confirmed by the taught points of `sf1_plc_v4.script` and photos of the cell, §4.6). *Corrected 2026-10-17: was `0.0`, which put every taught grasp point in empty space* | deg | REQUIRED |
@@ -801,7 +650,7 @@ field without a reader.
 | `Clearance.Environment` | minimum robot/gripper ↔ environment distance: `0.020` | m | REQUIRED |
 | `Clearance.Self` | minimum distance between non-excluded robot/gripper bodies: `0.005` | m | REQUIRED |
 | `Clearance.Self_Pair_Overrides` | `[[base, upper_arm_link, 0.0]]` (Q9 (a)): a pair-specific self margin. Allowed only for a pair whose true minimum stays > 0: grid over the joints that move it, then scipy local minimisation from the 20 lowest cells; the test checks every entry and pins the refined minimum | m | REQUIRED |
-| `Clearance.Station_Zone.Min/Max` | world box of the station zone: environment pieces whose bounding box meets it are the zone pieces (§9.7). Shipped: the holder's neighbourhood, `[-0.755, -0.36, 0.94]` – `[-0.62, -0.24, 1.13]` (owner, 2026-10-18, §4.12) | m | REQUIRED |
+| `Clearance.Station_Zone.Min/Max` | world box of the station zone: environment pieces whose bounding box meets it are the zone pieces (§9.7). Shipped: the station boxes' neighbourhood, `[-0.755, -0.36, 0.94]` – `[-0.62, -0.24, 1.13]` (owner, 2026-10-18, §4.12) | m | REQUIRED |
 | `Clearance.Station_Zone.Environment` | margin of the zone pieces where the zone applies; > 0 and ≤ `Clearance.Environment` | m | REQUIRED |
 | `Clearance.Station_Zone.Endpoint_Radius` | a generated sample uses the zone margin only while its TCP lies within this distance of a fixed station point's TCP (§9.7) | m | REQUIRED |
 | `Clearance.Machine_Extra.Assembly/Margin/Source` | extra environment margin of **generated** segments to one assembly's pieces outside the station zone, for the accuracy of its estimated placement (§9.7). Shipped: `machine_a`, `0.010` (owner accuracy estimate of the machine position, 2026-10-18), so a generated path keeps 30 mm to machine (a) outside the zone. `plan_rotation.py`'s report and the headers of its output state the margin with its source (`Machine_Margin`). Load rejects: an assembly not in `Environment.Assembly_Overrides`, a negative margin or one above 150 mm, an empty source | –, m, text | REQUIRED |
@@ -1128,8 +977,9 @@ covers the position only; the budget above is unchanged. Taught segments are not
 
 **Inside the station zone** (§9.7) the environment margin is 5 mm: eps (1 mm) + the measured
 kinematic error at the drop points (4.0 mm) leaves **0 mm for cables**, and case B (10 mm) is **not
-covered**. The zone holds only the holder and the sill frame it sits on (§4.12); the holder's top was
-fitted to keep the taught segments 5 mm clear of the nominal-DH robot (§4.10), so the zone margin
+covered**. The zone holds only the holder, the stub and the sill frame (§4.12); the holder's top and the
+stub's depth were fitted to keep the taught segments 5 mm clear of the nominal-DH robot (§4.10,
+§4.13), so the zone margin
 pins consistency with the taught program, not real clearance. A generated path gets it only within
 50 mm of a station point.
 
