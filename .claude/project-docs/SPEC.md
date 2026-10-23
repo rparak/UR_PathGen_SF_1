@@ -447,6 +447,7 @@ requirements.txt          pinned
 .claude/skills/project-style-rpx/   SKILL.md, references/, assets/, scripts/
 .claude/skills/feature-manager/SKILL.md
 .claude/skills/project-optimize/SKILL.md
+.claude/skills/readme-writer/references/project.md   the README rules of the user-level readme-writer skill (no SKILL.md here)
 CAD/SF1_Environment.stl                       source, unchanged (visual mesh)
 CAD/Collision/SF1_Environment_Collision.npz   convex pieces (vertices, faces, piece → component, body)
 CAD/Collision/SF1_Environment_Collision.json  manifest (§7.6)

@@ -15,6 +15,8 @@ every file. The owner's notes may be in Czech or Slovak; answer in English anywa
 - `.claude/skills/feature-manager/` — how a feature, a behaviour change or a bug fix is added.
 - `.claude/skills/project-optimize/` — cleanup, speed, complexity and reliability work. Behaviour
   does not change, and a generated path is compared byte for byte.
+- `readme-writer` (user level, `~/.claude/skills/readme-writer/`) — every README change; this
+  repository's rules are in `.claude/skills/readme-writer/references/project.md`.
 
 ## Commands
 
