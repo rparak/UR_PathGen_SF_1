@@ -27,7 +27,8 @@ the collision model with its configured corrections, not the original CAD.
 
 [About](#about) · [Results](#results) · [Quick start](#quick-start) · [How it works](#how-it-works) ·
 [Inputs and outputs](#inputs-and-outputs) · [Limitations and safety](#limitations-and-safety) ·
-[Repository layout](#repository-layout) · [License](#license) · [Acknowledgement](#acknowledgement)
+[Repository layout](#repository-layout) · [Authors](#authors) · [License](#license) ·
+[Acknowledgement](#acknowledgement)
 
 ## About
 
@@ -703,6 +704,11 @@ models/           vendored MuJoCo Menagerie UR10e and Robotiq 2F-85, pinned by h
 src/              Configuration, URScript, Kinematics, Collision, Scene, Planner
 test/             pytest suite: the modules, the scripts and the installer
 ```
+
+## Authors
+
+- **Roman Parak** ([@rparak](https://github.com/rparak)), JIC Smart Factory: author.
+- **Filip Rusnak** ([@piifl](https://github.com/piifl)), JIC Smart Factory: collaborator.
 
 ## License
 

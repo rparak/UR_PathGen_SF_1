@@ -89,10 +89,10 @@ The owner's statuses (2026-10-21), the same words in the tables, prose, figure l
   `> [!WARNING]` then "**Simulation passed ≠ safe on the robot.** ...", naming c2 as the only
   path tested on the real cell (owner, 2026-10-21). "Simulation passed ≠ safe on the robot" also
   opens Limitations and safety.
-- **Visible / collapsed split** (216 visible lines of 714, 2026-10-23):
+- **Visible / collapsed split** (223 visible lines of 723, check_readme.py, 2026-10-23):
   - visible: title, value sentence, badges, Figure 1, the alert, Contents, About, Results (compact
     table, Figures 2-3), Quick start, How it works (Mermaid + bullets), Inputs and outputs (file
-    table), Limitations and safety, Repository layout, License, Acknowledgement;
+    table), Limitations and safety, Repository layout, Authors, License, Acknowledgement;
   - collapsed: All metrics, All figures (4-15), All usage, The full method, Every file, What a run
     needs, Another program, case or path.
 - The compact results table keeps 5 columns; the 10-column table lives in "All metrics".
