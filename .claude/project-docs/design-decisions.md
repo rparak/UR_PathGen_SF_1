@@ -127,7 +127,7 @@ missed eps by 0.12 mm, and the fallback hull extended 297 mm beyond the frame, 0
 base. Manifold-edge splitting gives the 2756 components of SPEC 4.1 (measured with trimesh), and each
 profile is hulled on its own.
 
-**Alternatives.** Raising eps or `Hull_Excess_Max` until the frame passed was rejected: tuning to
+**Alternatives.** Raising eps or the excess threshold (`CONST_HULL_EXCESS_MAX`) until the frame passed was rejected: tuning to
 make a check pass.
 
 **Revisit if** a CAD export joins real parts by manifold edges (then they hull together).
