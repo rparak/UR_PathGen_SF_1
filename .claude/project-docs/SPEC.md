@@ -574,8 +574,14 @@ checked against the stand.
 ### 7.6 Storage and manifest
 
 `CAD/Collision/` is committed. The manifest holds: the sha256 of the source STL; the crop centre
-and radius; the excess threshold, `eps`, the CoACD version (`unknown` when the package does not
-report one, as for the committed set) and parameters, seed; counts and runtimes; both metrics. `Read_Collision_Set` refuses a set whose recorded STL hash differs from the file on disk
+and radius; the excess threshold, `eps`, the CoACD version and parameters, seed; counts and
+runtimes; both metrics.
+
+**Pending for the next rebuild** (no rebuild now): the build reads the version as
+`coacd.__version__`, which the installed package does not define, so the committed manifest records
+`unknown` although `requirements.txt` pins `coacd==1.0.14`. Before the set is next rebuilt, the
+build reads it with `importlib.metadata.version('coacd')` (1.0.14 in `.venv`), so the manifest
+records the version that made the pieces. `Read_Collision_Set` refuses a set whose recorded STL hash differs from the file on disk
 (`Collision_Error_Cls`, with the sentence "rerun Example/build_collision.py"). Tests read the set and
 never run CoACD.
 
