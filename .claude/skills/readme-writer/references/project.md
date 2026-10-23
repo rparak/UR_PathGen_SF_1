@@ -62,7 +62,8 @@ The owner's statuses (2026-10-21), the same words in the tables, prose, figure l
 - **Numbering**: Figures 1-3 visible (the cell, the cycle-time graph, the c2 path), Figures 4-15 in
   the "All figures" gallery, numbered in document order. Captions: `**Figure N:**` in Markdown,
   `<p><b>Figure N:</b> ...</p>` in the gallery's table cells.
-- `<img>` width: only Figure 1 sets one (`85%`); the others fill their cell or the page.
+- `<img>` width: Figure 1 `85%` (centred); every other figure `100%`, of the page or, in the
+  gallery's two-column tables, of its cell.
 
 ## Rules
 
@@ -106,8 +107,7 @@ Commands:
 .venv/bin/python ~/.claude/skills/readme-writer/scripts/check_readme.py README.md
 ```
 
-Known checker results that are decisions, not defects: no `width` on Figures 2-15, the
-left-aligned `--path` column, the two static badges (checked against `install.sh` and
+Known checker results that are decisions, not defects: the left-aligned `--path` column, the two static badges (checked against `install.sh` and
 `requirements.txt`), the Mermaid block (verify on GitHub after push; no `mmdc` installed).
 
 ## Pointers
