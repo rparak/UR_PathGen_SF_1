@@ -528,7 +528,7 @@ byte for byte; without it, those tests are skipped.
 
 - **`*.urscript`: points.** Only lines of two forms, plus `#` comments:
 
-  ```
+  ```text
   global <name>_p=p[x, y, z, rx, ry, rz]    # TCP pose: m, rotation vector in rad, Polyscope base frame
   global <name>_q=[j0, j1, j2, j3, j4, j5]  # joints in rad: base, shoulder, elbow, wrist 1, 2, 3
   ```
