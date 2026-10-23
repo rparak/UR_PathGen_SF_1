@@ -148,6 +148,8 @@ The verdicts were unaffected.
 **Alternatives.** trimesh closest-point per point: exact but slow, and it would bring trimesh into
 the tests.
 
+**Revisit if** the check becomes too slow for a rebuild; a faster method must give the same maxima.
+
 Pinned by `test/Collision/test_conservativeness.py`.
 
 ## The crop sphere is a conservative chain bound
@@ -181,6 +183,8 @@ built, and fails if any piece is within the environment margin.
 
 **Why.** MuJoCo never collides two static bodies, so `mj_collision` cannot report `base – env`.
 
+**Revisit if** the base is mounted on a moving axis, or MuJoCo starts colliding static bodies.
+
 Pinned by `test/Scene/test_core.py::test_the_static_base_clearance_is_checked_at_build`.
 
 ## Orientations are compared by the atan2 geodesic angle
@@ -190,6 +194,8 @@ components.
 
 **Why.** `home_p` has |r| ≈ π, where r and its equivalent differ by ≈ 2π component-wise. The arccos
 form cannot resolve below ≈ 6e-8 rad; atan2 resolves 1e-16 (measured).
+
+**Revisit if** a check needs a different orientation metric than the angle between two rotations.
 
 Pinned by `test/Kinematics/test_core.py`.
 
@@ -210,8 +216,9 @@ Pinned by `test/URScript/test_core.py::test_movej_uses_joint_targets_and_no_blen
 
 ## Learned points keep the program's names; the program extract is their single source
 
-**Decision.** Learned points are read only from `Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript`,
-under the robot's names (A = `home`, B = `drop_rotate_1`); generated via points are
+**Decision.** Learned points are read only from the positions extract of the job's program,
+`Data/Programs/<program>/<program>_positions.urscript` (`sf1_plc_v4` for every shipped job), under
+the robot's names (A = `home`, B = `drop_rotate_1`); generated via points are
 `via_<from>_<to>_<nn>`. The robot export of A and B is kept as
 `test/URScript/data/SF1_Positions_original.urscript`.
 
@@ -248,9 +255,7 @@ The owner sees the robot at home facing the machine.
 
 **Alternatives.** Keeping 0° and testing clearance only: rejected, clearance cannot tell an empty
 cell from a correct one. Deriving the yaw from a clearance optimum: rejected, it would fit the model
-instead of measuring the cell. Tests that now fail only because the STL does not match the cell at
-the rotation station are strict xfails (`KNOWN_ISSUES.md`): they turn red as soon as the geometry
-is fixed, so the failure stays visible.
+instead of measuring the cell.
 
 **Revisit if** the touch-probed cell disagrees with the placement, or `Robot.Base_Position` x/y
 turns out to be off (it is not verified against the STL).
@@ -355,28 +360,29 @@ consume the budget everywhere.
 
 Pinned by `test/Scene/test_core.py::test_the_station_zone_applies_within_the_endpoint_radius`.
 
-## The station zone holds the holder only; the post takes the full margin
+## The station zone holds the station boxes and their sill frame; the post takes the full margin
 
-**Decision.** `Clearance.Station_Zone` is the holder's neighbourhood, `[-0.755, -0.36, 0.94]` –
-`[-0.62, -0.24, 1.13]` m: the holder box and the sill-frame pieces it sits on (owner, 2026-10-18,
-option S of three). The post, the window's top profile and the machine front return to the 20 mm
-margin.
+**Decision.** `Clearance.Station_Zone` is the station boxes' neighbourhood, `[-0.755, -0.36, 0.94]`
+– `[-0.62, -0.24, 1.13]` m: the holder and stub boxes and the sill-frame pieces they sit on (owner,
+2026-10-18, option S of three). The post, the window's top profile and the machine front take the
+20 mm margin.
 
 **Why.** After the machine shift (SPEC §4.11) the taught program keeps ≥ 39.1 mm to the post, so it
-no longer constrains where the post is: its extra 34 mm beyond the earlier fit (−115.7 mm) rests
-only on the owner's estimate, and a generated path must keep 20 mm from it. The holder is the only
-geometry the program still comes closer to than 20 mm (5.5 mm, its top fitted to that); without it
-every taught segment keeps the global margins everywhere (SPEC §4.12). *Updated 2026-10-18: the stub
-box, modelled later at its largest size (SPEC §4.13), meets the zone box and is a zone piece too.*
+no longer constrains where the post is: its position rests only on the owner's estimate, and a
+generated path must keep 20 mm from it. The station boxes are the only geometry the program comes
+closer to than 20 mm (holder 5.5 mm, stub 5.03 mm; both fitted to that); without them every taught
+segment keeps the global margins everywhere (SPEC §4.12). *Corrected 2026-10-18: the zone was first
+the holder's neighbourhood only; the stub, modelled later (SPEC §4.13), meets the box and is a zone
+piece too.*
 
-**Alternatives.** Keeping the zone (K): a generated path could then pass the post at 5 mm near a
-station point while the program keeps 39 mm, using space only the estimate provides. Removing the
-zone and lowering the holder's top to the photo's 1.095 m (R; 21.1 mm to every taught sample): it
-gives up the 17 mm of fitted, conservative height, and the zone's endpoint radius also defines the
-penalty's neighbourhood, so the planner's objective would change.
+**Alternatives.** Keeping the larger zone (K): a generated path could then pass the post at 5 mm
+near a station point while the program keeps 39 mm, using space only the estimate provides.
+Removing the zone and lowering the holder's top to the photo's 1.095 m (R; 21.1 mm to every taught
+sample): it gives up the 17 mm of fitted, conservative height, and the zone's endpoint radius also
+defines the penalty's neighbourhood, so the planner's objective would change.
 
-**Revisit if** the machine or the post is measured, the holder is measured (its top may then keep
-20 mm), or the program comes closer to the post again.
+**Revisit if** the machine or the post is measured, a station box is measured (the holder's top may
+then keep 20 mm), or the program comes closer to the post again.
 
 Pinned by `test/Scene/test_station.py::test_the_zone_holds_the_holders_neighbourhood_only` and
 `test/Scene/test_station.py::test_without_the_holder_the_taught_sequence_keeps_the_global_margin`.
@@ -385,39 +391,26 @@ Pinned by `test/Scene/test_station.py::test_the_zone_holds_the_holders_neighbour
 
 **Decision.** Machine (a) is shifted −150 mm along x as one assembly and the side cabinet (c) −50 mm
 as another (`machine_a`, `side_cabinet`, the owner's estimates). No component is fitted on top: the
-taught rotation sequence keeps ≥ 39.1 mm to the post 2710 without one (SPEC §4.11). A component is
-fitted only where the taught program contradicts the estimated placement, by the smallest
-translation that keeps every taught segment 5 mm clear. The holder box is fitted that way (its top,
-§4.10). *Corrected 2026-10-18: with the machine at −100 mm, component 2710 (the left window profile)
-was translated a further −15.7 mm along x: the smallest translation along the machine front's normal
-that keeps every segment of the taught rotation sequence (cases 17 and 18) at least 5 mm clear (the
-free-direction optimum was 15.5 mm). The owner's further 50 mm made it unnecessary, and it was
-removed rather than kept on top (−165.7 mm).* The station zone holds the holder's
-neighbourhood only (entry "The station zone holds the holder only"; until 2026-10-18 its box
-started at world x = −0.80 m, so the machine-interior fallback hull, component 1638, stayed
-outside it).
-*Corrected 2026-10-18: before the owner's assembly estimate, the fit was 2710 by (−114.8, −6.2,
-−0.6) mm and 1154 by (−32.6, −11.6, +3.6) mm (git history of SPEC §4.7); the post now totals −115.7 mm along x,
-consistent with it (git history of SPEC §4.9).*
+taught rotation sequence keeps ≥ 39.1 mm to the post 2710 without one (SPEC §4.11). Geometry is
+fitted only where the taught program contradicts or bounds the estimate, by the smallest change
+that keeps every taught segment 5 mm clear: the holder's top and the stub's depth (SPEC §4.10,
+§4.13). The zone: entry "The station zone holds the station boxes and their sill frame".
+*Corrected 2026-10-18: the post 2710 was fitted twice, first with the machine body 1154 before the
+assembly estimate, then by −15.7 mm on top of the machine at −100 mm (git history of SPEC §4.7,
+§4.9); at −150 mm the program kept ≥ 39.1 mm without it, and the fit was removed rather than kept
+on top (−165.7 mm).*
 
 **Why.** No measurement is available, and the real robot runs the whole program without collision
-(owner): the program is the only evidence of where the cell is not. A rigid translation per
-component changes the least geometry for that evidence. The machine's placement is the owner's
-estimate, kept apart from the fit as an assembly override; only the post, which the taught drop
-contradicts, is fitted on top, along −x, which matches the owner's description and is only 0.2 mm
-longer than the free direction. No segment of any of the 21 cases gets new or deeper penetration
-(git history of SPEC §4.9). The approved box (x from −0.85 m) also caught
-the 235 mm-excess interior hull and about 30 small parts behind the machine front; at −0.80 m the
-zone holds the station frame only and the taught replay still keeps every margin.
+(owner): the program is the only evidence of where the cell is not. The machine's placement is the
+owner's estimate, kept apart as an assembly override; a fit is a different claim, made only where
+the program requires one, and the smallest change makes the least claim. No segment of any of the
+21 cases gets new or deeper penetration (SPEC §4.11).
 
 **Alternatives.** Trimming the post in z: rejected, it removes the post exactly where the robot
-works. Translating only the touched 1154 pieces: rejected, piece ids change with every rebuild and
-a moved piece leaves its surface. A lower global margin: rejected, it hides every contradiction at
-once.
-
-Removing the post fit at −150 mm: a fit that the program no longer requires would move the post on
-no evidence. Kept on top it would put the post 165.7 mm behind the STL, beyond what either the
-program or the owner states.
+works. Translating only the touched pieces of the set: rejected, piece ids change with every rebuild
+and a moved piece leaves its surface. A lower global margin: rejected, it hides every contradiction
+at once. Keeping the post fit at −150 mm: it would move the post on no evidence, 165.7 mm behind the
+STL, beyond what either the program or the owner states.
 
 **Revisit if** the station is measured, the machine is placed closer again, or a taught segment changes.
 
@@ -425,39 +418,34 @@ Pinned by `test/Scene/test_station.py::test_the_taught_rotation_sequence_keeps_i
 `test/Scene/test_station.py::test_the_corrections_are_recorded_and_configured` and
 `test/Scene/test_station.py::test_the_zone_holds_the_holders_neighbourhood_only`.
 
-## The station holder is a box sized by a photo and capped by the taught sweep; the stub is not modelled
+## The station holder and stub are boxes sized by a photo and capped by the taught program
 
-**Decision.** The U-shaped holder under the part, missing from the STL, is one box in
-`Environment.Added_Boxes` (`station_bracket`). Its footprint and bottom come from an owner photo,
-and its x range runs from the post face to an assumed 90 mm in front. *Updated 2026-10-18 (SPEC
-§4.11): the box stays where the robot places the part (front at x −0.645 m); with the machine at
-−150 mm and the post fit removed, its back is extended to 8 mm inside the shifted post face
-(x −0.770 m), because the holder is mounted on the post (owner). The extension costs no taught
-clearance (5.5 mm either way); without it the model would show a 27 mm gap between post and holder.*
-Its top is the highest at
-which every taught sample of cases 17 and 18 keeps 5 mm: 1.112 m, 17 mm above the photo's estimate
-(SPEC §4.10). The stub seen above the holder is not modelled (owner, 2026-10-18).
+**Decision.** The two obstacles at the station missing from the STL are boxes in
+`Environment.Added_Boxes`, their footprints from an owner photo (SPEC §4.8):
+- `station_bracket`, the U-shaped holder under the part: front 90 mm in front of the earlier post
+  face (assumed), back 8 mm into the shifted post face (it is mounted on the post; no clearance
+  cost), top 1.112 m, the highest at which every taught sample of cases 17 and 18 keeps 5 mm, 17 mm
+  above the photo's estimate (SPEC §4.10). It stays where the robot places the part (world-fixed).
+- `station_stub`, the profile above the holder: from 8 mm into the post face to 34.6 mm proud of
+  it, the farthest front at which every taught sample keeps 5 mm (SPEC §4.13).
+
+*Corrected 2026-10-18: the stub was first not modelled. At the post fitted for −100 mm a box could
+stand at most 0.3 mm proud, a plate nothing supports; at −150 mm it can stand 34.6 mm proud, and
+the owner had it modelled at that largest size.*
 
 **Why.** The optimised paths reach the station points from directions the taught program never
-used, and the model had nothing under the part. The photo cannot resolve the height to better than
-about ±30 mm; the taught program bounds it from above, because the real robot runs it, release
-included. The largest box that bound allows is the conservative end. The stub cannot stand where
-the photo puts it: the post fit leaves the taught drop 5 mm from the post face there, so a box could
-be at most 0.3 mm proud. Such a plate would claim a geometry nothing supports and would still steer
-the planner. *Corrected 2026-10-18: that held for the fitted post at −100 mm. With the machine at
-−150 mm a stub on the post face could stand up to 34.6 mm proud (SPEC §4.11), and the owner had it
-modelled at that largest size (`station_stub`, SPEC §4.13): the conservative end, as for the
-holder's top.*
+used, and the model had nothing there. The photo cannot resolve the height or depth to better than
+about ±30 mm; the taught program bounds them, because the real robot runs it, release included. The
+largest box that bound allows is the conservative end.
 
 **Alternatives.**
 
 - The photo's height for the holder (1.095 m): rejected, less conservative.
-- The stub as a 0.3 mm plate beside the post: rejected by the owner; its real position is unknown,
-  and a plate there would only move case 17 S2.
+- The stub left out: rejected once the shifted post left room for it; leaving it out would let a
+  generated path use space the photo shows occupied.
 - A U with arms: rejected, the arms' position relative to the fingers is not visible.
 
-**Revisit if** the holder or the stub is measured, the drop or the pick is re-taught, or the owner
-decides on the stub at the shifted post.
+**Revisit if** the holder or the stub is measured, or the drop or the pick is re-taught.
 
 Pinned by `test/Scene/test_station.py::test_the_taught_station_clears_the_station_boxes_by_the_zone_margin`
 and `test/Planner/test_core.py::test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end`.
@@ -566,8 +554,9 @@ Pinned by `test/Planner/test_core.py::test_a_reduced_planning_run_is_byte_identi
 ## The holding opening is configured per program case
 
 **Decision.** `Tool.Holding_Openings` gives the gripper opening while the part of each program
-case is held, with its source: case 17 = 0.050 m (owner). Planning, the verification of the
-committed output and the replay take case 17's entry; open is the full 85 mm stroke (a gripper property, a code constant). `Tool.Opening` stays
+case is held, keyed by program and case, with its source: sf1_plc_v4 case 17 = 0.050 m (owner).
+Planning, verification and replay of a job take its case's entry; open is the full 85 mm stroke (a
+gripper property, a code constant). `Tool.Opening` stays
 the opening of a scene that names no case (the demo, the tests).
 
 **Why.** Cases 17 and 18 are independent and probably handle parts of different size (owner,
@@ -575,8 +564,7 @@ the opening of a scene that names no case (the demo, the tests).
 configuration field over a code constant: it is a cell fact with a source, like the other
 `Tool` values.
 
-**Alternatives.** A code constant next to the case table in `Example/plan_rotation.py`: rejected by
-the owner.
+**Alternatives.** A code constant in `Example/plan_rotation.py`: rejected by the owner.
 
 **Revisit if** a case handles more than one part, or the URCap's position for a part is measured.
 
@@ -595,8 +583,8 @@ of the interior hull of machine (a) (component 1638) is labelled *model not vali
 viewers, whatever the clearance check reports there. The violating pairs are still listed.
 
 **Why.** That hull is an open shell filled by its hull (235 mm excess, `KNOWN_ISSUES.md`); every
-taught loading point inside the machine penetrates it by 99 – 144 mm (measured 2026-10-18 at 50 mm:
-load3 −99.5, Waypoint_13 −137.4, bench_drop_11 −140.8 mm), although the program runs there on the
+taught loading point inside the machine penetrates it, by 74 – 140 mm (SPEC §4.11: load3 −74.1 mm,
+the deepest segment −140.4 mm), although the program runs there on the
 real robot. Calling those moves collisions would be false; calling them clear would be worse.
 
 **Alternatives.** Excluding the piece from the check: rejected, it would hide a real contact with
@@ -629,58 +617,41 @@ keep equal to the DH; the numeric one uses the DH directly.
 Pinned by `test/Kinematics/test_core.py::test_a_movel_follows_the_straight_tcp_line_to_its_target` and
 `test/Example/test_replay.py::test_every_path_visits_its_moves_in_program_order`.
 
-## After the machine shift, S2 is optimised for time, not safety; the re-planned paths are kept
+## After a scene change the output is re-planned, not kept
 
-**Decision.** `Data/Generated/` keeps the S1 – S3 re-planned on the current scene (2026-10-18: the
-machine shifted 100 mm, the post refitted, the station holder box added; same seed, budget and
-w = 0.5 s/m), not the ones planned on the 2026-10-17 scene (owner, 2026-10-18).
+**Decision.** A path planned on a scene that is no longer the model is re-planned on the current
+scene (same seed, budget and weight), not kept because it still passes (owner, 2026-10-18).
 
-**Why.** A path planned on a scene that is no longer the model is not what the checks describe. On
-the current scene the taught S2 also keeps the generated rule (0 violations in both cases; on
-2026-10-17 it came to 15.4 mm and failed), so S2's optimisation is now about time: one via point
-instead of three, 8.30 / 8.29 s -> 4.45 / 4.46 s (estimate, case 17 / 18). The price is clearance:
-outside the station neighbourhood the optimised S2 passes at 30.0 / 29.7 mm against the taught
-42.5 mm, 10 mm above the 20 mm hard margin, at the 30 mm penalty threshold in case 17 and 0.3 mm
-inside it in case 18 (penalty 0.002 m).
+**Why.** A path planned for another model is not what the checks describe. The optimisation is
+about time, not safety: after the machine shift even the taught S2 kept the generated rule, so the
+optimised S1 – S3 trade clearance above the margins for time.
 
-**Alternatives.** Keeping the 2026-10-17 paths: they keep the generated rule on the current scene
-(git history of SPEC §4.9), but they were planned for another model. Keeping the taught S2: 3.8 s slower per case
-(estimate), 12.5 mm more clearance.
+*Superseded in its details 2026-10-18 by "Generated paths may use the space the machine shift to
+-150 mm frees" and, for what is delivered, 2026-10-21 by "The delivered c2 is the default job"; the
+re-planned paths and their numbers are in the git history of SPEC §17.*
 
-*Updated 2026-10-18: with the deliverable narrowed to case 17 and the machine at −150 mm, S1 – S3
-were re-planned once on the final scene (the git history of SPEC §17): 4.76 / 4.31 / 5.27 s (S3 direct), home -> home
-16.66 s against the committed 17.24 s; outside the station neighbourhood they pass at 29.7 / 31.0 /
-23.3 mm (top profile, top profile, post) against the committed 64.0 / 48.9 / 65.6 mm. The same
-objective, now with more free space: time is bought down to the 30 mm penalty threshold and, for
-S3, 6.7 mm inside it. All three use space only the estimated shift frees (`KNOWN_ISSUES.md`).*
-
-*Updated 2026-10-18 (later): with the machine margin (+10 mm), the stub and the station-box rule,
-S1 - S3 were re-planned once more (the git history of SPEC §17): 4.76 / 4.81 / 5.62 s, home -> home 17.50 s (+0.84 s);
-S2 needs two via points to stay as far from the stub as its taught end, S3 is no longer direct.*
-
-**Revisit if** the cell is measured (the machine position is an estimate, `KNOWN_ISSUES.md`), the
-penalty weight changes, or the owner prefers the clearance of the taught or committed paths to the
+**Revisit if** the cell is measured, the penalty weight changes, or the owner prefers clearance to
 time.
 
-Pinned by `test/Planner/test_core.py::test_the_committed_paths_pass_the_independent_verification`
-and `test/Example/test_replay.py::test_every_path_visits_its_moves_in_program_order` (entry 3 prints
-the strict comparison).
+Pinned by `test/Planner/test_core.py::test_the_committed_paths_pass_the_independent_verification`.
 
-## The deliverable is case 17 home -> home; case 18 and the whole cases are ground truth only
+## The deliverable is case 17 home -> home; the other cases are ground truth
 
-**Decision.** The planner, the taught-program writer, the replay and `Data/` deliver one sequence:
-case 17 of `sf1_plc_v4.script` from home to home, taught (`Data/Programs/sf1_plc_v4/sf1_plc_v4_case_17*`)
-and optimised (`Data/Generated/SF1_Rotation_17*`: S1 home -> drop_rotate_1, S2 Waypoint_5 ->
-Waypoint_18 and S3 Waypoint_6 -> home generated, the station lines verbatim). The replay catalogue
-is 1 taught, 2 optimised, 3 both with the strict comparison. The program extract (every learned
-point, the whole cases 17 and 18) and the tests that check the model against real program segments
-stay: the taught replay of cases 17 and 18 and the placement of the grasp points. The generated rule's station points are case 17's six.
+**Decision.** What is delivered is case 17 of `sf1_plc_v4.script` from home to home, taught
+(`Data/Programs/sf1_plc_v4/sf1_plc_v4_case_17*`) and optimised: the default job's output in
+`Data/Generated/` (S1 home -> drop_rotate_1, S2 Waypoint_5 -> Waypoint_18 and S3 Waypoint_6 -> home
+generated, the station lines verbatim; c2, entry "The delivered c2 is the default job"). The replay
+catalogue is case 17's variants, 1 – 5, and 6, all five with the strict comparison. The program
+extract (every learned point, cases 17 and 18) and the tests that check the model against real
+program segments stay: the taught replay of cases 17 and 18 and the placement of the grasp points.
+Case 18 has a job only to show that another case plans (entry "What is planned is a job file").
 
-**Why.** Owner, 2026-10-18: this exact taught sequence and its optimised version are the only
+**Why.** Owner, 2026-10-18: this exact taught sequence and its optimised version are the
 deliverable; the holder exists so that the robot can grip the part from the other side. The loading
 moves run inside machine (a), where the model is not valid (`KNOWN_ISSUES.md`), so a whole-case
 deliverable carried lines the tool cannot check. The other cases still run on the real robot, so
-they remain the evidence the fitted geometry is checked against.
+they remain the evidence the fitted geometry is checked against. *Corrected 2026-10-18: cases 17
+and 18 were the deliverables, each as the whole case.*
 
 **Alternatives.** Keeping case 18 as a second deliverable: rejected by the owner; its part's size
 was an assumption. Removing case 18 from the tests as well: rejected, it is ground truth that
@@ -703,7 +674,7 @@ the scene, its before / after comparison in the commit.
 
 **Why.** Every segment runs on the real robot (owner), so a change of the model that makes the
 program penetrate more is a change away from the cell. The program cannot be required to be clear:
-the machine-interior hull 1638 fills the space the loading moves use (down to -145 mm), and the grasp
+the machine-interior hull 1638 fills the space the loading moves use (down to -140.4 mm), and the grasp
 points reach into the modelled parts (KNOWN_ISSUES). 0.5 mm is far above the sampling and solver
 noise (the reference was reproduced to 1e-5 m by an independent scratch replay) and far below a
 real geometry change.
@@ -719,23 +690,24 @@ Pinned by `test/Scene/test_program.py`.
 
 ## Generated paths may use the space the machine shift to -150 mm frees: the owner's judgement
 
-**Decision.** Machine (a) stays at -150 mm in the model, and the S1 - S3 re-planned on that scene
-(home -> home 16.66 s, estimate) were the delivered output. The planner plans and verifies
-against the current scene only.
+**Decision.** Machine (a) stays at -150 mm in the model, and the paths planned on that scene (the
+default job's output, c2) are delivered. The planner plans and verifies against the current scene
+only.
 
 **Why.** The owner judges that the further 50 mm matches the real cell better than -100 mm
 (2026-10-18). It is still an estimate: the taught program does not confirm it (it keeps >= 39.1 mm
-to the post at -150 mm, SPEC §4.11), and all three re-planned segments would penetrate the machine
-front at -100 mm (by 9.8 - 19.6 mm). The owner accepts that, with every path run at reduced speed
+to the post at -150 mm, SPEC §4.11), and the segments re-planned on 2026-10-18 would have
+penetrated the machine front at -100 mm (by 9.8 - 19.6 mm; git history of SPEC §17). The owner accepts that, with every path run at reduced speed
 first.
 
 **Alternatives.** Planning against a conservative scene (the machine at -100 mm, the last position
 the program constrains) and verifying against both: considered on 2026-10-18 and withdrawn by the
 owner the same day; it would have kept the previous outputs (17.24 s, 49 - 66 mm clearance). A
-machine-(a)-only margin raised by the position's accuracy: open until the accuracy is stated.
+machine-(a)-only margin raised by the position's accuracy: adopted once the owner stated it, as
+`Clearance.Machine_Extra` (entry "Generated paths keep an extra 10 mm to machine (a) outside the
+station zone").
 
-**Revisit if** the machine is measured, the owner states the position's accuracy (above 10 mm a
-machine-only margin increase is to be proposed), or a path is found to come closer on the robot.
+**Revisit if** the machine is measured, or a path is found to come closer on the robot.
 
 Pinned by `test/Planner/test_core.py::test_the_committed_paths_pass_the_independent_verification`.
 
@@ -824,13 +796,14 @@ token stay the program's; the program's pick lines stay verbatim and take the ne
 changes and no re-teaching is needed; but S3 had to unwind 4.7 rad of wrist 3 on the way home,
 the leading joint of its estimate. With the lower turn S3 takes 2.74 s instead of 5.62 s (home →
 home 17.50 → 14.66 s, estimate; the branch study of 2026-10-19). The study's other gains need the
-drop on another IK branch (c2, c3), which means re-teaching on a robot that is not available.
+drop on another IK branch (c2, c3).
 
 **Alternatives.** Turning wrist 3 inside S3 (a generated via point): the joint still travels
 4.7 rad. Wrapping every joint into [−π, π]: changes taught configurations everywhere and hides the
-branch (SPEC §10.5). Re-teaching the drop (c2, 12.06 s; c3, 13.86 s): kept as proposals in
-`Data/Generated/variants/` until a robot is available. *Owner, 2026-10-21: c2 was delivered and
-tested on the real cell; c3 stays a proposal.*
+branch (SPEC §10.5). The drop on another branch (c2, 12.05 s; c3, 13.86 s): kept as variants in
+`Data/Generated/variants/`. *Corrected 2026-10-21: both were proposals for re-teaching; c2 was
+then delivered and tested on the real cell (entry "The delivered c2 is the default job"), with the
+pick's lower turn; c3 stays a proposal.*
 
 **Revisit if** the first run on the robot shows the controller choosing the other solution, the
 gripper cable or a wrist-3 safety limit objects, or the pick is re-taught.
@@ -839,12 +812,12 @@ Pinned by `test/Example/test_plan_rotation.py::test_the_delivered_points_turn_on
 `test/URScript/test_core.py::test_replacing_joints_keeps_the_pose_and_every_unchanged_token` and
 `test/Planner/test_core.py::test_the_station_points_keep_their_tokens`.
 
-## Every variant is kept as files with its status; the proposals use the nominal-DH IK of the taught poses
+## Every variant is kept as files with its status; the drop branches c2 and c3 use the nominal-DH IK of the taught poses
 
 **Decision.** `Example/write_variants.py` writes taught, b_optimised, c1, c2 and c3 into
 `Data/Generated/variants/<name>/` in the delivered formats, each file stating its status, and
-measures them all into `comparison.md` / `comparison.csv` from those files (owner, 2026-10-19). The
-proposals c2 and c3 put the drop on another branch with `Solve_IK_Analytic` of the program's `_p`
+measures them all into `comparison.md` / `comparison.csv` from those files (owner, 2026-10-19). c2
+and c3 put the drop on another branch with `Solve_IK_Analytic` of the program's `_p`
 (nominal DH), never mink or a numeric IK from a seed.
 
 **Why.** The owner compares the variants visually (the replay reads them) and decides on re-teaching
@@ -861,11 +834,12 @@ program: they were never taught.
 **Revisit if** the drop is re-taught on another branch (the export then replaces the proposal), or a
 variant is no longer worth comparing.
 
-*Owner, 2026-10-21: c2 was delivered and tested on the real cell (no further details recorded) and
-c1 is the previous optimisation, simulation only; c3 stays a proposal. Only the status lines
-changed; the points and motion lines of every variant are as before.*
+*Corrected 2026-10-21: c1 was the delivered output and c2 a proposal. c2 was delivered and tested
+on the real cell (no further details recorded), c1 is the previous optimisation, simulation only,
+and c3 stays a proposal. Only the status lines changed; the points and motion lines of every
+variant are as before.*
 
-Pinned by `test/Example/test_write_variants.py` (the files, the statuses, c1 = `Data/Generated/`,
+Pinned by `test/Example/test_write_variants.py` (the files, the statuses, c2 = `Data/Generated/`,
 the proposals' branches, the table against the files) and `test/Kinematics/test_core.py`.
 
 ## Every learned point a script reads is checked against the FK sanity bound; the margins are not
@@ -882,7 +856,7 @@ The margins cannot be applied there: the extract's grasp, load and unload points
 and fixtures or lie inside machine (a), and `Check_Learned_Point` refuses 50 of the 78 points at
 50 mm (41 at 85 mm), none of them case 17's. The margins are applied where they mean something: the
 planner refuses an end that breaks its rule, the replay and the position viewer label each point by
-its rule. *Corrects SPEC 9.7, which said a learned point is never accepted inside a margin.*
+its rule (SPEC §9.7).
 
 **Alternatives.** `Check_Learned_Point` on every point: every script would stop today. On case 17's
 points only: a gate on the deliverable that the planner's own end check already is. Only the points
@@ -899,7 +873,7 @@ Pinned by `test_a_learned_point_outside_the_sanity_bound_is_refused` in `test/Ex
 
 **Decision.** `Example/make_readme_figures.py` writes every image of the README into `Media/`: six
 matplotlib graphs from `comparison.csv` (read by `Read_Table_CSV`, beside its writer) and from the
-variant files as the replay builds and times them, and five offscreen MuJoCo renders of the cell,
+variant files as the replay builds and times them, and nine offscreen MuJoCo renders of the cell,
 each for GitHub's light and dark page theme (the README picks one with `<picture>`) (owner,
 2026-10-20). The renders show the environment as its collision model only (the convex pieces at
 their corrected positions and the added boxes, one matte grey, the station-zone pieces orange),
@@ -961,8 +935,9 @@ Pinned by `test/Example/test_extract_program.py` (the synthetic program, the ref
 (owner, 2026-10-21; SPEC §8.6): the program folder, the case, the segments (from, to), the point
 configurations (joint turns, IK branches) and the output names and wording. The gripper state of
 each segment, the station operations, the fixed station points and the station time are derived
-from the case's lines (`Resolve_Sequence`, `Load_Job_Plan`). The default job
-`sf1_plc_v4_case_17` writes the earlier output byte for byte. `Tool.Holding_Openings` stays in
+from the case's lines (`Resolve_Sequence`, `Load_Job_Plan`). *Corrected 2026-10-21: the default
+job first reproduced the earlier output (c1) byte for byte; that output is now the job
+`sf1_plc_v4_case_17_c1`, and the default is c2 (next entry).* `Tool.Holding_Openings` stays in
 the cell configuration, keyed by program and case. There is no `Home` field: the sequence runs from
 the first segment's `From` to the last segment's `To`.
 
