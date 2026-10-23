@@ -246,7 +246,8 @@ def test_the_job_sequence_of_case_17_is_home_to_home_with_its_gripper_states(roo
     ([('S1', 'home', 'nowhere')], 'nowhere is not a learned point'),
     ([('S1', 'drop_rotate_1', 'Waypoint_5')], 'contains the gripper action at program line 3425'),
     ([('S1', 'Waypoint_5', 'Waypoint_18'), ('S2', 'home', 'drop_rotate_1')], 'does not move to drop_rotate_1 after program line 3463'),
-    ([('S1', 'home', 'drop_rotate_1'), ('S2', 'Waypoint_1', 'Waypoint_18')], 'line at program line 3433 blends into it'),
+    ([('S1', 'home', 'drop_rotate_1'), ('S2', 'Waypoint_1', 'Waypoint_18')],
+     'line at program line 3433 blends into it .* Start the segment at a line without a blend \\(r=0\\)\\.$'),
 ])
 def test_a_segment_the_case_cannot_hold_is_refused(root, segments, fragment):
     """

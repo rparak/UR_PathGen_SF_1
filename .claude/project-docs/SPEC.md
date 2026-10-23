@@ -581,7 +581,9 @@ runtimes; both metrics.
 `coacd.__version__`, which the installed package does not define, so the committed manifest records
 `unknown` although `requirements.txt` pins `coacd==1.0.14`. Before the set is next rebuilt, the
 build reads it with `importlib.metadata.version('coacd')` (1.0.14 in `.venv`), so the manifest
-records the version that made the pieces. `Read_Collision_Set` refuses a set whose recorded STL hash differs from the file on disk
+records the version that made the pieces. The same rebuild drops "(SPEC 7.4)" from the note of
+`flagged_open_shells` (`src/Collision/Core.py`): the manifest is read by people outside the
+project, who cannot follow an internal document. `Read_Collision_Set` refuses a set whose recorded STL hash differs from the file on disk
 (`Collision_Error_Cls`, with the sentence "rerun Example/build_collision.py"). Tests read the set and
 never run CoACD.
 

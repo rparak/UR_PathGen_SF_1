@@ -429,7 +429,10 @@ def test_a_taught_line_inside_the_model_stops_the_run(root, cfg, tmp_path):
     errors = [line for line in result.stdout.splitlines() if line.startswith('[ERROR] The model is not valid for case 17 of sf1_plc_v4')]
     assert any('the taught movej to Waypoint_2 at program line %d' % first in line and 'mm into' in line for line in errors), errors
     assert all('guard_test' in line for line in errors)
-    assert 'Nothing is planned, and nothing is refitted' in result.stdout
+    assert ('[ERROR] The model does not describe case 17 of sf1_plc_v4 where the taught program ran. Nothing is planned, and '
+            'nothing is refitted. The real robot runs these moves, so the cell model is wrong at the pieces named above: measure '
+            'that geometry and correct Configuration/Cell_SF1.yaml before planning this case (README, "Limitations and safety").'
+            in result.stdout.splitlines())
     assert not (tmp_path / 'out').exists()
 
 
@@ -494,7 +497,8 @@ def test_a_job_the_program_cannot_hold_is_refused(root, tmp_path, field, value, 
 CONST_BAD_PROGRAM_LINES = [('movel(Waypoint_4_p, a=1.2, v=0.25)', 'movel(Waypoint_4_p)',
                             'The station line at program line 3414 has no a and v'),
                            ('Waypoint_3_q), a=1.3962634015954636,', 'Waypoint_3_q), a=1.0,',
-                            'Segment S2: the taught line at program line 3437 moves at another a and v')]
+                            'Segment S2: the taught line at program line 3437 moves at another a and v .* Planning at another speed is '
+                            'not supported: choose segments whose taught movej lines use this a and v, or re-teach them at it\\.$')]
 
 
 @pytest.mark.parametrize('old, new, fragment', CONST_BAD_PROGRAM_LINES)
@@ -522,6 +526,29 @@ def test_a_program_line_the_job_cannot_time_is_refused(root, tmp_path, old, new,
     assert result.returncode == 1
     assert re.search(r'^\[ERROR\] ' + fragment, result.stdout, re.M), result.stdout
     assert not (tmp_path / 'out').exists()
+
+
+# The names of the internal documents, which no output a user reads may cite.
+#   Unit [Pattern]
+CONST_INTERNAL_DOCUMENTS = re.compile(r'KNOWN_ISSUES|SPEC|design-decisions')
+
+
+def test_the_output_names_no_internal_document(root):
+    """
+    Description:
+        The text a user reads names no internal document (KNOWN_ISSUES, SPEC, design-decisions):
+        the default job's header status lines, the viewers' clearance labels, and every file in
+        Data/Generated/ (the delivered output, the variants and the comparison table; hidden files
+        such as .DS_Store skipped).
+    """
+
+    plan = _Plan_Module(root)
+    texts = plan.Status_Lines(_Job(plan)) + [plan.CONST_LABEL_CLEAR, plan.CONST_LABEL_VIOLATED, plan.CONST_LABEL_INVALID]
+    for folder, _, files in os.walk(os.path.join(root, 'Data', 'Generated')):
+        for name in (name for name in files if not name.startswith('.')):
+            with open(os.path.join(folder, name), encoding='utf-8') as handle:
+                texts.append(handle.read())
+    assert [CONST_INTERNAL_DOCUMENTS.search(text).group(0) for text in texts if CONST_INTERNAL_DOCUMENTS.search(text)] == []
 
 
 def test_the_case_18_job_is_refused_without_its_holding_opening(root, tmp_path):

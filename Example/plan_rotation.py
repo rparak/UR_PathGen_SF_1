@@ -266,8 +266,9 @@ def Load_Job_Plan(job: str) -> Job_Plan_Str:
             if line.Kind == 'movej' and (not line.A_Token or (float(line.A_Token), float(line.V_Token))
                                          != (float(CONST_MOVEJ_A_TOKEN), float(CONST_MOVEJ_V_TOKEN))):
                 raise Configuration_Error_Cls('Segment %s: the taught line at program line %d moves at another a and v than the '
-                                              'generated moves are written with (a=%s, v=%s, src/Planner/Core.py): %s. A job of '
-                                              'another speed is not supported (KNOWN_ISSUES).'
+                                              'generated moves are written with (a=%s, v=%s, src/Planner/Core.py): %s. Planning at '
+                                              'another speed is not supported: choose segments whose taught movej lines use '
+                                              'this a and v, or re-teach them at it.'
                                               % (segment.Name, line.Line, CONST_MOVEJ_A_TOKEN, CONST_MOVEJ_V_TOKEN, line.Raw.strip()))
     return plan
 
@@ -581,7 +582,7 @@ def Status_Lines(plan: Job_Plan_Str) -> tp.List[str]:
             parts.append('%s use %s %s turn%s %s than taught (%s)' % (', '.join(names), CONST_JOINT_NAMES[joint],
                                                                       CONST_TURN_WORDS.get(abs(turns), str(abs(turns))),
                                                                       '' if abs(turns) == 1 else 's', 'lower' if turns < 0 else 'higher', source))
-    text = plan.Job.Status + (' ' + '; '.join(parts) + '; same pose, same _p (SPEC 10.5).' if parts else '')
+    text = plan.Job.Status + (' ' + '; '.join(parts) + '; same pose, same _p.' if parts else '')
     return textwrap.wrap(text, width=CONST_STATUS_WIDTH, initial_indent='# ', subsequent_indent='# ', break_on_hyphens=False)
 
 
@@ -900,7 +901,9 @@ def main():
         for line in errors:
             print('[ERROR] %s' % line)
         print('[ERROR] The model does not describe case %d of %s where the taught program ran. Nothing is planned, and nothing '
-              'is refitted: check the cell geometry there (KNOWN_ISSUES, SPEC 9.7).' % (plan.Job.Case, plan.Program_Name))
+              'is refitted. The real robot runs these moves, so the cell model is wrong at the pieces named above: measure that '
+              'geometry and correct Configuration/Cell_SF1.yaml before planning this case (README, "Limitations and safety").'
+              % (plan.Job.Case, plan.Program_Name))
         return 1
     print('[INFO] Taught model check: %d taught moves of case %d (%d samples, %.0f s) pass through no modelled geometry; %d warning(s).'
           % (len(Taught_Moves(plan, cfg)), plan.Job.Case, samples, time.time() - started, len(warnings)))

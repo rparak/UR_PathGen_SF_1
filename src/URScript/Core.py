@@ -823,7 +823,8 @@ def Resolve_Sequence(lines: tp.Sequence[Program_Line_Str], segments: tp.Sequence
                                                                                         lines[crossed[0]].Raw.strip()))
         if bounds and lines[i_from].Kind == 'movej' and lines[i_from].R_Token:
             raise URScript_Error_Cls('Segment %s (%s -> %s): the station line at %s blends into it (%s); a blend into a generated '
-                                     'segment is not checked (SPEC 8.5).' % (name, start, goal, Where(i_from), lines[i_from].Raw.strip()))
+                                     'segment is not checked. Start the segment at a line without a blend (r=0).'
+                                     % (name, start, goal, Where(i_from), lines[i_from].Raw.strip()))
         before = [target for index, target in actions if index < i_from]
         state = ('open' if before[-1] == 'open' else 'holding') if before else ('holding' if actions[0][1] == 'open' else 'open')
         out.Segments.append(Sequence_Segment_Str(name, start, goal, state,
