@@ -119,8 +119,12 @@ Commands:
 .venv/bin/python ~/.claude/skills/readme-writer/scripts/check_readme.py README.md
 ```
 
-Known checker results that are decisions, not defects: the left-aligned `--path` column, the two static badges (checked against `install.sh` and
-`requirements.txt`), the Mermaid block (verify on GitHub after push; no `mmdc` installed).
+Known checker results that are decisions, not defects: the left-aligned `--path` column, the two
+static badges (checked against `install.sh` and `requirements.txt`), the Mermaid block (verify on
+GitHub after push; no `mmdc` installed), and the six `/tmp/...` warnings (`local-paths`): each is a
+documented output directory of a command (`--out /tmp/<name>`, `--screenshots /tmp/sf1_c2`, the
+`diff` of `/tmp/sf1_plan`), portable on macOS and Linux, not pasted output (2026-10-23: 0 errors,
+7 warnings, 3 notes).
 
 ## Pointers
 
