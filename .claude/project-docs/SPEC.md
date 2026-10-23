@@ -444,10 +444,11 @@ requirements.txt          pinned
 .claude/project-docs/SPEC.md              this file
 .claude/project-docs/KNOWN_ISSUES.md      accepted risks and known limitations
 .claude/project-docs/design-decisions.md  deliberate choices whose reason is not visible in the code
-.claude/skills/project-style-rpx/   SKILL.md, references/, assets/, scripts/
-.claude/skills/feature-manager/SKILL.md
-.claude/skills/project-optimize/SKILL.md
-.claude/skills/readme-writer/references/project.md   the README rules of the user-level readme-writer skill (no SKILL.md here)
+.claude/skills/project-style-rpx/references/   project.md, urscript.md, mjcf.md, check_style.json
+.claude/skills/feature-manager/references/project.md
+.claude/skills/project-optimize/references/project.md
+.claude/skills/readme-writer/references/project.md
+                          the project layer of the personal skills in ~/.claude/skills/ (no SKILL.md here, §13)
 CAD/SF1_Environment.stl                       source, unchanged (visual mesh)
 CAD/Collision/SF1_Environment_Collision.npz   convex pieces (vertices, faces, piece → component, body)
 CAD/Collision/SF1_Environment_Collision.json  manifest (§7.6)
@@ -1264,7 +1265,10 @@ deselected by `-m "not slow"`.
 | `test/Example/test_make_readme_figures.py` | The figure script names its output from any directory; the collision-model groups cover the environment once; the renders never load the visual STL; *slow*: the graphs are the committed ones byte for byte. |
 | `test/Docs/test_readme.py` | The README's results tables equal `comparison.csv`, every image it shows exists (and every `Media/` file is shown), each figure has an alt text and a numbered caption, and the root holds only what the README describes. |
 | `test/Install/test_install.py` | `bash -n`, the OS detection, the Python 3.11 resolution (`python3` never called), the hash verification and the log format, under a hermetic `PATH`. |
-| `.claude/skills/project-style-rpx/scripts/test_check_style.py` | The style checker itself (outside `test/`). |
+| `test/Docs/test_skills.py` | The repository keeps only the skills' project layer (`.claude/skills/<skill>/references/`, no `SKILL.md`), and the style checker's configuration names the holder, checks `src`, `Example` and `test`, and excludes nothing (§13). |
+
+The style checker's own tests are part of the personal skill
+(`~/.claude/skills/project-style-rpx/scripts/test_check_style.py`), outside this repository.
 
 Expected numbers from the tests are taken from the measurements above or from the configuration,
 never from the code under test.
@@ -1284,12 +1288,21 @@ path: written, tested only against stubs, **unverified**.
 
 ## 13. Skills (`.claude/skills/`)
 
-- **project-style-rpx**: the code, shell, YAML, Markdown, URScript and MJCF conventions;
-  `scripts/check_style.py` checks `src`, `Example` and `test`.
-- **feature-manager**: how a feature, a behaviour change or a bug fix is added, with the robotics
-  review checklist.
+The skills are personal and generic (`~/.claude/skills/<skill>/`, outside this repository and its
+git history). This repository keeps only their project layer, `.claude/skills/<skill>/references/`,
+and never a `SKILL.md`: a personal skill wins over a project skill of the same name (Claude Code
+docs, *Resolve skills that share a name*), so a copy here would be ignored and drift. Pinned by
+`test/Docs/test_skills.py`.
+
+- **project-style-rpx**: the code, shell, YAML and Markdown conventions; this repository's rules in
+  `references/project.md`, the URScript and MJCF pages `urscript.md` and `mjcf.md`, and the
+  checker's configuration `check_style.json` (holder JIC Smart Factory; `check_style.py` checks
+  `src`, `Example` and `test`).
+- **feature-manager**: how a feature, a behaviour change or a bug fix is added; the robotics review
+  checklist is in `references/project.md`.
 - **project-optimize**: cleanup, speed, complexity and reliability work that does not change
-  behaviour; a generated path is compared byte for byte.
+  behaviour; the outputs compared byte for byte (a generated path) are in `references/project.md`.
+- **readme-writer**: the README; its rules for this repository are in `references/project.md`.
 
 ## 14. Risks and how they are handled
 

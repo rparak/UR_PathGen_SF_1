@@ -1014,3 +1014,28 @@ inside machine (a).
 
 Pinned by `test/Example/test_plan_rotation.py::test_the_taught_moves_of_case_17_pass_the_model`,
 `test_a_taught_line_inside_the_model_stops_the_run`, `test_a_taught_move_above_the_workspace_top_is_a_warning_only`.
+
+## The skills are personal and generic; this repository keeps only their project layer
+
+**Decision.** project-style-rpx, feature-manager, project-optimize and readme-writer live in
+`~/.claude/skills/<skill>/` and hold nothing specific to SF1. This repository keeps
+`.claude/skills/<skill>/references/` only: `project.md` per skill, `urscript.md` and `mjcf.md`, and
+the style checker's configuration `check_style.json` (SPEC §6, §13). No `SKILL.md` here.
+
+**Why.** The same conventions serve other projects; one copy each keeps them from diverging. A
+personal skill wins over a project skill of the same name (Claude Code docs,
+https://code.claude.com/docs/en/skills, *Resolve skills that share a name*: "Enterprise over
+personal, and personal over project"), so a `SKILL.md` here would be silently ignored. The
+checker's findings on `src`, `Example` and `test` did not change: its output was byte-identical
+before and after the move (37 files, 0 issues, 2026-10-23).
+
+**Alternatives.** Keeping full copies here: they would be ignored while the personal skills exist,
+and drift. Keeping everything here and nothing personal: every new project would copy and fork the
+rules. A plugin: the same separation, with namespaced names; possible later
+(`~/.claude/skills/README.md`).
+
+**Revisit if** someone other than the owner works on this repository: the checker and the generic
+rules are not in its git history, so they need the skills (or a plugin) installed.
+
+Pinned by `test/Docs/test_skills.py::test_the_repository_skill_folders_hold_only_references`,
+`test_the_style_checker_configuration_checks_every_file`.
