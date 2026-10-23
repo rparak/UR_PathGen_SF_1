@@ -29,8 +29,20 @@ Run every Python command with `.venv/bin/python` (never a bare `python3`, `CLAUD
 | Variant generation about 6 minutes, collision build about 19 minutes, figures under a minute | measured runs (figures: 6.9 s, M2 Pro, 2026-10-23) | — | — |
 | Python 3.11, MuJoCo 3.16.0 (badges) | `install.sh`, `requirements.txt` | — | — |
 
-A changed `comparison.csv` updates both tables, every caption that quotes a time or height, and
-the figures (`make_readme_figures.py`). A re-measured runtime gets its date and machine.
+A re-measured runtime gets its date and machine.
+
+## Triggers
+
+The one list of what makes a change update the README (feature-manager points here), in
+maintenance mode of this skill.
+
+| A change to | Updates | Then run |
+|---|---|---|
+| `Data/Generated/variants/comparison.csv` (a result) | both results tables, every caption that quotes a time or height, the figures | `.venv/bin/python Example/make_readme_figures.py` |
+| A figure's input (the variant files, the configuration, the collision set) | the figures and their captions | `Example/make_readme_figures.py` |
+| A command or option of a documented script | Quick start, All usage | - |
+| A status of a variant | every place the status words appear (Statuses below) | `Example/make_readme_figures.py` (labels) |
+| A measured runtime or count | the number, with its date and machine (Sources of numbers) | - |
 
 ## Statuses
 

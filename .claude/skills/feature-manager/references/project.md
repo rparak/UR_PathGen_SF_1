@@ -142,9 +142,7 @@ distance test does not show a misplaced body.
 - **Never commit a regenerated `models/` file.**
 - Commit a rebuilt `CAD/Collision/` only as its own deliberate change with its manifest and report.
 
-## Docs and README triggers
+## Docs
 
 - Configuration: update the SPEC §8 (or §8.6) table in the same change.
-- README: a change to a command, a result in `Data/Generated/variants/comparison.csv`, or a figure's
-  input updates the README and re-runs `Example/make_readme_figures.py`, following the
-  `readme-writer` skill in maintenance mode (`.claude/skills/readme-writer/references/project.md`).
+- README: the triggers are in `.claude/skills/readme-writer/references/project.md` > Triggers.
