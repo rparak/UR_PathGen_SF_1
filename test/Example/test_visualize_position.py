@@ -44,7 +44,7 @@ def _Run(root, tmp_path, *args):
 
 @pytest.mark.parametrize('argument, name, label', [
     ('home_q', 'home', 'clearance kept (taught rule)'),
-    ('load3', 'load3', 'model not valid here (machine (a) interior, KNOWN_ISSUES)'),
+    ('load3', 'load3', 'model not valid here (machine (a) interior)'),
 ])
 def test_a_known_position_reports_its_clearance(root, tmp_path, argument, name, label):
     """

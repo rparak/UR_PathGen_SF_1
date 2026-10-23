@@ -115,16 +115,17 @@ CONST_SEED = 20261017
 #   Unit [float] (s/m)
 CONST_PENALTY_WEIGHT = 0.5
 # The STL component whose hull fills the interior of machine (a): the set's only fallback piece, an
-# open shell with 235 mm excess; the loading moves of the program penetrate it by up to 145 mm, so
-# the model is not valid there (KNOWN_ISSUES, SPEC 4.9). A configuration within the environment
+# open shell with 235 mm excess; the loading moves of the program penetrate it by up to 140 mm, so
+# the model is not valid there (KNOWN_ISSUES, SPEC 4.11). A configuration within the environment
 # margin of it is labelled CONST_LABEL_INVALID, never as a collision.
 #   Unit [Tuple<int>]
 CONST_MACHINE_INTERIOR = (1638,)
-# The clearance labels of a configuration or a segment shown in a viewer.
+# The clearance labels of a configuration or a segment shown in a viewer. The user reads them, so
+# they name no internal document.
 #   Unit [string]
 CONST_LABEL_CLEAR = 'clearance kept (%s rule)'
 CONST_LABEL_VIOLATED = 'CLEARANCE VIOLATED (%s rule)'
-CONST_LABEL_INVALID = 'model not valid here (machine (a) interior, KNOWN_ISSUES)'
+CONST_LABEL_INVALID = 'model not valid here (machine (a) interior)'
 # The blend radius token, and the acceleration and speed tokens, of a program move (absent = no
 # blend; a and v are required of every station line, whose duration is estimated from them).
 #   Unit [Pattern]
