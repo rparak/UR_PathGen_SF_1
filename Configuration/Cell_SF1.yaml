@@ -146,19 +146,20 @@ Clearance:
   # minimum of every entry and fails if it is not > 0. REQUIRED (may be empty). [m]
   Self_Pair_Overrides:
     - [base, upper_arm_link, 0.0]
-  # The station holder, whose geometry is fitted to the taught program, not measured
+  # The station boxes, whose geometry is fitted to the taught program, not measured
   # (.claude/project-docs/KNOWN_ISSUES.md). Environment pieces whose bounding box meets the box
   # [Min, Max] (world frame) get the margin Environment instead of Clearance.Environment: always for taught segments, and
   # for a generated sample only while its TCP lies within Endpoint_Radius of a fixed station point.
-  # Box: the holder's neighbourhood (owner, 2026-10-18; SPEC 4.12): the holder box and the sill
-  # frame it sits on (components 181, 1062, 2701, 2702, 2704, which no taught sample comes within
-  # 20 mm of). Since the machine shift the holder is the only geometry the taught program (cases 17
-  # and 18) comes closer to than 20 mm (5.5 mm); the post keeps >= 39.1 mm, so it, the window's top
-  # profile and the machine front take the full 20 mm: its extra 34 mm beyond the earlier fit rests
-  # only on the owner's estimate, and a generated path may not use it. Environment 5 mm: it covers
-  # eps (1 mm) and the measured kinematic error at the drop (4.0 mm), nothing for cables (SPEC 9.8).
-  # Endpoint_Radius 50 mm: every taught sample under 20 mm has its TCP within 13.5 mm of a station
-  # point (2026-10-18; 44 mm before the shift, owner 2026-10-17). REQUIRED, all four. [m]
+  # Box: the station boxes' neighbourhood (owner, 2026-10-18; SPEC 4.12): the holder and stub boxes
+  # and the sill frame they sit on (components 181, 1062, 2701, 2702, 2704, which no taught sample
+  # comes within 20 mm of). Since the machine shift the station boxes are the only geometry the
+  # taught program (cases 17 and 18) comes closer to than 20 mm (holder 5.5 mm, stub 5.03 mm); the
+  # post keeps >= 39.1 mm, so it, the window's top profile and the machine front take the full
+  # 20 mm: its position rests only on the owner's estimate, and a generated path may not use it.
+  # Environment 5 mm: it covers eps (1 mm) and the measured kinematic error at the drop (4.0 mm),
+  # nothing for cables (SPEC 9.8). Endpoint_Radius 50 mm: every taught sample under 20 mm (615) has
+  # its TCP within 41.2 mm of a station point of its job (measured 2026-10-23, SPEC 4.12; 13.5 mm
+  # before the stub was modelled). REQUIRED, all four. [m]
   Station_Zone:
     Min: [-0.755, -0.36, 0.94]
     Max: [-0.62, -0.24, 1.13]
