@@ -2,7 +2,7 @@
 
 **Simulation passed ≠ safe on the robot.** Every path this tool generates is a proposal. Run it on
 the real SF1 cell at reduced speed first, with someone at the stop button. This file lists what the
-simulation does not model or has not verified. It contains only what the skeleton decided or
+simulation does not model or has not verified. It contains only what has been decided or
 measured.
 
 ## Kinematic error measured at the learned points only, unmeasured at generated via points
@@ -15,8 +15,8 @@ calibrated kinematics. It is measured at all 78 learned points of the program ex
 the 10 mm sanity bound (SPEC §9.4); a point outside stops the script. At the generated via points,
 and between points along a path, the error is unmeasured and may be larger.
 
-- **Impact:** of the 20 mm environment margin, 4.0 mm is taken by the measured error, which leaves
-  15.0 mm for cables. If the error reached the 10 mm sanity bound, 9.0 mm would be left (SPEC §9.8).
+- **Impact:** of the 20 mm environment margin, 4.0 mm is taken by the measured error, and up to
+  10 mm by the sanity bound; what is left is for cables (see *Cables are not modelled*, SPEC §9.8).
 - **Evidence:** SPEC §4.3 (A and B), SPEC §9.4 (all 78 points); `Example/plan_rotation.py` prints
   the largest residual of the 78 points on every run.
 - **Pinned by:** `test/Kinematics/test_core.py::test_the_configured_tcp_residual_is_pinned` (A and B);
@@ -24,75 +24,61 @@ and between points along a path, the error is unmeasured and may be larger.
   `test_visualize_position.py` and `test_replay.py` (a point outside the bound is refused).
 - **What would close it:** the robot's `calibration.conf` and FK with its corrections.
 
-## Simulation only: no real robot is available
+## No measurement of the cell; c2 is the only generated path run on the robot
 
-No real robot and no measurement of the cell are available (owner, 2026-10-17). Every result of this
-tool, including everything below, is a simulation of a model that was in part fitted to the robot
-program, not measured. The one exception: c2 was delivered and tested on the real cell (owner,
-2026-10-21); no further details are recorded.
+No measurement of the cell is available (owner, 2026-10-17). Every result of this tool, including
+everything below, is a simulation of a model that was in part fitted to the robot program, not
+measured. The one generated path run on the robot is c2, delivered and tested on the real cell
+(owner, 2026-10-21); no further details are recorded.
 
-- **Impact:** any new path through the station region must first run on the robot at reduced
-  speed, with someone at the stop button, before it is used.
-
-## The rotation-station geometry is approximate: the holder fitted to the taught program, the post placed by an estimate
+## The rotation-station geometry is approximate: the station boxes fitted to the taught program, the post placed by an estimate
 
 At `Base_Yaw` = 180° the taught rotation sequence (cases 17 and 18, home → … → home) collides with
 the original STL although the real robot runs it. Machine (a) is shifted −150 mm along x as an
-assembly (the owner's estimate, below). With that the left window profile 2710 needs no fit: the
-taught sequence keeps ≥ 39.1 mm to it (SPEC §4.11). *Until 2026-10-18 (machine at −100 mm) the
-post was translated a further −15.7 mm, fitted so that the sequence kept 5 mm (git history of SPEC §4.9).* The post
-now stands 34.3 mm behind that fit: **nothing in the program constrains where it is; its position is
-only the owner's estimate.** The visual mesh is unchanged, so the viewer shows the original post and
-machine front, not the collision geometry.
+assembly (the owner's estimate, next item); with that the post (left window profile 2710) needs no
+fit: the taught sequence keeps ≥ 39.1 mm to it (SPEC §4.11). **Nothing in the program constrains
+where the post is; its position is only the owner's estimate.** The visual mesh is unchanged, so the
+viewer shows the original post and machine front, not the collision geometry.
 
-Inside the station zone (`Clearance.Station_Zone`: the holder and the sill frame it sits on; since
-2026-10-18 no longer the post, the window's top profile or the machine front, SPEC §4.12) the
-environment margin is 5 mm instead of 20 mm: for taught segments everywhere, for a generated path
-only while its TCP lies within 50 mm of a station point. Everything else, the post included, takes
-the full 20 mm.
+Inside the station zone (`Clearance.Station_Zone`: the holder, the stub and the sill frame they sit
+on, SPEC §4.12) the environment margin is 5 mm instead of 20 mm: for taught segments everywhere, for
+a generated path only while its TCP lies within 50 mm of a station point. Everything else, the post
+included, takes the full 20 mm.
 
 - **Impact:**
   - **0 mm is left for cables inside the zone** (5 mm = 1 mm eps + 4.0 mm measured kinematic error);
   - **case B (10 mm sanity bound) is not covered** there;
-  - **the holder pins consistency with the taught program, not real clearance:** its top is the
-    highest at which the taught pick keeps 5 mm (5.5 mm, the open finger), by construction;
+  - **the station boxes pin consistency with the taught program, not real clearance:** each is as
+    large as the taught program allows at 5 mm (the holder 5.53 mm, the stub 5.03 mm), by
+    construction;
   - **if the machine stands closer than estimated**, the post is closer than modelled; the taught
     program keeps ≥ 39.1 mm to the model, so a real post up to about 34 mm closer is still consistent
     with it. A generated path keeps 20 mm to the modelled post, not more.
-- **Also assumed:** movel segments checked joint-linear (the robot moves the TCP on a line); blended
-  corners (r > 0) checked through the corner, not along the blend; nominal DH (4.0 mm error at the
-  drop); the open gripper at 85 mm — the release opening is real (owner, 2026-10-18).
-- **The station holder is an estimate** (`Environment.Added_Boxes`, `station_bracket`, source "owner
-  photo + taught points, back to the shifted post (owner, 2026-10-18), not measured", SPEC §4.10,
-  §4.11): one box under the part, world-fixed where the robot places the part. Its footprint comes
-  from the photo, its front (90 mm in front of the earlier post face) is assumed, its back reaches
-  into the shifted post (it is mounted on it), and its top (1.112 m) is the highest the taught
-  sequence allows. The holder's arms beside the part are not modelled.
-- **The stub is an estimate** (`station_stub`, source "owner photo + taught points, not measured",
-  SPEC §4.13): one box on the post face above the holder, its y and z from the photo, its depth the
-  largest the taught program allows (34.6 mm proud of the post; the taught program keeps 5.03 mm
-  to it). The real stub may be smaller; it cannot be larger without contradicting the taught
-  program. Run the robot near the drop at reduced speed first.
+- **The holder is an estimate** (`station_bracket`, SPEC §4.10): its footprint from a photo, its
+  front assumed, its top (1.112 m) the highest the taught sequence allows. Its arms beside the part
+  are not modelled.
+- **The stub is an estimate** (`station_stub`, SPEC §4.13): y and z from the photo, its depth the
+  largest the taught program allows (34.6 mm proud of the post). The real stub may be smaller; it
+  cannot be larger without contradicting the taught program. Run the robot near the drop at reduced
+  speed first.
+- **The open gripper is 85 mm**, the real release opening (owner, 2026-10-18).
 - **Evidence:** SPEC §4.10 (holder), §4.11 (−150 mm, no fit, the per-segment table), §4.12 (the
   zone), §4.13 (stub).
 - **Pinned by:** `test/Scene/test_station.py` (the replay of both cases as taught and as generated,
-  the recorded overrides, the zone pieces, the holder) and
+  the recorded overrides, the zone pieces, the station boxes) and
   `test/Planner/test_core.py::test_no_generated_sample_comes_closer_to_a_station_box_than_its_taught_end`.
-- **Another case or program is guarded, not fitted** (owner, 2026-10-21): before a job is planned,
-  its taught moves are replayed against the model (`Check_Taught_Model`, SPEC §9.7); a taught line
-  inside modelled geometry stops the run, naming the line, the piece and the depth, and less room
-  than the taught margin or a reach above the workspace top is a warning. The guard sees only
-  where the taught program ran: geometry fitted to cases 17 and 18 that a new case does not touch
-  (a station box too large for its path, an endpoint radius) is not checked, and nothing is refit.
+- **Another case or program is guarded, not fitted:** `Check_Taught_Model` (SPEC §9.7) stops a job
+  whose taught line passes through modelled geometry, but sees only where the taught program ran:
+  geometry fitted to cases 17 and 18 that a new case does not touch (a station box too large for its
+  path, an endpoint radius) is not checked, and nothing is refit.
 - **What would close it:** measuring the machine's position, the post, the holder and the stub on
-  the real cell, then correcting the STL and removing the overrides and the box.
+  the real cell, then correcting the STL and removing the overrides and the boxes.
 
 ## The positions of machine (a) and the side cabinet are the owner's estimates, not measurements
 
 Machine (a), all 1749 components, is shifted −150 mm along x as one rigid assembly, and the side
 cabinet (c), 56 components, −50 mm along x as another (`Environment.Assembly_Overrides`): estimates
-of the owner (2026-10-18; the machine first 100 mm, then a further 50 mm), normal to the machine
-front. The robot stand and the tables stay. The owner's tape readings were rough, and nothing is
+of the owner (2026-10-18), normal to the machine front. The robot stand and the tables stay. The owner's tape readings were rough, and nothing is
 fitted to them (SPEC §4.8). After the shift, the robot-table edge → lower cabinet front is 276 mm
 (tape about 300 mm) and the base axis → right window profile 762 mm (tape about 700 mm).
 
@@ -113,13 +99,11 @@ fitted to them (SPEC §4.8). After the shift, the robot-table edge → lower cab
 ## Machine (a) interior is filled by open-shell hulls; real loading paths penetrate it; the model is not usable inside the machine
 
 The grinder-loading segments of `sf1_plc_v4.script` reach into machine (a), and the model there is a
-single convex hull: component 1638, the set's only fallback piece (CoACD missed eps by 1.12 mm, so
-its hull was kept), flagged as an open shell, 234.8 mm excess. Real segments penetrate it by up to
+single convex hull: component 1638, the set's only fallback piece (its CoACD parts reached 1.121 mm,
+above eps 1 mm, so its hull was kept), flagged as an open shell, 234.8 mm excess. Real segments penetrate it by up to
 140 mm: load2 ↔ load3 (−74.2 mm, in every case 1 – 21), load_hower / rect_pick_hower → load3,
 and the bench segments through Waypoint_9/10/12/13/14/15/16/17/19 to bench_drop_* / bench_sqr_pick
 (down to −140.4 mm; cases 1 – 8, 17, 18, 20, 21). Not corrected (out of scope, owner 2026-10-17).
-*Updated 2026-10-18: with the machine shifted 150 mm (100 mm: −99.5 and −145.0 mm; unshifted: −108.6
-and −154.1 mm).*
 
 Two other kinds of penetration in the program are expected and not errors of the machine model:
 the grasp and unload points reach into the modelled parts on the pallet and side tables
@@ -127,9 +111,9 @@ the grasp and unload points reach into the modelled parts on the pallet and side
 2718, 236, 237, 243, 244) are touched by up to 3.3 mm.
 
 - **Impact:** no path inside machine (a) can be checked or planned; a result there means nothing.
-  The optimised S1 – S3 (home ↔ station) keep about 228 mm or more to every one of these pieces
-  (closest: S2; re-planned 2026-10-18, every third sample), and component 1638 is outside the
-  station zone.
+  The delivered S1 – S3 (c2, home ↔ station) keep 227.9 mm or more to component 1638 (closest: S2
+  at Waypoint_5, measured 2026-10-23 on every sample), and component 1638 is outside the station
+  zone.
 - **Evidence:** replay of all 125 unique segments of the 21 cases (the 4 home → first target entries
   included), joint-linear, 50 and 85 mm openings, on the current set (SPEC §4.11).
 - **Pinned by:** `test/Scene/test_program.py::test_no_program_segment_penetrates_more_than_recorded`
@@ -139,30 +123,29 @@ the grasp and unload points reach into the modelled parts on the pallet and side
 
 ## Generated transfer segments: estimates, margins without reserve, unproven space
 
-The optimised segments S1 - S3 of case 17's rotation sequence (`Data/Generated/`, the only
+The optimised segments S1 - S3 of case 17's rotation sequence (`Data/Generated/`, c2, the
 deliverable) pass the full generated-rule check in simulation. What that does not cover:
 
 - **Durations are estimates:** a trapezoid on the leading joint with the program's a and v, a stop
   at every via point; the controller's profile, blends and the gripper's time are not modelled. The
-  cycle-time gain (23.37 -> 14.66 s home -> home, estimate; 17.50 s before the pick's wrist-3 turn)
-  is not measured.
-- **Clearance has no reserve beyond the margins:** the hard limits are 20 mm, and 5 mm within
-  50 mm of a station point (the holder only). The clearance penalty (weight 0.5 s/m, the owner's
-  choice) only prefers clearance below 30 mm, and machine (a) outside the zone is held at 30 mm
-  (±10 mm position accuracy): outside the station neighbourhood the optimised paths keep 30.4 mm
-  (S1), 51.7 mm (S2) and 59.4 mm (S3); near the station S2 passes the stub at 10.1 mm, as close as
-  its taught end (c1, re-planned 2026-10-19).
+  cycle-time gain (23.37 -> 12.05 s home -> home, estimate) is not measured.
+- **Clearance has no reserve beyond the margins:** the hard limits are 20 mm, 30 mm to machine (a)
+  outside the station zone (±10 mm position accuracy), and 5 mm to the zone's pieces within 50 mm
+  of a station point. The clearance penalty (weight 0.5 s/m, the owner's choice) only prefers
+  clearance below 30 mm. With its TCP outside the station neighbourhood c2 keeps 52.9 mm (S1),
+  34.7 mm (S2) and 59.4 mm (S3); its least room above a margin is 10.9 mm, to machine (a) in S1
+  (40.9 mm), and S2 passes the stub at 10.1 mm, as close as its taught end (measured 2026-10-23;
+  `Data/Generated/variants/comparison.md`).
 - **The optimised paths depend on the estimated machine position:** they keep 30 mm to it, which
-  covers the stated ±10 mm; with the machine at the earlier estimate (−100 mm, post fitted) S1 would
-  penetrate the top profile by 18.5 mm and S2 by 0.8 mm (S3 would keep 11.5 mm). The space they use is freed only by the owner's estimate of a
-  further 50 mm, which nothing in the program confirms; the owner judges it closer to the real cell
+  covers the stated ±10 mm, not the whole shift: with the machine at the earlier estimate (−100 mm,
+  post fitted) the paths planned 2026-10-18 would have penetrated the top profile by up to 18.5 mm
+  (measured before c2; not measured for c2). The space they use is freed only by the owner's
+  estimate of a further 50 mm, which nothing in the program confirms; the owner judges it closer to the real cell
   (2026-10-18), still unmeasured. **Run them on the robot at reduced speed first** (see "The
   positions of machine (a) and the side cabinet").
 - **Space:** a generated segment stays inside `Clearance.Workspace` (the STL's x/y extents, up to
   2.35 m, the height the taught program reaches); what lies outside the STL is unknown.
 - **The carried part, cables, Polyscope safety limits** as elsewhere in this file.
-- **Impact:** run every generated path on the robot at reduced speed first, with someone at the
-  stop button; no real robot is available.
 - **Pinned by:** `test/Planner/test_core.py` (the committed paths pass `Verify_Path`).
 
 ## The pick's wrist 3 is one turn lower than taught: unconfirmed on the robot
@@ -173,31 +156,29 @@ program's pick lines solve `get_inverse_kin(<name>_p, qnear=<name>_q)` on the ro
 
 - **Not verified:** that the controller's IK, given the new qnear, returns the configuration one turn
   lower (the simulation drives `_q` directly), and that the gripper cable and any wrist-3 safety
-  limit allow it. The tool cable is not modelled; over the cycle wrist 3 now spans 0 – 1.50 rad and
-  −1.54 rad, against 0 – 4.74 rad taught, so it winds less, not more.
+  limit allow it. c2 was tested on the real cell, but whether that test ran the pick lines is not
+  recorded (owner, 2026-10-23). The tool cable is not modelled; over the cycle wrist 3 now spans
+  −1.544 … 1.636 rad at c2's points, against 0 … 4.74 rad taught, so it winds less, not more.
 - **Impact:** the first run at reduced speed, with someone at the stop button, watches wrist 3 at
   the pick (Waypoint_18 and pick_rotate_1) and on S3.
 - **Pinned by:** `test/Example/test_plan_rotation.py::test_the_delivered_points_turn_only_the_picks_wrist_3`,
   `test/Planner/test_core.py::test_the_station_points_keep_their_tokens`.
 - **What would close it:** the first run on the robot.
 
-## The proposal c3 is a nominal-DH branch of the taught drop, never taught (c2 tested on the real cell)
+## The proposal c3 is a nominal-DH branch of the taught drop, never taught
 
-`Data/Generated/variants/c2` and `c3` put the drop's three points on another IK branch (SPEC §10.6):
-the nominal-DH IK of the program's `_p`, 12.05 s and 13.86 s home -> home against c1's 14.66 s
-(estimates). c2 was delivered and tested on the real cell (owner, 2026-10-21; no further details
-are recorded), so what follows is open for c3; for c2 it describes the files as written here.
-*Corrected 2026-10-21: both were proposals.*
+`Data/Generated/variants/c3` puts the drop's three points on another IK branch (S− E− W+, home's;
+SPEC §10.6): the nominal-DH IK of the program's `_p`, 13.86 s home -> home (estimate). c2, built
+the same way on S− E− W−, ran on the real cell (previous items).
 
 - **Not verified:** the robot's calibrated IK gives other joints (the drop's FK residual is 4.0 mm,
-  SPEC §9.4), so the station clearances of 12.0 mm (the taught branch: 10.6 mm) are model values;
-  c2 flips the wrist in S1 (θ5 passes π while the part is held) and its Waypoint_5 lies 8° from the
-  wrist singularity (a movej); cables and the carried part are not modelled.
+  SPEC §9.4), so its station clearances (12.0 mm; the taught branch 10.6 mm) are model values;
+  cables and the carried part are not modelled.
 - **Impact:** c3 may not run as written. Using it means re-teaching the drop on that branch and
   re-verifying it on the robot at reduced speed; the re-taught program then replaces the proposal.
 - **Pinned by:** `test/Example/test_write_variants.py::test_a_proposal_moves_the_drop_to_its_branch_and_nothing_else`.
-- **What would close it:** for c3, re-teaching on the robot (owner, 2026-10-19: not now, no robot
-  available).
+- **What would close it:** re-teaching the drop on that branch on the robot (owner, 2026-10-19:
+  not now).
 
 ## Generated moves run at sf1_plc_v4's movej a and v only; a job at another speed is refused
 
@@ -219,10 +200,7 @@ its estimate did not assume.
 
 `Example/replay_rotation.py` plays each move for its estimated duration (the trapezoid of SPEC
 §10.6 with the line's a and v). Blends are not replayed (every move stops), and the gripper's time
-and the program's waits are left out, so the elapsed time shown is not the robot's. The gripper
-state is not an estimate: the robot holds the part from the start of the case, places it into the
-magazine and releases it, picks it up again and returns home holding it; the gripper is open only
-between the release and the re-pick (S2) (owner fact, 2026-10-18).
+and the program's waits are left out, so the elapsed time shown is not the robot's.
 
 - **Impact:** the replay shows the order, the shape and the relative timing of the moves; real cycle
   times must be measured on the robot.
@@ -264,7 +242,7 @@ joint limits of SF1 may be tighter.
 
 The cables at the base and at the tool are not in the scene. They are covered only by what the
 environment margin leaves after the kinematic error and the collision-set tolerance: 15.0 mm in
-the measured case, 9.0 mm at the sanity bound (SPEC §9.8).
+the measured case, 9.0 mm at the sanity bound, and 0 mm inside the station zone (SPEC §9.8).
 
 ## Open shells filled by their hulls
 
