@@ -444,7 +444,7 @@ requirements.txt          pinned
 .claude/project-docs/SPEC.md              this file
 .claude/project-docs/KNOWN_ISSUES.md      accepted risks and known limitations
 .claude/project-docs/design-decisions.md  deliberate choices whose reason is not visible in the code
-.claude/skills/project-style-rpx/   SKILL.md, README.md, references/, assets/, scripts/
+.claude/skills/project-style-rpx/   SKILL.md, references/, assets/, scripts/
 .claude/skills/feature-manager/SKILL.md
 .claude/skills/project-optimize/SKILL.md
 CAD/SF1_Environment.stl                       source, unchanged (visual mesh)

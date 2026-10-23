@@ -3,8 +3,9 @@
 The scene is the UR10e and the Robotiq 2F-85 from MuJoCo Menagerie plus the SF1 environment, built
 by `src/Scene/Core.py` (`Scene_Cls`) through `mujoco.MjSpec` (SPEC §4.2, §4.5, §7, §9). ✅ =
 enforced by a test; 📄 = documentation only. The tests are in `test/Scene/test_core.py`,
-`test/Scene/test_margin.py`, `test/Collision/test_core.py` and
-`test/Collision/test_conservativeness.py`.
+`test/Scene/test_margin.py`, `test/Scene/test_station.py`, `test/Scene/test_program.py`,
+`test/Collision/test_core.py`, `test/Collision/test_conservativeness.py` and
+`test/Collision/test_excess.py`.
 
 ## Vendored models are never edited ✅
 
@@ -51,8 +52,9 @@ What the scene needs that the vendored files do not say is applied in `Scene_Cls
 - The robot collides through the **convex hulls of its visual meshes** (MuJoCo hulls every mesh
   geom); each hull contains its visual part. The Menagerie capsules are removed: they need not
   contain the mesh.
-- The gripper keeps its Menagerie collision geoms at the joint angles that give `Tool.Opening`, plus
-  the pad-span hull.
+- The gripper keeps its Menagerie collision geoms at the joint angles that give the scene's opening
+  (`Tool.Opening`, or a job segment's holding opening from `Tool.Holding_Openings`, or 85 mm open),
+  plus the pad-span hull.
 - Clearance is implemented with geom margins (`Clearance.Environment` on environment geoms,
   `Clearance.Self` on robot and gripper geoms). MuJoCo generates a contact below the **sum** of the
   two geom margins; `Check_Clearance` filters each contact by the pair's configured margin (the
@@ -76,10 +78,11 @@ build with `mj_geomDistance`; the build fails with the violating pieces if any i
   refuses a set whose recorded STL sha256 differs from the file on disk (`Collision_Error_Cls`:
   "rerun Example/build_collision.py"). Tests never run CoACD.
 - **Built by** `Example/build_collision.py`: crop to the reachable sphere, a hull per connected
-  component, CoACD only where a hull's excess exceeds `Hull_Excess_Max`, fallback to the hull when the
+  component, CoACD only where a hull's excess exceeds `CONST_HULL_EXCESS_MAX` (10 mm), fallback to the hull when the
   CoACD pieces are not conservative (SPEC §7.2). **Conservativeness beats tightness.**
 - **Degenerate components** (planar or collinear, no 3-D hull, which MuJoCo refuses) are thickened
-  by ±0.5 mm along their mean face normal before hulling; the result contains the original.
+  by ±0.5 mm along the normal of their plane, from the SVD of their centred vertices (a mean face
+  normal can cancel: the winding is inconsistent), before hulling; the result contains the original.
 - Every collision mesh gets shell inertia (the bodies are static). Stand components go to body
   `env_stand`, all others to `env` (SPEC §7.5).
 - Open shells whose hull fills space are listed by the build report and in `.claude/project-docs/KNOWN_ISSUES.md`, never

@@ -45,15 +45,19 @@ Never a silent skip, never a best-effort parse.
 - The reader keeps each number's **original token** beside its float. The writer writes learned
   points from the tokens, so `Write_URScript(Read_URScript(text)) == text`, byte for byte.
 - A learned point is never re-formatted, re-normalised or rounded. Encoder noise such as `2.44E-5`
-  rad is read and written unchanged (SPEC §10.2).
+  rad is read and written unchanged (SPEC §10.2). The one exception: a point a job configures with
+  another `_q` (SPEC §8.6) gets its changed joints as generated tokens (`Replace_Joints`); its `_p`
+  and every unchanged token stay verbatim.
 - **Generated points** get fixed precision: `%.12f` with the leading zero dropped
-  (`0.5` → `.500000000000`, `-0.5` → `-.500000000000`), `-0` written as `0`. Their `_p` comes from DH
+  (`0.5` → `.500000000000`, `-0.5` → `-.500000000000`); a value that rounds to zero loses its sign
+  (`.000000000000`). Their `_p` comes from DH
   FK · TCP with `Matrix_To_Rotvec` (SPEC §9.5).
 
 ## Joints are never wrapped ✅
 
-UR joints span ±2π and `movej` goes to the exact value. A joint is never wrapped into [−π, π]; the
-planner and writer stay on the branch of A and B. A synthetic joint at 4.0 rad comes out as 4.0
+UR joints span ±2π and `movej` goes to the exact value. A joint is never wrapped into [−π, π]; a
+generated segment stays on the branches of its two ends, and a learned point takes another `_q` only
+through its job's `Point_Configurations`, with a source. A synthetic joint at 4.0 rad comes out as 4.0
 (SPEC §10.5).
 
 ## Motion output: generated `movej(<name>_q, a=<a>, v=<v>, r=0)`, station lines verbatim ✅
@@ -73,20 +77,15 @@ movej(<name>_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
   runs at the speed the duration estimate assumes. Speed does not change the path of a `movej` with
   `r=0`.
 
-*Corrected 2026-10-19: this section said that `a` and `v` are omitted and that `movel` is never
-written; the owner's decisions of 2026-10-17 (a, v) and 2026-10-18 (station lines verbatim) changed
-both (.claude/project-docs/design-decisions.md, SPEC §10.4).*
-
 ## Naming 📄
 
 | Point | Name | Role |
 |---|---|---|
-| robot `home` | `home` | A |
-| robot `drop_rotate_1` | `drop_rotate_1` | B |
-| generated | `via_<from>_<to>_<nn>`, e.g. `via_home_drop_rotate_1_01` | via points, `nn` from `01` |
+| learned | the robot program's name, e.g. `home`, `Waypoint_18` | a segment's ends come from the job (`From`, `To`); the tests' A = `home`, B = `drop_rotate_1` |
+| generated | `via_<from>_<to>_<nn>`, e.g. `via_Waypoint_5_Waypoint_18_01` | via points, `nn` from `01` |
 
-Learned points keep the robot's names; their single source is the program extract
-`Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript`. The original export is kept as a test
+Learned points keep the robot's names; their single source is the positions extract of the job's
+program, `Data/Programs/<program>/<program>_positions.urscript` (`sf1_plc_v4` for SF1). The original export is kept as a test
 fixture, and its number tokens equal the extract's (SPEC §10.3). At most **5 via points** per path; more is a failure, never a longer output
 (SPEC §1, §14 risk 8).
 
@@ -97,5 +96,5 @@ fixture, and its number tokens equal the extract's (SPEC §10.3). At most **5 vi
   (`home_p` has |r| = 3.1393 rad).
 - Computed with **atan2**, `θ = atan2(‖vee(M − Mᵀ)‖ / 2, (tr M − 1) / 2)`, `M = R_aᵀ R_b`. The
   arccos form cannot resolve angles below ≈ 6e-8 rad, and the 1e-9 checks need that (SPEC §4.5, §9.5).
-- `Matrix_To_Rotvec` applies to generated points only: θ ∈ [0, π]; θ < 1e-12 → (0, 0, 0); if
+- Of the written points, `Matrix_To_Rotvec` applies to generated points only: θ ∈ [0, π]; θ < 1e-12 → (0, 0, 0); if
   π − θ < 1e-9, the axis sign makes the first component with |·| > 1e-9 positive.
