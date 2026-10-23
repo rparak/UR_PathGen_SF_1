@@ -611,22 +611,22 @@ field without a reader.
 | `Environment.Added_Boxes` | obstacles missing from the STL, added to body `env` as convex meshes of their eight corners (world-axis-aligned boxes; not box primitives, whose contacts with the gripper's box pads are missed inside the margin) with the environment margin: `{Name, Min [x, y, z], Max [x, y, z] (world), Source}` each; a box meeting `Clearance.Station_Zone` is a zone piece; may be empty. Shipped: `station_bracket`, the holder (§4.10), and `station_stub` (§4.13); both are zone pieces. The collision set is not rebuilt for them | –, m, m, text | REQUIRED |
 | `Robot.Model` | `models/universal_robots_ur10e/ur10e.xml` | path | REQUIRED |
 | `Robot.Base_Position` | Polyscope base origin in the STL/world frame: `[0.0, 0.0, 0.7152]` | m | REQUIRED |
-| `Robot.Base_Yaw` | rotation of the Polyscope base frame about world z: `180.0` (owner, 2026-10-17; confirmed by the taught points of `sf1_plc_v4.script` and photos of the cell, §4.6). *Corrected 2026-10-17: was `0.0`, which put every taught grasp point in empty space* | deg | REQUIRED |
+| `Robot.Base_Yaw` | rotation of the Polyscope base frame about world z: `180.0` (owner, 2026-10-17; confirmed by the taught points of `sf1_plc_v4.script` and photos of the cell, §4.6) | deg | REQUIRED |
 | `Robot.Joint_Position_Limits.Min/Max` | joint position limits, 6 each. Shipped: ±360° for base, shoulder, wrists; **±180° for the elbow** (Menagerie default, owner). Load rejects: any joint beyond ±360°, and **the elbow beyond ±180°**, because that limit is the precondition for excluding `upper_arm_link–forearm_link` (§9.6). The Polyscope safety limits may be tighter (`KNOWN_ISSUES.md`) | deg | REQUIRED |
 | `Tool.Model` | `models/robotiq_2f85/2f85.xml` | path | REQUIRED |
 | `Tool.Coupling.Thickness` | coupling thickness: `0.0169` (manual rev. 2020/02/11 p. 119, Fig. 5-5) | m | REQUIRED |
 | `Tool.Coupling.Diameter` | coupling outer diameter: `0.075` | m | REQUIRED |
 | `Tool.Coupling.Spigot_Depth` | depth of the Ø71 bore receiving the gripper: `0.0029`; gripper datum = thickness − depth = 14.0 mm (measured on the robot) | m | REQUIRED |
-| `Tool.Mount_Yaw` | rotation of the gripper about the flange z axis relative to the Menagerie default: `0.0`, the fingers open along flange ±x. **Confirmed on the robot by the owner (2026-10-18)**; a statement of 90° made that day was withdrawn (§9.3) | deg | REQUIRED |
+| `Tool.Mount_Yaw` | rotation of the gripper about the flange z axis relative to the Menagerie default: `0.0`, the fingers open along flange ±x. **Confirmed on the robot by the owner (2026-10-18)** (§4.9, §9.3) | deg | REQUIRED |
 | `Tool.Opening` | inner pad-face gap of a scene that names no program case (the demo, the tests): `0.050`, the 50 × 50 mm part (owner) | m | REQUIRED |
-| `Tool.Holding_Openings` | inner pad-face gap while the part of a program case is held, `{Program, Case, Opening, Source}` each, keyed by program folder (`Data/Programs/<Program>/`) and case, so a case number names a case of one program only (owner, 2026-10-21); used by planning, verification and replay of a job of that case (§8.6): sf1_plc_v4 case 17 `0.050` (owner, 2026-10-18: the 50 × 50 mm part). Case 18 has no entry: its part's size is not known. *Corrected 2026-10-18: case 18 `0.050` was listed, an assumption.* Load rejects: an empty list, an entry without its program, an opening ≤ 0 or above the 85 mm stroke, an empty source, a case of a program named twice; a script refuses a case without an entry, naming the entry to add | –, –, m, – | REQUIRED |
+| `Tool.Holding_Openings` | inner pad-face gap while the part of a program case is held, `{Program, Case, Opening, Source}` each, keyed by program folder (`Data/Programs/<Program>/`) and case, so a case number names a case of one program only (owner, 2026-10-21); used by planning, verification and replay of a job of that case (§8.6): sf1_plc_v4 case 17 `0.050` (owner, 2026-10-18: the 50 × 50 mm part). Case 18 has no entry: its part's size is not known. Load rejects: an empty list, an entry without its program, an opening ≤ 0 or above the 85 mm stroke, an empty source, a case of a program named twice; a script refuses a case without an entry, naming the entry to add | –, –, m, – | REQUIRED |
 | `Tool.TCP_Offset` | TCP in the flange frame `[x, y, z, rx, ry, rz]`: `[0.0, 0.0, 0.174, 0.0, 0.0, 0.0]`. Source: the Polyscope TCP of SF1 (owner, 2026-10-17), identical to the Robotiq value (manual rev. 2020/02/11 p. 127, §5.2.3) | m, rad (rotvec) | REQUIRED |
 | `Clearance.Environment` | minimum robot/gripper ↔ environment distance: `0.020` | m | REQUIRED |
 | `Clearance.Self` | minimum distance between non-excluded robot/gripper bodies: `0.005` | m | REQUIRED |
 | `Clearance.Self_Pair_Overrides` | `[[base, upper_arm_link, 0.0]]` (Q9 (a)): a pair-specific self margin. Allowed only for a pair whose true minimum stays > 0: grid over the joints that move it, then scipy local minimisation from the 20 lowest cells; the test checks every entry and pins the refined minimum | m | REQUIRED |
 | `Clearance.Station_Zone.Min/Max` | world box of the station zone: environment pieces whose bounding box meets it are the zone pieces (§9.7). Shipped: the station boxes' neighbourhood, `[-0.755, -0.36, 0.94]` – `[-0.62, -0.24, 1.13]` (owner, 2026-10-18, §4.12) | m | REQUIRED |
-| `Clearance.Station_Zone.Environment` | margin of the zone pieces where the zone applies; > 0 and ≤ `Clearance.Environment` | m | REQUIRED |
-| `Clearance.Station_Zone.Endpoint_Radius` | a generated sample uses the zone margin only while its TCP lies within this distance of a fixed station point's TCP (§9.7) | m | REQUIRED |
+| `Clearance.Station_Zone.Environment` | margin of the zone pieces where the zone applies; > 0 and ≤ `Clearance.Environment`. Shipped: `0.005` (§9.8) | m | REQUIRED |
+| `Clearance.Station_Zone.Endpoint_Radius` | a generated sample uses the zone margin only while its TCP lies within this distance of a fixed station point's TCP (§9.7). Shipped: `0.050` (§4.12) | m | REQUIRED |
 | `Clearance.Machine_Extra.Assembly/Margin/Source` | extra environment margin of **generated** segments to one assembly's pieces outside the station zone, for the accuracy of its estimated placement (§9.7). Shipped: `machine_a`, `0.010` (owner accuracy estimate of the machine position, 2026-10-18), so a generated path keeps 30 mm to machine (a) outside the zone. `plan_rotation.py`'s report and the headers of its output state the margin with its source (`Machine_Margin`). Load rejects: an assembly not in `Environment.Assembly_Overrides`, a negative margin or one above 150 mm, an empty source | –, m, text | REQUIRED |
 | `Clearance.Workspace.Min/Max` | world box a generated segment keeps every robot collision geom inside: x/y the STL's extents, z max 2.35 m, the highest point of the taught rotation sequence (2.322 m) rounded up — space proved free by the taught program (§9.7) | m | REQUIRED |
 | `Self_Collision.Excluded_Pairs` | explicit body pairs never checked (§9.6) | — | REQUIRED |
@@ -684,10 +684,9 @@ the pick's wrist-3 turn, §10.5); `sf1_plc_v4_case_17_c1`, c1; `sf1_plc_v4_case_
 S3 (home → drop_rotate_2, Waypoint_5 → Waypoint_11, Waypoint_8 → home), no point configured, kept to
 show that another case plans without code changes (owner, 2026-10-21). Case 18 is not a
 deliverable: no output of it is committed, and without a `Tool.Holding_Openings` entry for it
-(its part's size is not known) `--job sf1_plc_v4_case_18` is refused. A test plans it with an
-assumed 50 mm and a reduced budget (2 restarts; about 65 s with the model check): its taught moves
-pass the model check (8883 samples, no error, no warning, 2026-10-21), and every segment is planned
-and verified (17.76 s home → home at that budget, estimate). When the program's line to the first
+(its part's size is not known) `--job sf1_plc_v4_case_18` is refused. A slow test plans it with an
+assumed 50 mm and a reduced planner budget: its taught moves pass the model check with no error and
+no warning, and every segment is planned and verified. When the program's line to the first
 `From` does not blend (case 18), the start's comment says so.
 
 ## 9. Kinematics, TCP and collision model
@@ -698,8 +697,7 @@ and verified (17.76 s home → home at that budget, estimate). When the program'
   by `Robot.Base_Yaw` about z. The Menagerie root (with its built-in 180°) is placed at exactly that
   pose; §4.2 shows that the Menagerie world frame already equals the Polyscope base frame.
 - `Robot.Base_Yaw` = 180°: the base frame's +x points to world −x, towards machine (a). FK vs `_p`
-  cannot see the yaw; the placement of the taught points decides it (§4.6). *Corrected 2026-10-17:
-  0° was configured until then.*
+  cannot see the yaw; the placement of the taught points decides it (§4.6).
 - Flange frame = DH frame 6 (z out of the flange).
 - TCP = flange · `Tool.TCP_Offset`.
 
@@ -713,13 +711,13 @@ corrected flange.
 
 **Inverse kinematics** (`src/Kinematics/Core.py`, all on these DH parameters). `Solve_IK_Near`
 (numeric, damped least squares) follows one branch, as the controller follows a movel.
-`Solve_IK_Analytic` (closed form, added 2026-10-19) returns every solution of a TCP pose, up to 8,
+`Solve_IK_Analytic` (closed form) returns every solution of a TCP pose, up to 8,
 each labelled by its branch `S± E± W±`: S the sign of the shoulder solution θ1 = atan2(y5, x5) ±
 acos(d4 / r5) + π/2 (wrist centre at (x5, y5), r5 from the base axis), E the sign of the elbow angle,
 W the sign of sin θ5; angles in [−π, π), every joint but the elbow also reachable ± 2π
 (`Nearest_Representative`); each solution is checked by DH FK (1e-9 m / rad). `IK_Branch` names the
-branch of a configuration. Measured 2026-10-19: home and the pick's points of case 17 lie on
-S− E− W+, the drop's on S+ E+ W−. The analytic IK serves the branch proposals for re-teaching (§10.6);
+branch of a configuration. Home and the pick's points of case 17 lie on S− E− W+, the drop's on
+S+ E+ W− (`test_the_taught_points_lie_on_their_measured_branches`). The analytic IK serves the branch proposals for re-teaching (§10.6);
 a solution of a learned `_p` is nominal-DH, millimetres from what the robot's calibrated IK returns.
 
 ### 9.3 TCP and gripper geometry (owner: configured, sourced, do not tune)
@@ -745,8 +743,7 @@ a solution of a learned `_p` is nominal-DH, millimetres from what the robot's ca
 6. **Mounting orientation, `Tool.Mount_Yaw` = 0: confirmed by the owner (2026-10-18).** The manual
    indexes the coupling with the dowel pin next to the wrist connector (p. 21, p. 23 Fig. 3-2) but
    states no angle; the scene uses the Menagerie default orientation, and the fingers open along
-   flange ±x (§4.5). Until 2026-10-18 this was a documented assumption; a statement of 90° made that
-   day was withdrawn. The taught program cannot discriminate the yaw (a consistent station fit
+   flange ±x (§4.5). The taught program cannot discriminate the yaw (a consistent station fit
    exists at 0° and at 90°), so it is configured, never fitted.
 
 ### 9.4 FK accuracy: regression pin + independent sanity bound
@@ -755,9 +752,8 @@ The residual `FK_DH(q) · TCP_config` vs `_p` is kinematic error (§4.3): nomina
 robot's calibration. Two separate checks, with separate jobs:
 
 1. **Regression pin (narrow band, test only):** the measured residuals with the configured TCP,
-   home 1.72 mm / 0.261° and drop_rotate_1 4.02 mm / 0.376°, plus the diagnostic derived-TCP values
-   of §4.3.
-   The band is ±0.01 mm / ±0.001°. These numbers come from this measurement on purpose: the pin
+   home 1.72 mm / 0.261° and drop_rotate_1 4.02 mm / 0.376°, within ±0.01 mm / ±0.001°, and the
+   diagnostic derived-TCP values of §4.3, within ±0.001 mm / ±0.001°. These numbers come from this measurement on purpose: the pin
    detects any change in FK, DH constants, rotvec conversion, the parser or the TCP. It says nothing
    about whether the residual is acceptable.
 2. **Sanity bound (independent of the measurement, enforced at runtime):** derived from the
@@ -775,9 +771,8 @@ robot's calibration. Two separate checks, with separate jobs:
      (`plan_rotation.Check_Learned`, the orientation bound from a robot-only scene at
      `Tool.Opening`, L_tool 176.7 mm → θ_max 3.245°). A point outside stops the script with
      `Kinematics_Error_Cls` and its numbers; the script prints the largest residual otherwise. A
-     point is never accepted silently. Measured 2026-10-21: all 78 points within it, the largest
-     4.04 mm (Waypoint_7) and 0.377° (Waypoint_1). *Corrected 2026-10-21: the orientation maximum
-     was attributed to Waypoint_4.*
+     point is never accepted silently. All 78 points lie within it, the largest 4.04 mm
+     (Waypoint_7) and 0.377° (Waypoint_1).
 
 The largest measured 4.04 mm / 0.377° lies at 40 % / 12 % of the bound.
 
@@ -786,7 +781,7 @@ points and checked at load; at generated via points, and between points along a 
 unmeasured and can only be assumed. The sanity bound allows up to 10 mm at a learned point. The
 budget (§9.8) therefore shows both cases, the measured 4.0 mm and the bound's 10 mm, and
 `KNOWN_ISSUES.md` states that the error is unmeasured at generated via points and between points
-and may be larger there. *Corrected 2026-10-21: the error was said to be known only at home and drop_rotate_1.*
+and may be larger there.
 
 ### 9.5 Orientation comparison (requirement A)
 
@@ -796,8 +791,8 @@ and may be larger there. *Corrected 2026-10-21: the error was said to be known o
   `home_p` has |r| = 3.1393 rad ≈ π, where r and the equivalent −r′ differ component-wise by ≈ 2π
   while describing the same rotation. A test pins exactly this case.
 - `Matrix_To_Rotvec` for **generated** points: θ ∈ [0, π]. θ < 1e-12 → (0, 0, 0). If π − θ < 1e-9
-  the axis sign is chosen so that its first component with |·| > 1e-9 is positive. Learned points A
-  and B are always written verbatim and never normalised.
+  the axis sign is chosen so that its first component with |·| > 1e-9 is positive. A learned point's
+  `_p` is always written verbatim and never normalised.
 
 ### 9.6 Robot and gripper collision geometry; self-collision
 
@@ -805,8 +800,9 @@ and may be larger there. *Corrected 2026-10-21: the error was said to be known o
   geom). Each hull contains its visual part by construction. The Menagerie capsules are removed,
   since they do not necessarily contain the mesh.
 - Coupling: the cylinder of §9.3 in body `base_mount`, which replaces the Menagerie disc.
-- Gripper: the Menagerie 2F-85 collision geoms, at the joint angles that give `Tool.Opening`. These
-  are solved once at scene build by bisection on the simulated equilibrium of the gripper alone; the
+- Gripper: the Menagerie 2F-85 collision geoms, at the joint angles that give the scene's opening:
+  `Tool.Opening`, or for a job's segment its holding opening (`Tool.Holding_Openings`) or the open
+  85 mm (§4.9). These are solved once at scene build by bisection on the simulated equilibrium of the gripper alone; the
   check is that the equality-constraint residual is < 0.1 mm.
 - **Pad-span hull (owner: option (ii)).** One extra collision geom in the gripper `base` body is
   the convex hull of the 32 corners of the four pad boxes at the fixed opening. It covers the space
@@ -846,8 +842,7 @@ and may be larger there. *Corrected 2026-10-21: the error was said to be known o
   `test/Scene/test_margin.py`). That is a superset of the configured margins, and `Check_Clearance`
   filters every contact by the pair's configured margin itself: the larger geom margin, i.e. 20 mm
   for robot↔environment and 5 mm for robot↔robot, or the pair override. Contacts with
-  `dist < margin` are violations; `dist < 0` is a collision. (Corrected 2026-10-17: an earlier
-  revision said MuJoCo itself uses the larger margin.) The configuration is set with `mj_kinematics` +
+  `dist < margin` are violations; `dist < 0` is a collision. The configuration is set with `mj_kinematics` +
   `mj_collision`, with no dynamics.
 - `Check_Clearance(q)` returns every violating pair (bodies, distance, margin), never just a bool.
 - **Static bodies.** MuJoCo never collides two jointless, world-welded bodies (§4.5). The robot
@@ -896,14 +891,13 @@ and may be larger there. *Corrected 2026-10-21: the error was said to be known o
   `mj_geomDistance` for these meshes (`test/Scene/test_margin.py`).
 
   A learned point is taught: `Check_Learned_Point` applies the zone margin to the zone pieces.
-- **Start or goal inside the margin**: `Plan` refuses an end that breaks the generated rule, and
-  `Check_Learned_Point` raises `Clearance_Error_Cls`, which names the point, every violating pair,
-  its distance and the margin. No silent pass, no silent failure, no override. *Corrected
-  2026-10-20: no script holds a learned point to the margins when it reads it. The grasp, load and
-  unload points touch the parts and fixtures or lie inside machine (a): `Check_Learned_Point`
-  refuses 50 of the extract's 78 points at 50 mm and 41 at 85 mm (none of case 17's). The scripts
-  check the FK bound at load (§9.4); the viewers label a point by its rule, and the planner refuses
-  an end that breaks its rule.*
+- **Start or goal inside the margin**: `Plan` refuses an end that breaks the generated rule, naming
+  every violating pair, its distance and the margin. No silent pass, no silent failure, no override.
+  No script holds a learned point to the margins when it reads it: the scripts check the FK bound
+  (§9.4), and the viewers label a point by its rule. The grasp, load and unload points touch the
+  parts and fixtures or lie inside machine (a): `Check_Learned_Point` (the taught rule, raising
+  `Clearance_Error_Cls`; used by the tests) refuses 50 of the extract's 78 points at 50 mm and 41
+  at 85 mm, none of case 17's.
 
 **The taught model check** (`Check_Taught_Model`, `Example/plan_rotation.py`, owner 2026-10-21).
 The station zone, the station boxes and the workspace top are fitted to the taught samples of
@@ -915,10 +909,10 @@ robot ran there, so the model is not valid for the case there) stops the run bef
 `[ERROR]` per move naming the case, the program line, the robot body, the piece (with "fitted to
 the taught samples of cases 17 and 18" for the station boxes and zone pieces) and the depth;
 nothing is planned or written and nothing is refitted. Less room than the taught margin and a robot
-geom above `Clearance.Workspace` are `[WARNING]`s: they are conservative, not unsafe. Case 17
-(measured 2026-10-21): 15 moves, 8866 samples, no error and no warning. Only the job's span is
-checked: case 17's loading moves pass up to 145 mm into machine (a)'s filled interior
-(`KNOWN_ISSUES.md`), where the model is known not to be valid.
+geom above `Clearance.Workspace` are `[WARNING]`s: they are conservative, not unsafe. Case 17's
+15 taught moves pass with no error and no warning (`test/Example/test_plan_rotation.py`). Only the
+job's span is checked: the program's loading moves pass up to 140 mm into machine (a)'s filled
+interior (§4.11, `KNOWN_ISSUES.md`), where the model is known not to be valid.
 
 ### 9.8 Clearance budget
 
@@ -935,7 +929,6 @@ The error is measured at all 78 learned points (at most 4.04 mm at Waypoint_7, 0
 Waypoint_1) and every learned point is checked at load. Case A is the expected case; case B is what
 the checks can guarantee for learned points. At generated via points, and between points along a
 path, the error cannot be measured, so neither case is guaranteed there (`KNOWN_ISSUES.md`).
-*Corrected 2026-10-21: the error was said to be measured only at home and drop_rotate_1.*
 
 Not in the budget, because they are not small bounded errors. Each is listed in `KNOWN_ISSUES.md`:
 
@@ -951,10 +944,9 @@ covers the position only; the budget above is unchanged. Taught segments are not
 
 **Inside the station zone** (§9.7) the environment margin is 5 mm: eps (1 mm) + the measured
 kinematic error at the drop points (4.0 mm) leaves **0 mm for cables**, and case B (10 mm) is **not
-covered**. The zone holds only the holder, the stub and the sill frame (§4.12); the holder's top and the
-stub's depth were fitted to keep the taught segments 5 mm clear of the nominal-DH robot (§4.10,
-§4.13), so the zone margin
-pins consistency with the taught program, not real clearance. A generated path gets it only within
+covered**. The zone holds only the holder, the stub and the sill frame (§4.12); the holder's top
+and the stub's depth were fitted to keep the taught segments 5 mm clear of the nominal-DH robot
+(§4.10, §4.13), so the zone margin pins consistency with the taught program, not real clearance. A generated path gets it only within
 50 mm of a station point.
 
 ## 10. Data formats
@@ -975,15 +967,13 @@ global <name>_q=[j0, j1, j2, j3, j4, j5]      # rad: base, shoulder, elbow, wris
   `URScript_Error_Cls` with the line number. Also an error: a name with `_p` but no `_q` or the
   reverse, a duplicate name, or a vector of the wrong length.
 - **Generated** points get fixed precision: `%.12f` with the leading zero dropped (`0.5` → `.500000000000`,
-  `-0.5` → `-.500000000000`), `-0` written as `0`. Their `_p` comes from DH FK · TCP with
+  `-0.5` → `-.500000000000`); a value that rounds to zero loses its sign (`.000000000000`). Their `_p` comes from DH FK · TCP with
   `Matrix_To_Rotvec` and is informational (§10.4).
 
 **Program excerpt** (`Data/Programs/sf1_plc_v4/sf1_plc_v4_cases_17_18.script`, read by
 `Read_Program_Excerpt` only): lines of the robot program kept verbatim, indentation included: the
 whole body of each case's branch `elif (<n> == switch_1):` (case 17 lines 3397 – 3478, case 18
-3480 – 3561), out of machine (a), the rotation sequence home → … → home, back into machine (a).
-*Corrected 2026-10-18: it held only the rotation sequence.* Column-0
-`#` lines before the first block are the header (source, sha256); a column-0 `# case <n>:` line opens
+3480 – 3561), out of machine (a), the rotation sequence home → … → home, back into machine (a). Column-0 `#` lines before the first block are the header (source, sha256); a column-0 `# case <n>:` line opens
 a case. Each program line is classified as a movej to a learned point
 (`movej(get_inverse_kin(<name>_p, qnear=<name>_q), …)`), a movel to a learned pose, a gripper
 action (`rq_set_pos_spd_for(0 | 255, …)`: open / close) or other (URCap boilerplate, Polyscope
@@ -997,10 +987,8 @@ of its switch branch `(el)if (<n> == <variable>):` up to the next line indented 
 (`Program_Cases`), verbatim. Both headers name the program, its line ranges and its sha256
 (`Read_Extract_Source` reads the name and the hash back). Refused, with nothing written: a case the
 program does not have, a point with only one of `_p` and `_q`, a name defined twice, a case already
-held by another cases file of the folder, a cases file of the folder from another sha256. The
-positions extract it writes is the committed one byte for byte; the cases extract's header was
-rewritten once to the general template (2026-10-21: the old one carried case-17 prose and quoted the
-branch as `n == switch_1`; its program lines, ranges and sha256 are unchanged). With
+held by another cases file of the folder, a cases file of the folder from another sha256. Both
+extracts it writes are the committed ones byte for byte. With
 `SF1_PLC_V4_SCRIPT` naming the program, the tests compare the extracts with the program, byte for
 byte, and re-extracting cases 17 and 18 reproduces both committed files; otherwise those tests are
 skipped.
@@ -1011,16 +999,13 @@ skipped.
 
 ### 10.3 Naming convention
 
-Learned points keep the program's names. Their single source is the program extract
-`Data/Programs/sf1_plc_v4/sf1_plc_v4_positions.urscript` (§10.1): A = `home`, B = `drop_rotate_1`.
+Learned points keep the program's names. Their single source is the positions extract of the job's
+program, `Data/Programs/<program>/<program>_positions.urscript` (§10.1; `sf1_plc_v4` for every
+shipped job). The tests' points A = `home` and B = `drop_rotate_1`.
 Generated via points are `via_<from>_<to>_<nn>`, `nn` from `01`, e.g. `via_home_drop_rotate_1_01`.
 The original robot export of A and B is kept as the test fixture
 `test/URScript/data/SF1_Positions_original.urscript`; a test asserts that its number tokens equal
 the extract's.
-
-*Corrected 2026-10-18: the project names `home_safe` / `drop_rot_01` and the file
-`Data/Positions/SF1_Positions.urscript` that held them are retired; one source of learned points,
-under the robot's names.*
 
 ### 10.4 Motion output (requirement B)
 
@@ -1028,7 +1013,7 @@ under the robot's names.*
 movej(<name>_q, a=1.3962634015954636, v=1.0471975511965976, r=0)
 ```
 
-*Corrected 2026-10-17 (owner):* `a` and `v` are written, as the tokens of the robot program
+`a` and `v` are written, as the tokens of the robot program
 `sf1_plc_v4.script`, so a generated move runs at the speed the duration estimate assumes (§10.6).
 Speed does not change the path of a `movej` with `r=0`. `r=0` is written explicitly because it is
 the one argument that does change the path. Joint targets only, never `movej(p[...])`. `_p` of via
@@ -1041,8 +1026,7 @@ case's first movej to home to its second, inclusive), as its motion program, wri
 every movej and movel in program order, verbatim without indentation (targets, a, v, r), each
 gripper action as a `# Gripper open/close` comment naming the program line, nothing else (no URCap
 code, no PLC I/O, no waits). The points file holds the points it moves to, with the program's
-tokens. *Corrected 2026-10-18: the files held the whole case, loading moves included, for cases 17
-and 18.*
+tokens.
 
 **Exception: station lines copied verbatim.** In a motion sequence (`Write_Motion_Sequence`) the
 station operations of the robot program are copied verbatim (without indentation), with their own
@@ -1052,16 +1036,17 @@ the owner's tested program, not generated output; the gripper nodes are marked b
 ### 10.5 Joint branches (requirement C)
 
 Joint values are never wrapped into [−π, π]. UR joints span ±2π and `movej` goes to the exact
-value. The planner and writer stay on the branch of A and B. A test feeds A and B through parse →
-path (the milestone's trivial path [A, B]) → write and asserts the tokens are unchanged, plus a
-synthetic point with a joint at 4.0 rad that must come out as 4.0.
+value. A generated segment stays on the branches of its two ends; a learned point takes another `_q`
+only through the job's `Point_Configurations` (§8.6), with its source. A test feeds A and B through
+parse → path [A, B] → write and asserts the tokens are unchanged, plus a synthetic point with a
+joint at 4.0 rad that must come out as 4.0.
 
 **One owner-approved exception** (2026-10-19, "q6 representative chosen to avoid an unnecessary
 wrist-3 turn"): in c1 and in the delivered c2 the pick's three station points, Waypoint_18,
 pick_rotate_1 and Waypoint_6, use wrist 3 one turn lower than taught (4.739 − 2π = −1.544 rad;
 the default job's `Point_Configurations`, §8.6, applied by `Configured_Points` of `Example/plan_rotation.py`). The arm pose and the `_p` are
 the program's; only that `_q` token changes (`Replace_Joints`, a generated token), every other token
-is kept. S3 then turns wrist 3 by 1.5 rad instead of 4.7 (home → home 17.50 → 14.66 s, estimate). The
+is kept. S3 then turns wrist 3 by 1.5 rad instead of 4.7. The
 program's pick lines stay verbatim: `get_inverse_kin(<name>_p, qnear=<name>_q)` takes the solution
 nearest the new qnear on the robot, which the first run at reduced speed confirms (`KNOWN_ISSUES.md`).
 No re-teaching: the pose is unchanged. No other joint is turned.
@@ -1070,21 +1055,18 @@ No re-teaching: the pose is unchanged. No other joint is turned.
 real cell). In the default job the drop's three points, drop_rotate_1, Waypoint_4 and Waypoint_5,
 are `Branch: S- E- W-` entries (§8.6): each the nominal-DH IK of its `_p` on that branch, turned to
 the representative nearest the `_q` of the point the output moves to just before it, as configured
-(home → drop_rotate_1 → Waypoint_4 → Waypoint_5; the chain rule that made the c2 drop on
-2026-10-19). The `_p` tokens are the program's; the program's drop lines stay verbatim and take
-the new qnear. *The rule "nearest the point's own taught `_q`" was asked for and measured
-(2026-10-21): it puts wrist 2 one full turn away (−2.903 instead of 3.381 rad at drop_rotate_1),
-not what was tested; the chain rule reproduces the committed c2 to 1e-11 rad.*
+(home → drop_rotate_1 → Waypoint_4 → Waypoint_5), which reproduces the tested c2 to 1e-11 rad
+(`design-decisions.md`). The `_p` tokens are the program's; the program's drop lines stay verbatim
+and take the new qnear.
 
 ### 10.6 Planner and the rotation-sequence output
 
-*Since the machine shift (2026-10-18) S1 – S3 are optimised for time (home → home 23.37 → 17.50 s,
-estimate; 14.66 s since the pick's wrist-3 turn, §10.5, 2026-10-19), not for clearance, and the paths written on the final scene use the space the estimated
-shift frees, keeping 30 mm to machine (a) outside the zone (§9.7). Corrected 2026-10-19: the
-taught S1 – S3 were said to all keep the generated rule; since the station-box rule (§9.7) the taught
-S2 does not: its last leg, Waypoint_3 → Waypoint_18, comes 8.3 mm to the station stub, below the
-floor of 10.1 mm (Waypoint_18's own distance), on 51 samples (`Example/plan_rotation.py` report).
-Under the taught rule it is clear.*
+S1 – S3 are optimised for time, not for clearance: the delivered c2 takes 12.05 s home → home
+against the taught 23.37 s (estimates, `Data/Generated/variants/comparison.md`), using the space
+the estimated machine shift frees while keeping 30 mm to machine (a) outside the zone (§9.7). The
+taught S2 does not keep the generated rule's station-box floor: its last leg, Waypoint_3 →
+Waypoint_18, comes 8.3 mm to the station stub, below the floor of 10.1 mm (Waypoint_18's own
+distance), on 51 samples (`Example/plan_rotation.py` report). Under the taught rule it is clear.
 
 **Segments** (the job, §8.6; the default `sf1_plc_v4_case_17`, case 17, §1). S1 home →
 drop_rotate_1 (holding: case 17's `Tool.Holding_Openings` entry, 50 mm), S2 Waypoint_5 →
@@ -1093,11 +1075,8 @@ real, owner 2026-10-18, §4.9), S3 Waypoint_6 → home (holding); the states are
 case's gripper actions (§8.6). The ends are the program's `_q` tokens, never wrapped, except the
 job's `Point_Configurations` (§10.5): S2 ends and S3 starts with the pick's wrist 3 one turn lower.
 The fixed station points of the generated rule (§9.7), derived from the job's sequence, are case
-17's six: drop_rotate_1, Waypoint_4, Waypoint_5, Waypoint_18, pick_rotate_1, Waypoint_6. *Corrected
-2026-10-18: both cases' eleven, while case 18 was a deliverable.* Segment k of the job plans with
-the seed 20261017 × 1000 + case × 10 + k. *Changed 2026-10-21: the program, case, segments, wrist
-turn and output names were constants of `Example/plan_rotation.py`; the default job writes the
-same output byte for byte (a full run with 8 workers, compared with the committed files).*
+17's six: drop_rotate_1, Waypoint_4, Waypoint_5, Waypoint_18, pick_rotate_1, Waypoint_6. Segment k
+of the job plans with the seed 20261017 × 1000 + case × 10 + k.
 
 **Planner** (`Planner_Cls.Plan`):
 1. Both ends must keep the generated rule (§9.7), else `Planner_Error_Cls`.
@@ -1124,11 +1103,9 @@ generator (`[seed, restart]`, `[seed, 1000 + rank]`) and its arguments, and the 
 the same rule (`Rank_Found`, `Choose_Refined`). With `--workers N` > 1 they run in a pool of N
 spawned processes, each with its own scene (MjModel / MjData) and planner, S1 – S3 at once: all
 prepares, then the 60 restarts, then the 6 refinements, then the 3 final checks. The output is
-byte-identical for every N. Measured 2026-10-19 (M2 Pro, 8 performance cores): planning 857 s with
-1 worker, 463 s with 8 (the 4-worker run of the slow test 549 s in all). The critical path is the
-refinement, 150 dependent steps per candidate (about 120 s alone); 6 at once run about 2.5× slower
-each (8 copies of a fixed planning benchmark: 20.7 s alone, 36.0 s at once; the same with one BLAS
-thread), so more workers cannot shorten it without changing the output.
+byte-identical for every N. Planning takes about 857 s with 1 worker and 463 s with 8 (M2 Pro,
+2026-10-19); the critical path is the refinement, 150 dependent steps per candidate, which more
+workers cannot shorten without changing the output (`design-decisions.md`).
 
 **Objective.** Minimise the estimated duration plus `w` × the clearance penalty; tie-break on fewer
 via points.
@@ -1139,7 +1116,8 @@ via points.
 - Clearance penalty: the sum over the samples of every segment of max(0, 30 mm − d), d the smallest
   robot – environment distance (`Environment_Distance`), for samples whose TCP lies outside the
   station neighbourhood. The hard margins are unchanged; the penalty only prefers clearance above
-  them. `w` = 0.5 s/m (owner, 2026-10-17, after the trade-off recorded in `design-decisions.md`), set in `Example/plan_rotation.py`.
+  them. `w` = 0.5 s/m (owner, 2026-10-17, after the trade-off recorded in `design-decisions.md`),
+  `CONST_PENALTY_WEIGHT` in `Example/plan_rotation.py`; `--penalty-weight` overrides it.
 
 **Final verification.** `Verify_Path` re-checks every segment with the full generated-rule check
 (`Check_Segment`, no early exit, no cache), at most 5 via points, within the joint limits; a path
@@ -1152,7 +1130,6 @@ that fails is never written.
   the extract's `_p` and another `_q` (`Provenance`; delivered, c2: the drop's three on branch
   S− E− W− and the pick's three with wrist 3 one turn lower, §10.5); a learned point with another `_p` is never written. The status lines say why. Both
   files' headers state the machine margin with its source (`Clearance.Machine_Extra`, §8).
-  *Corrected 2026-10-20: the header called every learned point verbatim.*
 - `SF1_Rotation_17_Sequence.script`: **case 17 home → … → home** in program order, in the form of the
   simplified taught program (§10.4), so the two compare line by line: the station lines copied
   verbatim, the gripper nodes as comments, S1 – S3 as generated movej (§10.4) to their via points
@@ -1160,10 +1137,8 @@ that fails is never written.
   into a generated segment is not checked (§8.5), so the start is written as the generated
   `movej(home_q, a=…, v=…, r=0)` with a comment (owner, 2026-10-18). Its header names the station
   lines whose points have another `_q` (delivered, c2: the drop's movel and retreat, the pick and the
-  lift). *Changed 2026-10-21: `Data/Generated/` was c1; it is the default job's output, c2,
-  delivered and tested on the real cell (owner).* *Corrected 2026-10-18: the file
-  held the whole case, the loading moves out of and back into machine (a) verbatim, for cases 17
-  and 18.*
+  lift). `Data/Generated/` is the default job's output, c2, delivered and tested on the real cell
+  (owner, 2026-10-21).
 - The script prints the machine margin with its source and, per segment, taught vs optimised: via points, estimated duration, Σ|Δq|,
   max-joint length, the smallest robot – environment distance and its robot body, the generated-rule
   violations, and the home → home totals (station operations estimated with the same model, movel
@@ -1173,20 +1148,18 @@ that fails is never written.
 variant of case 17 home → home is kept for comparison, each in `<name>/` as `SF1_Rotation_17.urscript`
 and `SF1_Rotation_17_Sequence.script` (the formats above), each file stating its status:
 - `taught`: the program's sequence (the simplified taught program).
-- `b_optimised`: S1 – S3 planned on the program's points: the previous optimisation (17.50 s),
-  byte-identical via points to the output delivered before 2026-10-19.
+- `b_optimised`: S1 – S3 planned on the program's points: an earlier optimisation (17.50 s).
 - `c1`: the previous optimisation, simulation only (§10.5), planned as the job
   `sf1_plc_v4_case_17_c1` plans it (the same points and motion lines).
 - `c2`: **delivered - tested on the real cell (owner, 2026-10-21)**; no further details are
   recorded. The default job `sf1_plc_v4_case_17`: the same points and motion lines as
-  `Data/Generated/`. `c3`: **proposal for re-teaching, not verified on the robot.** *Corrected 2026-10-21:
-  c1 was the delivered output and c2 a proposal.* Both put the drop's three points on
+  `Data/Generated/`. `c3`: **proposal for re-teaching, not verified on the robot.** Both put the drop's three points on
   another IK branch (§9.2): each the nominal-DH IK of its `_p` on the branch (c2 S− E− W−, c3
   S− E− W+), turned to the representative nearest the point before it (home first); the `_p` are the
   program's, the `_q` generated; the pick as in c1. c3 keeps home's branch; c2 flips the wrist
   (θ5 passes π in S1 while the part is held) and Waypoint_5 lies 8° from the wrist singularity
-  (|sin θ5| = 0.14, a movej). Any branch change means re-teaching and re-verifying the drop on the robot
-  at reduced speed; a re-taught program arrives as a new export, extracted as before.
+  (|sin θ5| = 0.14, a movej). c3's branch change means re-teaching and re-verifying the drop on the
+  robot at reduced speed; a re-taught program arrives as a new export, extracted as before.
 
 S1 – S3 of every planned variant are planned as `plan_rotation.py` plans them (the same seeds, budget,
 weight; `Plan_All`, `--workers`), from the points as written (the generated `_q` tokens, 12 decimals).
@@ -1197,7 +1170,7 @@ rest to rest with its line's a and v, r = 0; the taught blends listed as not mod
 the max-joint length (a movel along its solved TCP line), the TCP path length over the checked samples,
 the largest TCP and robot heights (world z; `Robot_Top`), the closest robot – environment pair and
 the pair with the least room above its rule's margin (`Environment_Clearance`), and the samples
-breaking the rule of their move. Measured 2026-10-19 (estimates): taught 23.37 s, b_optimised 17.50,
+breaking the rule of their move. Home → home (estimates): taught 23.37 s, b_optimised 17.50,
 c1 14.66, c2 12.05, c3 13.86; the largest robot height 2.32 / 2.26 / 2.26 / 1.82 / 1.78 m; 0 samples
 breaking the rule in every variant.
 
@@ -1216,8 +1189,7 @@ violating pair.
 each case 17 home → home, read from `Data/Generated/variants/` (§10.6): 1 taught, 2 b_optimised,
 3 c1 (previous optimisation, simulation only), 4 c2 (delivered - tested on the real cell, owner,
 2026-10-21) and 5 c3 (proposal – not verified on the robot), 6 all five one after
-another with the strict comparison. *Corrected 2026-10-19: 1 taught, 2 optimised, 3 both; corrected
-2026-10-18: 1 – 4 were the whole cases 17 and 18, 5 and 6 their rotation sequences.* `--path N`
+another with the strict comparison. `--path N`
 selects, without it the catalogue is printed and a number asked; `--list` prints it. Read through
 `Read_Motion_Sequence`, the one reader of the motion-sequence format.
 - **Motion.** The path starts at its first target, home. A movej is joint-linear; a movel moves the TCP on the straight line to the DH TCP of its
@@ -1239,7 +1211,7 @@ selects, without it the catalogue is printed and a number asked; `--list` prints
   variant's own station points. Entry 6 also prints the strict comparison: S1 – S3 of every variant
   judged by the generated rule. `--skip-check` replays without the check (labelled so). The overlay
   shows the path, the variant with its estimated home → home time (c3 marked "proposal - not
-  verified on the robot", `Variant_Title`, also printed; c2 unmarked since 2026-10-21), the move and its section, the gripper
+  verified on the robot", `Variant_Title`, also printed; c2 unmarked), the move and its section, the gripper
   state and width, the estimated elapsed time and the label.
 
 **`replay_rotation.py --job <name> [--out DIR]`** (owner, 2026-10-21) replays a job's output instead
