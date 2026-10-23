@@ -18,6 +18,7 @@ workspace for flexible small-batch production with high process variability.
 machine (a), the tables, the side cabinet and, in orange, the regrasp station. The environment is
 the collision model with its configured corrections, not the original CAD.
 
+> [!WARNING]
 > **Simulation passed ≠ safe on the robot.** Every path in this repository is verified in a
 > simulation model; only c2 has been tested on the real cell (owner, 2026-10-21). Run any other
 > path on the real cell at reduced speed first.
