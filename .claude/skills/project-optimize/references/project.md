@@ -1,7 +1,8 @@
 # project-optimize: project reference for UR_PathGen_SF_1
 
-This project's part of optimization work. The generic skill is personal
-(`~/.claude/skills/project-optimize/`); this file overrides it where they differ. This folder has no
+This project's part of optimization work. The generic skill is optional and private
+(`rparak/rp-claude-skills`, cloned to `~/.claude/skills/project-optimize/`); this file overrides it
+where they differ, and its outputs and comparisons hold without it. This folder has no
 `SKILL.md` on purpose: a personal skill wins over a project skill of the same name (Claude Code docs,
 *Resolve skills that share a name*), so a copy here would be ignored and drift.
 

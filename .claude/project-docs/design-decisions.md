@@ -1015,10 +1015,12 @@ inside machine (a).
 Pinned by `test/Example/test_plan_rotation.py::test_the_taught_moves_of_case_17_pass_the_model`,
 `test_a_taught_line_inside_the_model_stops_the_run`, `test_a_taught_move_above_the_workspace_top_is_a_warning_only`.
 
-## The skills are personal and generic; this repository keeps only their project layer
+## The skills are optional, private and generic; this repository keeps only their project layer
 
-**Decision.** project-style-rpx, feature-manager, project-optimize and readme-writer live in
-`~/.claude/skills/<skill>/` and hold nothing specific to SF1. This repository keeps
+**Decision.** project-style-rpx, feature-manager, project-optimize and readme-writer are optional
+and private: they live in `rparak/rp-claude-skills`, cloned to `~/.claude/skills/<skill>/`, and
+hold nothing specific to SF1. The project installs, runs and passes its tests without them; only
+the style checker and the README checker need them. This repository keeps
 `.claude/skills/<skill>/references/` only: `project.md` per skill, `urscript.md` and `mjcf.md`, and
 the style checker's configuration `check_style.json` (SPEC §6, §13). No `SKILL.md` here.
 
@@ -1031,11 +1033,13 @@ before and after the move (37 files, 0 issues, 2026-10-23).
 
 **Alternatives.** Keeping full copies here: they would be ignored while the personal skills exist,
 and drift. Keeping everything here and nothing personal: every new project would copy and fork the
-rules. A plugin: the same separation, with namespaced names; possible later
-(`~/.claude/skills/README.md`).
+rules. Vendoring the generic skills into this repository: cancelled by the owner (2026-10-23),
+because the repository is public and the generic skills stay private. A plugin: the same
+separation, with namespaced names; possible later (`~/.claude/skills/README.md`).
 
-**Revisit if** someone other than the owner works on this repository: the checker and the generic
-rules are not in its git history, so they need the skills (or a plugin) installed.
+**Revisit if** someone other than the owner works on this repository: the checkers and the generic
+rules are not in its git history, so running the checkers needs access to the private skills (or a
+plugin); the suite does not.
 
 Pinned by `test/Docs/test_skills.py::test_the_repository_skill_folders_hold_only_references`,
 `test_the_style_checker_configuration_checks_every_file`.

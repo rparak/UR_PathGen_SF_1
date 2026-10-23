@@ -448,7 +448,8 @@ requirements.txt          pinned
 .claude/skills/feature-manager/references/project.md
 .claude/skills/project-optimize/references/project.md
 .claude/skills/readme-writer/references/project.md
-                          the project layer of the personal skills in ~/.claude/skills/ (no SKILL.md here, §13)
+                          the project layer of the optional private skills (rparak/rp-claude-skills,
+                          cloned to ~/.claude/skills/; no SKILL.md here, §13)
 CAD/SF1_Environment.stl                       source, unchanged (visual mesh)
 CAD/Collision/SF1_Environment_Collision.npz   convex pieces (vertices, faces, piece → component, body)
 CAD/Collision/SF1_Environment_Collision.json  manifest (§7.6)
@@ -607,7 +608,8 @@ configuration, as for component overrides.
 
 ## 8. Cell configuration — `Configuration/Cell_SF1.yaml`
 
-The loader rules follow `references/yaml.md` of the style skill. A REQUIRED field that is missing,
+The loader rules are these (the configuration rules of the optional private style skill,
+`references/yaml.md` there, which this repository does not hold). A REQUIRED field that is missing,
 or a value that is invalid, fails the load; all problems are collected first and named together. An
 unknown key is reported as a WARNING. Every field is read by code whose behaviour it changes. No
 field without a reader.
@@ -1267,8 +1269,9 @@ deselected by `-m "not slow"`.
 | `test/Install/test_install.py` | `bash -n`, the OS detection, the Python 3.11 resolution (`python3` never called), the hash verification and the log format, under a hermetic `PATH`. |
 | `test/Docs/test_skills.py` | The repository keeps only the skills' project layer (`.claude/skills/<skill>/references/`, no `SKILL.md`), and the style checker's configuration names the holder, checks `src`, `Example` and `test`, and excludes nothing (§13). |
 
-The style checker's own tests are part of the personal skill
-(`~/.claude/skills/project-style-rpx/scripts/test_check_style.py`), outside this repository.
+The style checker and its own tests are part of the optional private skill
+(`~/.claude/skills/project-style-rpx/scripts/test_check_style.py`), outside this repository; the
+suite does not need them.
 
 Expected numbers from the tests are taken from the measurements above or from the configuration,
 never from the code under test.
@@ -1288,16 +1291,18 @@ path: written, tested only against stubs, **unverified**.
 
 ## 13. Skills (`.claude/skills/`)
 
-The skills are personal and generic (`~/.claude/skills/<skill>/`, outside this repository and its
-git history). This repository keeps only their project layer, `.claude/skills/<skill>/references/`,
+The skills are optional, private and generic (`rparak/rp-claude-skills`, cloned to
+`~/.claude/skills/<skill>/`, outside this repository and its git history). The project installs,
+runs and passes its tests without them; only the style checker and the README checker need them.
+This repository keeps only their project layer, `.claude/skills/<skill>/references/`,
 and never a `SKILL.md`: a personal skill wins over a project skill of the same name (Claude Code
 docs, *Resolve skills that share a name*), so a copy here would be ignored and drift. Pinned by
 `test/Docs/test_skills.py`.
 
 - **project-style-rpx**: the code, shell, YAML and Markdown conventions; this repository's rules in
   `references/project.md`, the URScript and MJCF pages `urscript.md` and `mjcf.md`, and the
-  checker's configuration `check_style.json` (holder JIC Smart Factory; `check_style.py` checks
-  `src`, `Example` and `test`).
+  checker's configuration `check_style.json` (holder JIC Smart Factory; `check_style.py`, in the
+  private skill, checks `src`, `Example` and `test`).
 - **feature-manager**: how a feature, a behaviour change or a bug fix is added; the robotics review
   checklist is in `references/project.md`.
 - **project-optimize**: cleanup, speed, complexity and reliability work that does not change

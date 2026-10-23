@@ -32,8 +32,9 @@ import json
 Description:
     Initialization of constants.
 
-    The skills are personal (~/.claude/skills/); this repository keeps only their project layer
-    (SPEC §6, §13). These tests pin that layer, not the personal skills, which live outside git.
+    The skills are optional and private (rparak/rp-claude-skills, cloned to ~/.claude/skills/); this
+    repository keeps only their project layer (SPEC §6, §13). These tests pin that layer, not the
+    private skills, which live outside this repository; they pass without them.
 """
 # The skills whose project layer this repository keeps, and the files each holds.
 #   Unit [Dict<string, List<string>>]

@@ -1,8 +1,10 @@
 # project-style-rpx: project reference for UR_PathGen_SF_1
 
-The conventions of this repository that the generic skill (`~/.claude/skills/project-style-rpx/`)
-leaves to the project: what `.claude/project-docs/SPEC.md` decided, as the code follows it. It
-overrides the generic skill where they differ. This folder has no `SKILL.md` on purpose: a personal
+The conventions of this repository that the generic skill leaves to the project: what
+`.claude/project-docs/SPEC.md` decided, as the code follows it. The generic skill is optional and
+private (`rparak/rp-claude-skills`, cloned to `~/.claude/skills/project-style-rpx/`); its checker
+`check_style.py` is part of it. This file overrides the generic skill where they differ, and its
+rules hold without it. This folder has no `SKILL.md` on purpose: a personal
 skill wins over a project skill of the same name (Claude Code docs, *Resolve skills that share a
 name*), so a copy here would be ignored and drift. ✅ = enforced (checker, test, loader); 📄 =
 documentation only.
@@ -18,7 +20,8 @@ Project-only pages in this folder: **urscript.md** (the Polyscope `*.urscript` v
   `../Example/build_collision.py` for a script, `../test/URScript/test_core.py` for a test.
 - `check_style.json` (this folder): class roots `src`, `Example`; test root `test`; check roots
   `src`, `Example`, `test`; no exclusions. Pinned by `test/Docs/test_skills.py`.
-- Command (CLAUDE.md): `.venv/bin/python ~/.claude/skills/project-style-rpx/scripts/check_style.py src Example test`.
+- Command (CLAUDE.md; needs the optional private skill):
+  `.venv/bin/python ~/.claude/skills/project-style-rpx/scripts/check_style.py src Example test`.
 
 ## Layout and layers (SPEC §6)
 

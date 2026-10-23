@@ -27,7 +27,8 @@ global <name>_q=[j0, j1, j2, j3, j4, j5]
 `src/URScript/Core.py` holds the only readers (`Read_URScript`; for the `*.script` files
 `Read_Program_Excerpt` and `Read_Motion_Sequence`) and the only writers (`Write_URScript`,
 `Write_Movej_Sequence`, `Write_Motion_Sequence`). No other module parses or formats these lines - not a
-script, not a test helper (a test compares against literal text; generic skill references/structure.md > One reader and writer per file format). A
+script, not a test helper (a test compares against literal text; the rule "One reader and writer per file format" of the
+optional private style skill, references/structure.md there). A
 program line's `a`, `v` and `r` reach a script as `Program_Line_Str.A_Token` / `V_Token` / `R_Token`.
 
 ## The reader is strict ✅

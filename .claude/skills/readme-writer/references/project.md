@@ -1,7 +1,9 @@
 # readme-writer: project reference for UR_PathGen_SF_1
 
-The README decisions of this repository. The generic skill is user level
-(`~/.claude/skills/readme-writer/`); this file overrides it where they differ. This folder has no
+The README decisions of this repository. The generic skill is optional and private
+(`rparak/rp-claude-skills`, cloned to `~/.claude/skills/readme-writer/`); its checker
+`check_readme.py` is part of it. This file overrides it where they differ, and its rules hold
+without it. This folder has no
 `SKILL.md` on purpose: a personal skill wins over a project skill of the same name (Claude Code
 docs, *Resolve skills that share a name*), so a copy here would be ignored and drift.
 
@@ -116,10 +118,10 @@ Commands:
 
 ```bash
 .venv/bin/python -m pytest test/Docs/test_readme.py test/Example/test_make_readme_figures.py
-.venv/bin/python ~/.claude/skills/readme-writer/scripts/check_readme.py README.md
+.venv/bin/python ~/.claude/skills/readme-writer/scripts/check_readme.py README.md   # needs the optional private skill
 ```
 
-Known checker results that are decisions, not defects: the left-aligned `--path` column, the two
+Known checker results (of the private `check_readme.py`) that are decisions, not defects: the left-aligned `--path` column, the two
 static badges (checked against `install.sh` and `requirements.txt`), the Mermaid block (verify on
 GitHub after push; no `mmdc` installed), and the six `/tmp/...` warnings (`local-paths`): each is a
 documented output directory of a command (`--out /tmp/<name>`, `--screenshots /tmp/sf1_c2`, the
