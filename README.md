@@ -666,7 +666,9 @@ are measured again, not copied.
 **Limits of the current procedure.**
 
 - One job per run.
-- The generated moves use SF1's `movej` a and v.
+- The generated moves use SF1's `movej` a = 1.396 rad/s² (80 °/s²) and v = 1.047 rad/s (60 °/s),
+  fixed in code. A job whose taught segment moves use another a or v is refused: choose other
+  segments, or re-teach them at that speed.
 - The variants, the replay catalogue and the README figures are written for case 17.
 
 </details>
