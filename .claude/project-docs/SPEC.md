@@ -980,7 +980,10 @@ whole body of each case's branch `elif (<n> == switch_1):` (case 17 lines 3397 �
 a case. Each program line is classified as a movej to a learned point
 (`movej(get_inverse_kin(<name>_p, qnear=<name>_q), …)`), a movel to a learned pose, a gripper
 action (`rq_set_pos_spd_for(0 | 255, …)`: open / close) or other (URCap boilerplate, Polyscope
-markers). Strict: an unknown gripper position, a repeated or empty case is an error.
+markers). A move keeps its `a`, `v` and `r` tokens as written (`A_Token`, `V_Token`, `R_Token`;
+empty when the line has none): the station time, the speed check of a job's taught moves and the
+start's blend are read from them, never by parsing the line again. Strict: an unknown gripper
+position, a repeated or empty case is an error.
 
 **Making the extracts** (`Example/extract_program.py --program PATH --cases N [N ...] --out
 Data/Programs/<name>/`, owner 2026-10-21; writers `Extract_Positions` and `Extract_Cases` in

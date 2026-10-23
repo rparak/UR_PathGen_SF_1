@@ -54,11 +54,12 @@ CONST_NUMBER = r'-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?'
 CONST_POSE_LINE = re.compile(r'^global\s+([A-Za-z_][A-Za-z0-9_]*)_p\s*=\s*p\[(.*)\]\s*$')
 CONST_JOINT_LINE = re.compile(r'^global\s+([A-Za-z_][A-Za-z0-9_]*)_q\s*=\s*\[(.*)\]\s*$')
 # Program-excerpt lines: a block marker, a movej to a learned point by its pose with qnear (as
-# Polyscope writes it), a movel to a learned pose, and a Robotiq gripper position command.
+# Polyscope writes it), a movel to a learned pose, and a Robotiq gripper position command. A move
+# captures its target, then its a, v and (movej) r tokens when the line has them.
 #   Unit [Pattern]
 CONST_CASE_MARKER = re.compile(r'^# case (\d+):(?: lines (\d+)-\d+)?')
-CONST_PROGRAM_MOVEJ = re.compile(r'^\s*movej\(get_inverse_kin\(([A-Za-z_]\w*)_p, qnear=\1_q\)(?:, a=[^,()]+, v=[^,()]+(?:, r=[^,()]+)?)?\)\s*$')
-CONST_PROGRAM_MOVEL = re.compile(r'^\s*movel\(([A-Za-z_]\w*)_p(?:, a=[^,()]+, v=[^,()]+)?\)\s*$')
+CONST_PROGRAM_MOVEJ = re.compile(r'^\s*movej\(get_inverse_kin\(([A-Za-z_]\w*)_p, qnear=\1_q\)(?:, a=([^,()]+), v=([^,()]+)(?:, r=([^,()]+))?)?\)\s*$')
+CONST_PROGRAM_MOVEL = re.compile(r'^\s*movel\(([A-Za-z_]\w*)_p(?:, a=([^,()]+), v=([^,()]+))?\)\s*$')
 CONST_PROGRAM_GRIPPER = re.compile(r'^\s*rq_set_pos_spd_for\((\d+), \d+, \d+, "\d+"\)\s*$')
 # Robotiq position commands of the program: 0 opens fully, 255 closes (on the part).
 #   Unit [Dict<string, string>]
@@ -138,6 +139,12 @@ class Program_Line_Str:
     # gives none).
     #   Unit [int]
     Line: int = 0
+    # The acceleration, speed and blend radius tokens of a move as written ('' when the line has
+    # none; a movel has no blend).
+    #   Unit [string] (rad/s^2, rad/s, m for movej; m/s^2, m/s for movel)
+    A_Token: str = ''
+    V_Token: str = ''
+    R_Token: str = ''
 
 
 @dataclass
@@ -307,7 +314,8 @@ def Read_Program_Excerpt(text: str) -> tp.Dict[int, tp.List[Program_Line_Str]]:
     Description:
         Parse a program excerpt into its cases. Before the first '# case <n>:' line only column-0
         comments are allowed; inside a case every line is a program line, classified as a movej or
-        movel to a learned point, a gripper open/close or other. Strict: an unknown gripper position,
+        movel to a learned point (with its a, v and r tokens as written: the one reader of them), a
+        gripper open/close or other. Strict: an unknown gripper position,
         a repeated case or a case without lines is an error.
 
     Args:
@@ -335,9 +343,10 @@ def Read_Program_Excerpt(text: str) -> tp.Dict[int, tp.List[Program_Line_Str]]:
         movej, movel, gripper = CONST_PROGRAM_MOVEJ.match(raw), CONST_PROGRAM_MOVEL.match(raw), CONST_PROGRAM_GRIPPER.match(raw)
         line = first + len(cases[current]) if first else 0
         if movej is not None:
-            cases[current].append(Program_Line_Str('movej', movej.group(1), raw, line))
+            cases[current].append(Program_Line_Str('movej', movej.group(1), raw, line, movej.group(2) or '', movej.group(3) or '',
+                                                   movej.group(4) or ''))
         elif movel is not None:
-            cases[current].append(Program_Line_Str('movel', movel.group(1), raw, line))
+            cases[current].append(Program_Line_Str('movel', movel.group(1), raw, line, movel.group(2) or '', movel.group(3) or ''))
         elif gripper is not None:
             if gripper.group(1) not in CONST_GRIPPER_ACTIONS:
                 raise URScript_Error_Cls('Line %d sets the gripper to position %s; only 0 (open) and 255 (close) are '
@@ -812,7 +821,7 @@ def Resolve_Sequence(lines: tp.Sequence[Program_Line_Str], segments: tp.Sequence
             raise URScript_Error_Cls('Segment %s (%s -> %s) contains the gripper action at %s (%s). A generated segment runs at '
                                      'one gripper state; end it before the action.' % (name, start, goal, Where(crossed[0]),
                                                                                         lines[crossed[0]].Raw.strip()))
-        if bounds and lines[i_from].Kind == 'movej' and ', r=' in lines[i_from].Raw:
+        if bounds and lines[i_from].Kind == 'movej' and lines[i_from].R_Token:
             raise URScript_Error_Cls('Segment %s (%s -> %s): the station line at %s blends into it (%s); a blend into a generated '
                                      'segment is not checked (SPEC 8.5).' % (name, start, goal, Where(i_from), lines[i_from].Raw.strip()))
         before = [target for index, target in actions if index < i_from]

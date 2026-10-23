@@ -390,6 +390,28 @@ def test_a_motion_sequence_writes_generated_moves_program_lines_and_comments():
         Write_Motion_Sequence([('movel', 'x')], [], '1', '1')
 
 
+def test_the_excerpt_reader_keeps_each_moves_a_v_and_r_tokens():
+    """
+    Description:
+        A move of a program excerpt carries its a, v and r tokens exactly as written, and '' for
+        each one the line does not have (a movel has no blend); a gripper line and other lines carry
+        none. Scripts read these instead of parsing the line again (one reader per format).
+    """
+
+    text = ('# case 17: test\n'
+            '        movej(get_inverse_kin(a_p, qnear=a_q), a=1.3962634015954636, v=1.0471975511965976, r=0.05)\n'
+            '        movej(get_inverse_kin(b_p, qnear=b_q), a=1.4, v=1.05)\n'
+            '        movej(get_inverse_kin(c_p, qnear=c_q))\n'
+            '        movel(d_p, a=1.2, v=0.25)\n'
+            '        movel(e_p)\n'
+            '        rq_set_pos_spd_for(0, 255, 255, "1")\n'
+            '        sleep(0.5)\n')
+    lines = Read_Program_Excerpt(text)[17]
+    assert [(line.Target, line.A_Token, line.V_Token, line.R_Token) for line in lines] == [
+        ('a', '1.3962634015954636', '1.0471975511965976', '0.05'), ('b', '1.4', '1.05', ''), ('c', '', '', ''),
+        ('d', '1.2', '0.25', ''), ('e', '', '', ''), ('open', '', '', ''), ('', '', '', '')]
+
+
 def test_program_entries_keep_the_moves_and_comment_the_gripper():
     """
     Description:

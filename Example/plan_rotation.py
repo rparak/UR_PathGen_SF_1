@@ -32,8 +32,6 @@ if CONST_SRC not in sys.path:
 import argparse
 # Math (Mathematical functions)
 import math
-# Re (Regular expressions)
-import re
 # Glob (Unix style pathname pattern expansion)
 import glob
 # Textwrap (Text wrapping)
@@ -126,11 +124,6 @@ CONST_MACHINE_INTERIOR = (1638,)
 CONST_LABEL_CLEAR = 'clearance kept (%s rule)'
 CONST_LABEL_VIOLATED = 'CLEARANCE VIOLATED (%s rule)'
 CONST_LABEL_INVALID = 'model not valid here (machine (a) interior)'
-# The blend radius token, and the acceleration and speed tokens, of a program move (absent = no
-# blend; a and v are required of every station line, whose duration is estimated from them).
-#   Unit [Pattern]
-CONST_BLEND = re.compile(r', r=([^,()]+)\)\s*$')
-CONST_SPEED = re.compile(r', a=([^,()]+), v=([^,()]+)')
 # Cap of the reported robot - environment distance.
 #   Unit [float] (m)
 CONST_REPORT_DISTMAX = 0.200
@@ -265,13 +258,12 @@ def Load_Job_Plan(job: str) -> Job_Plan_Str:
                                           % (loaded.Name, point, ', '.join(order)))
     for station in sequence.Stations:
         for line in station:
-            if line.Kind in ('movej', 'movel') and CONST_SPEED.search(line.Raw) is None:
+            if line.Kind in ('movej', 'movel') and not line.A_Token:
                 raise Configuration_Error_Cls('The station line at program line %d has no a and v, so its duration cannot be '
                                               'estimated: %s' % (line.Line, line.Raw.strip()))
     for segment in sequence.Segments:
         for line in segment.Lines:
-            speed = CONST_SPEED.search(line.Raw) if line.Kind == 'movej' else None
-            if line.Kind == 'movej' and (speed is None or (float(speed.group(1)), float(speed.group(2)))
+            if line.Kind == 'movej' and (not line.A_Token or (float(line.A_Token), float(line.V_Token))
                                          != (float(CONST_MOVEJ_A_TOKEN), float(CONST_MOVEJ_V_TOKEN))):
                 raise Configuration_Error_Cls('Segment %s: the taught line at program line %d moves at another a and v than the '
                                               'generated moves are written with (a=%s, v=%s, src/Planner/Core.py): %s. A job of '
@@ -453,7 +445,7 @@ def Station_Duration(plan: Job_Plan_Str, points: tp.Dict) -> float:
         for line in station:
             if line.Kind not in ('movej', 'movel'):
                 continue
-            a, v = (float(token) for token in CONST_SPEED.search(line.Raw).groups())
+            a, v = float(line.A_Token), float(line.V_Token)
             if line.Kind == 'movej':
                 total += Estimate_Duration([points[previous].Q, points[line.Target].Q], a, v)
             else:
@@ -481,9 +473,9 @@ def Sequence_Entries(plan: Job_Plan_Str, vias: tp.Dict[str, tp.List[str]]) -> tp
     """
 
     sequence, first = plan.Sequence, plan.Sequence.Segments[0]
-    blend = CONST_BLEND.search(sequence.Lines[0].Raw)
+    blend = sequence.Lines[0].R_Token
     start = ('Start at %s (generated, r=0): the program\'s line blends (r=%s) into %s, and a blend into a generated segment is '
-             'not checked' % (first.From, blend.group(1), first.Name) if blend else
+             'not checked' % (first.From, blend, first.Name) if blend else
              'Start at %s (generated, r=0), as the program\'s line (no blend)' % first.From)
     entries = [('comment', start), ('movej', first.From)]
     for k, segment in enumerate(sequence.Segments):

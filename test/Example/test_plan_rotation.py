@@ -25,6 +25,8 @@ import os
 import sys
 # Subprocess (Subprocess management)
 import subprocess
+# Shutil (High-level file operations)
+import shutil
 # Dataclasses (Data Classes)
 import dataclasses
 # Importlib (Import machinery)
@@ -481,6 +483,44 @@ def test_a_job_the_program_cannot_hold_is_refused(root, tmp_path, field, value, 
     result = _Run(root, tmp_path, '--job', str(job), '--out', str(tmp_path / 'out'))
     assert result.returncode == 1
     assert re.search(r'^\[ERROR\] .*' + fragment, result.stdout, re.M), result.stdout
+    assert not (tmp_path / 'out').exists()
+
+
+# Edits of case 17's lines in the cases extract (program lines 3414 and 3437, the first occurrence of
+# each text) that the default job cannot plan, each with the refusal's words: a station line without
+# a and v (its duration cannot be estimated), and a taught movej of S2 at another a than the
+# generated moves are written with.
+#   Unit [List<Tuple<string, string, string>>]
+CONST_BAD_PROGRAM_LINES = [('movel(Waypoint_4_p, a=1.2, v=0.25)', 'movel(Waypoint_4_p)',
+                            'The station line at program line 3414 has no a and v'),
+                           ('Waypoint_3_q), a=1.3962634015954636,', 'Waypoint_3_q), a=1.0,',
+                            'Segment S2: the taught line at program line 3437 moves at another a and v')]
+
+
+@pytest.mark.parametrize('old, new, fragment', CONST_BAD_PROGRAM_LINES)
+def test_a_program_line_the_job_cannot_time_is_refused(root, tmp_path, old, new, fragment):
+    """
+    Description:
+        In a copy of the repository whose cases extract has one of case 17's lines edited, the
+        default job is refused by plan_rotation.py with exit 1 and a sentence naming the program line,
+        before anything is planned or written: a station line needs its a and v for the station time,
+        and a taught segment movej must move at the a and v the generated moves are written with.
+    """
+
+    copy = str(tmp_path / 'repository')
+    for folder in ('src', 'Example', 'Configuration', 'Data'):
+        shutil.copytree(os.path.join(root, folder), os.path.join(copy, folder), ignore=shutil.ignore_patterns('__pycache__'))
+    for folder in ('models', 'CAD'):
+        os.symlink(os.path.join(root, folder), os.path.join(copy, folder))
+    path = os.path.join(copy, 'Data', 'Programs', 'sf1_plc_v4', 'sf1_plc_v4_cases_17_18.script')
+    with open(path, encoding='utf-8') as handle:
+        text = handle.read()
+    assert old in text
+    with open(path, 'w', encoding='utf-8') as handle:
+        handle.write(text.replace(old, new, 1))
+    result = _Run(copy, tmp_path, '--out', str(tmp_path / 'out'))
+    assert result.returncode == 1
+    assert re.search(r'^\[ERROR\] ' + fragment, result.stdout, re.M), result.stdout
     assert not (tmp_path / 'out').exists()
 
 
