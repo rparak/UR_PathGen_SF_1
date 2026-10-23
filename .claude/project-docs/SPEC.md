@@ -1,55 +1,21 @@
 # UR_PathGen_SF_1 — Specification
 
-Status: **rev. 4, approved by the owner (2026-10-17)** with the amendments listed under "Approval"
-below, which are applied during implementation.
-Numbers marked *measured* come from scratch-folder experiments run on 2026-10-17 against the files
-named; they are re-measured by the tests once the skeleton exists.
-
-Approval (2026-10-17), applied during implementation:
-- **Q9 → (a).** The `base – upper_arm_link` self margin is 0 mm, for that pair only. The test must
-  establish the true minimum, not a grid minimum: a 1° grid moves the upper-arm end by ≈ 10 mm,
-  more than the 2.3 mm found. It runs a coarse grid over `shoulder_pan` ∈ [0, 2π) (periodic) ×
-  `shoulder_lift` within its limits, then local minimisation (scipy) from the 20 lowest cells.
-  It asserts the refined minimum > 0 and pins it as a regression value.
-- Degenerate components (§7.2) are thickened along the plane normal from the SVD of their vertices.
-  A mean face normal is not used, because the STL winding is inconsistent and normals can cancel.
-  Collinear components are thickened in two orthogonal directions. Both cases are tested.
-- §4.5 quotes the exact MuJoCo error for the > 200 000-face STL.
-- The time of one `Check_Clearance(q)` with the full environment collision set (mean and p95 over
-  1000 random `q`) and the collision geom count are measured. They decide whether the §7.2 merge
-  pass is needed.
-- If A or B violates the margin against the full environment set: **stop and report the pairs**.
-  `Hull_Excess_Max`, `eps` and the margins are never tuned to make it pass.
-
-Rev. 4 (owner review of rev. 3):
-- Elbow limit ±180° is a load-checked precondition (§8, §9.6).
-- Clearance failures at A/B fail the test (§11).
-- Conservativeness uses surface samples (§7.3).
-- Prototype measurements were added: pair distances, margin accuracy, compile time (§4.5).
-- Option (ii) pad-span hull is adopted (§9.6).
-- The geodesic angle uses atan2 (§9.5).
-- Static bodies (§9.7), degenerate STL components (§7.2) and loading the visual mesh (§5) are
-  specified.
-
-Rev. 3 (owner review): the TCP is configured, not derived (§9.3). The coupling was measured on the
-robot (§4.4). The sanity bound and the clearance budget are made consistent (§9.4, §9.8).
-`Mount_Yaw` = 0 is a documented assumption (§9.3). MuJoCo vs DH FK is checked at 1e-9 over random
-joint vectors (§11). The demo is either clearance-checked or labelled visual-only (§2). Gripper
-coverage of the carried part is stated as it actually is (§9.6).
+Status: the current specification, approved by the owner (rev. 4, 2026-10-17) and kept current
+since; its history is in git. A number marked *measured* names what it was measured on; where a test
+pins it, the test is named.
 
 ## 1. Goal
 
 Generate and verify, in simulation, a collision-free joint-space path for the UR10e of cell SF1
 before it is run on the real robot.
 
-**Current goal (owner, 2026-10-17): optimise the 90° part rotation (regrasp) sequence** of the robot
-program `sf1_plc_v4.script`. The station operations stay verbatim; the transfer segments between
-them (S1 home → drop, S2 retreat → approach, S3 lift → home) are generated with the planner of §10.6
-and compared with the taught baseline. The A → B planner below is the tool for that. The holder at
-the station exists so that the robot can grip the part from the other side.
+**Current goal (owner): optimise the 90° part rotation (regrasp) sequence** of the robot program
+`sf1_plc_v4.script`. The station operations stay verbatim; the transfer segments between them (S1
+home → drop, S2 retreat → approach, S3 lift → home) are generated with the planner of §10.6 and
+compared with the taught baseline. The holder at the station exists so that the robot can grip the
+part from the other side.
 
-**The only deliverable (owner, 2026-10-18) is case 17 from home to home**, this taught sequence and
-its optimised version:
+**The deliverable is case 17 from home to home**, this taught sequence and its optimised version:
 
 ```
 movej home (r=0.01) → Waypoint_1 (r=0.05) → drop_rotate_1 → movel Waypoint_4 → [gripper open]
@@ -58,14 +24,18 @@ movej home (r=0.01) → Waypoint_1 (r=0.05) → drop_rotate_1 → movel Waypoint
 ```
 
 Optimised: S1 (home → drop_rotate_1), S2 (Waypoint_5 → Waypoint_18) and S3 (Waypoint_6 → home)
-replaced, the station operations verbatim. *Corrected 2026-10-18: the deliverables were cases 17
-and 18, each as the whole case including the loading moves into and out of machine (a).* **Case 18
-and the other 19 cases of the program remain as ground truth only:** the program extract (every
-learned point and the whole cases 17 and 18, §10.1) and the tests that validate the model against
-real program segments (the replay of cases 17 and 18, §11; the penetration reference of all 21
-cases, `test/Scene/test_program.py`; the placement of the grasp points, §4.6) are kept. Nothing is planned, written or replayed for them.
+replaced, the station operations verbatim. The delivered version is **c2**, the output of the
+default job `sf1_plc_v4_case_17` in `Data/Generated/`, tested on the real cell by the owner
+(2026-10-21); c1 is the job `sf1_plc_v4_case_17_c1` (§8.6, §10.6).
 
-Long-term pipeline:
+**Case 18 is not a deliverable.** Its job `sf1_plc_v4_case_18` exists to show that another case
+plans without code changes; nothing of it is committed, and it is refused until
+`Tool.Holding_Openings` has an entry for it. Cases 17, 18 and the other 19 cases of the program are
+ground truth: the program extract (every learned point and cases 17 and 18, §10.1) and the tests
+that validate the model against real program segments (the taught replay, §11; the penetration
+reference of all 21 cases, `test/Scene/test_program.py`; the placement of the grasp points, §4.6).
+
+Pipeline:
 
 1. Read learned robot positions from a Polyscope `*.urscript` variable file
    (`global <name>_p=p[...]`, `global <name>_q=[...]`).
@@ -73,10 +43,10 @@ Long-term pipeline:
 3. Write the via points in the same format, plus a `movej(...)` sequence, ready to paste into the
    robot program.
 
-**Simulation passed ≠ safe on the robot.** Every output is a proposal that is run on the real cell
-at reduced speed first. The tool never claims more than that.
+**Simulation passed ≠ safe on the robot.** Every output not yet tested on the real cell is a
+proposal that is run there at reduced speed first. The tool never claims more than that.
 
-## 2. First milestone (this skeleton) — in scope
+## 2. Scope
 
 1. MuJoCo scene: the SF1 environment from `CAD/SF1_Environment.stl` (visual: the original mesh;
    collision: a committed convex decomposition), the UR10e with the Robotiq 2F-85, base at
@@ -89,20 +59,21 @@ at reduced speed first. The tool never claims more than that.
    - If it fails, the demo runs labelled **"VISUAL ONLY — UNCHECKED"**: an `[WARNING]` line and the
      viewer overlay say so, and the violations are listed.
 
-   The amplitude is never reduced to make the check pass. Which of the two labels the shipped motion
-   gets is reported at implementation and pinned by a test.
-3. A URScript parser and writer that read the test positions exactly and write them back
+   The amplitude is never reduced to make the check pass. The shipped motion is labelled
+   "clearance checked" (`test/Example/test_demo.py`).
+3. A URScript parser and writer that read the learned points exactly and write them back
    byte-identically.
 4. The kinematic checks: DH FK · configured TCP against `_p`, MuJoCo FK against DH FK, the
    derived TCP as a diagnostic, the coupling in the scene, the clearance check of A and B.
-5. Installer, tests, style checker, the three project skills, docs.
+5. The planner and the rotation-sequence output (§10.6), the replay (§10.7) and the README figures
+   (`Example/make_readme_figures.py`, §6).
+6. Installer, tests, style checker, the three project skills, docs.
 
-## 3. Out of scope for the milestone
+## 3. Out of scope
 
-- The planner (RRT-Connect + shortcutting, ≤ 5 via points) — implemented since, §10.6.
 - Modelling the carried part (accepted risk, `KNOWN_ISSUES.md`).
-- Blend radius > 0 and blend-envelope checking. The writer always emits `r=0` (§8.5).
-- Dynamics, payload, cycle time. The simulation is kinematic only.
+- Blend radius > 0 and blend-envelope checking. Every emitted `movej` has `r=0` (§8.5).
+- Dynamics and payload. The simulation is kinematic only; durations are estimates (§10.6).
 - Windows. Ubuntu is a target but cannot be run on this machine: it stays **unverified**.
 - Robot-specific calibration (`calibration.conf`): nominal DH only (§9.4).
 
@@ -580,6 +551,9 @@ Volume is meaningless for a non-watertight mesh, so it is not used.
 2. **Excess**: the maximum distance the collision geometry extends beyond the original surface,
    overall and per piece. Reported: max, p95, and the 20 largest with their location.
 
+When a configuration violates a margin against the full environment set, the pairs are reported.
+`CONST_HULL_EXCESS_MAX`, `eps` and the margins are never tuned to make a check pass.
+
 ### 7.4 Open shells filling space the robot needs
 
 A hull of an open shell (sheet-metal housings, frames, especially in object (a)) fills its
@@ -660,7 +634,7 @@ field without a reader.
 | `Kinematics.FK_Sanity_Bound.Position` | the most a learned point's DH FK·TCP may differ from its `_p` before it is refused: `0.010` (§9.4) | m | REQUIRED |
 
 The orientation sanity bound is derived from the position bound (§9.4), not configured. There are
-no optional fields in the milestone, so there are no defaults to keep in sync. Values that have a
+no optional fields, so there are no defaults to keep in sync. Values that have a
 single legal value are deliberately **not** fields: robot type (UR10e DH is a code constant), blend
 radius (always 0, §8.5), joint wrapping (never, §10.5). Speed and acceleration are not fields either:
 `movej` with `r=0` follows the same joint-linear path at any speed, so they cannot change what is
@@ -1280,7 +1254,7 @@ hull of machine (a) (component 1638, `KNOWN_ISSUES.md`) is labelled *model not v
 a collision: the hull fills the space the loading moves use (`Scene_Cls.Components_Within`). The
 replayed home → home paths stay far from it; the position viewer shows the label at the loading points.
 
-## 11. Tests of the first milestone
+## 11. Tests
 
 | Test file | What it pins |
 |---|---|
