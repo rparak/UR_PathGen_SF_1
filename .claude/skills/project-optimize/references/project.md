@@ -14,12 +14,29 @@ writer - is proven by writing the output on a fixed seed before and after and co
 is still collision-free but different is a behaviour change: a faster sampler that picks other via
 points is for `feature-manager`.
 
-| Output | Produced by |
-|---|---|
-| `<job>.urscript` points and `_Sequence.script` motion lines, the printed report (clearance verdicts and every violation) | `.venv/bin/python Example/plan_rotation.py --job <name> --workers 8 --out "$SCRATCH/<before or after>"` (CLAUDE.md; without `--out` it overwrites `Data/Generated/`) |
-| The variants and `comparison.csv` / `.md` | `Example/write_variants.py` |
-| The collision set and its manifest, where the build is touched | `Example/build_collision.py` (about 19 min, runs CoACD) |
-| Every `[INFO]`/`[WARNING]`/`[ERROR]` line and operator sentence | the scripts above and the tests |
+| Output | Produced by | Deterministic inputs (seed if any) |
+|---|---|---|
+| `<job>.urscript` points and `_Sequence.script` motion lines, the printed report (clearance verdicts and every violation) | `.venv/bin/python Example/plan_rotation.py --job <name> --workers 8 --out "$SCRATCH/<before or after>"` (CLAUDE.md; without `--out` it overwrites `Data/Generated/`) | the job file, `Cell_SF1.yaml`, `Data/Programs/`, the committed collision set; seed `CONST_SEED` = 20261017 (`Example/plan_rotation.py`; segment k: seed × 1000 + case × 10 + k); budgets are iteration counts, so the worker count does not change the output |
+| The variants and `comparison.csv` / `.md` | `Example/write_variants.py` | the same, per variant |
+| The collision set and its manifest, where the build is touched | `Example/build_collision.py` (about 19 min, runs CoACD) | `CAD/SF1_Environment.stl`, the configuration |
+| Every `[INFO]`/`[WARNING]`/`[ERROR]` line and operator sentence | the scripts above and the tests | as above |
+
+Two runs of the default job (`sf1_plc_v4_case_17`, 8 workers) on 2026-10-23: both files
+byte-identical to each other and to the committed `Data/Generated/` files; the printed output
+identical after the filter below.
+
+## Normalisation filter for printed output
+
+What varies between runs and is replaced (nothing else): the taught model check's time, the two
+wall-clock times of the `Wall time:` line, and the `--out` path of the `Written to` line.
+
+```bash
+F='s/(samples, )[0-9]+ s\)/\1<T> s)/; s/(Wall time: planning )[0-9]+ s/\1<T> s/; s/(, report )[0-9]+ s\./\1<T> s./; s/^(\[INFO\] Written to ).*(\. Simulation passed)/\1<OUT>\2/'
+sed -E "$F" "$SCRATCH/before.stdout" > "$SCRATCH/before.normalised"
+```
+
+The estimated durations in the report (`taught %.2f s, optimised %.2f s`) are computed, not
+measured, and are **not** filtered.
 
 ## Never touched
 
