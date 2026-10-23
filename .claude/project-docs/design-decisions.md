@@ -648,14 +648,14 @@ inside it in case 18 (penalty 0.002 m).
 (estimate), 12.5 mm more clearance.
 
 *Updated 2026-10-18: with the deliverable narrowed to case 17 and the machine at −150 mm, S1 – S3
-were re-planned once on the final scene (SPEC §17): 4.76 / 4.31 / 5.27 s (S3 direct), home -> home
+were re-planned once on the final scene (the git history of SPEC §17): 4.76 / 4.31 / 5.27 s (S3 direct), home -> home
 16.66 s against the committed 17.24 s; outside the station neighbourhood they pass at 29.7 / 31.0 /
 23.3 mm (top profile, top profile, post) against the committed 64.0 / 48.9 / 65.6 mm. The same
 objective, now with more free space: time is bought down to the 30 mm penalty threshold and, for
 S3, 6.7 mm inside it. All three use space only the estimated shift frees (`KNOWN_ISSUES.md`).*
 
 *Updated 2026-10-18 (later): with the machine margin (+10 mm), the stub and the station-box rule,
-S1 - S3 were re-planned once more (SPEC §17): 4.76 / 4.81 / 5.62 s, home -> home 17.50 s (+0.84 s);
+S1 - S3 were re-planned once more (the git history of SPEC §17): 4.76 / 4.81 / 5.62 s, home -> home 17.50 s (+0.84 s);
 S2 needs two via points to stay as far from the stub as its taught end, S3 is no longer direct.*
 
 **Revisit if** the cell is measured (the machine position is an estimate, `KNOWN_ISSUES.md`), the
@@ -720,7 +720,7 @@ Pinned by `test/Scene/test_program.py`.
 ## Generated paths may use the space the machine shift to -150 mm frees: the owner's judgement
 
 **Decision.** Machine (a) stays at -150 mm in the model, and the S1 - S3 re-planned on that scene
-(home -> home 16.66 s, estimate; SPEC §17) are the delivered output. The planner plans and verifies
+(home -> home 16.66 s, estimate) were the delivered output. The planner plans and verifies
 against the current scene only.
 
 **Why.** The owner judges that the further 50 mm matches the real cell better than -100 mm

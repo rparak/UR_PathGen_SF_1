@@ -497,7 +497,7 @@ at its estimated position; its real position is unknown (`KNOWN_ISSUES.md`).
 **Owner facts (estimates, not measured).** Machine (a) stands a further 50 mm along −x: 150 mm in
 all, at the 150 mm bound of an override. **Owner's judgement (2026-10-18): the −150 mm position
 matches the real cell better than −100 mm**, and generated paths may use the space it frees (the
-re-planned S1 – S3 of §17 are kept). It remains an estimate, not a measurement; its accuracy is not
+delivered c2 is planned on it). It remains an estimate, not a measurement; its accuracy is not
 yet stated. The side cabinet, object (c) (56 components, named by its
 body 2643), stands 50 mm along −x, a separate assembly with its own source. The robot stand and the
 tables, object (b), stay. The holder stays where the robot places the part (world-fixed); it is
@@ -597,10 +597,6 @@ holding pad). It meets the zone box, so it is a zone piece like the holder (§4.
 Taught clearance to the stub (mm, ≥ 60 not listed): case 17 / 18 Waypoint_1 → drop 13.6 / 11.6,
 drop → Waypoint_4 / 7 10.1 / 8.8, → Waypoint_5 (85 mm) 11.4 / 11.2, Waypoint_3 → Waypoint_18 / 11 8.3 /
 12.6, approach → pick 10.0 / 13.2, pick → Waypoint_6 / 8 5.03 / 7.1, Waypoint_5 → Waypoint_1 42.6.
-
-The S1 – S3 written before the stub (§17) keep the full check with it, at 13.6 / 9.5 / 63.3 mm; S2
-comes 0.6 mm closer than its taught end (10.1 mm at Waypoint_18), which the station-box rule (§9.7)
-refuses.
 
 ## 5. Platform
 
@@ -1012,7 +1008,8 @@ and may be larger there. *Corrected 2026-10-21: the error was said to be known o
   - Environment: `base–env_stand` only (§7.5). This one is code, not configuration, because it has
     a single legal value.
 - `base – upper_arm_link` is a structural near pair (min 2.3 mm, inside 5 mm in 17.5 % of samples,
-  §4.5). It is **not** excluded; Q9 decides how it is handled.
+  §4.5). It is **not** excluded; its self margin is 0 mm (owner, Q9 (a); true minimum
+  2.3237 mm, §17).
 - A test asserts that the compiled model's exclusion set equals exactly the expansion of the
   configuration plus `base–env_stand`, with nothing from model defaults.
 - Joint ranges in the compiled model are set from `Robot.Joint_Position_Limits`, not from the
@@ -1259,7 +1256,7 @@ not what was tested; the chain rule reproduces the committed c2 to 1e-11 rad.*
 
 *Since the machine shift (2026-10-18) S1 – S3 are optimised for time (home → home 23.37 → 17.50 s,
 estimate; 14.66 s since the pick's wrist-3 turn, §10.5, 2026-10-19), not for clearance, and the paths written on the final scene use the space the estimated
-shift frees, keeping 30 mm to machine (a) outside the zone (§9.7, §17). Corrected 2026-10-19: the
+shift frees, keeping 30 mm to machine (a) outside the zone (§9.7). Corrected 2026-10-19: the
 taught S1 – S3 were said to all keep the generated rule; since the station-box rule (§9.7) the taught
 S2 does not: its last leg, Waypoint_3 → Waypoint_18, comes 8.3 mm to the station stub, below the
 floor of 10.1 mm (Waypoint_18's own distance), on 51 samples (`Example/plan_rotation.py` report).
@@ -1318,7 +1315,7 @@ via points.
 - Clearance penalty: the sum over the samples of every segment of max(0, 30 mm − d), d the smallest
   robot – environment distance (`Environment_Distance`), for samples whose TCP lies outside the
   station neighbourhood. The hard margins are unchanged; the penalty only prefers clearance above
-  them. `w` = 0.5 s/m (owner, 2026-10-17, after the trade-off in §17), set in `Example/plan_rotation.py`.
+  them. `w` = 0.5 s/m (owner, 2026-10-17, after the trade-off recorded in `design-decisions.md`), set in `Example/plan_rotation.py`.
 
 **Final verification.** `Verify_Path` re-checks every segment with the full generated-rule check
 (`Check_Segment`, no early exit, no cache), at most 5 via points, within the joint limits; a path
@@ -1476,25 +1473,12 @@ path: written, tested only against stubs, **unverified**.
 
 ## 13. Skills (`.claude/skills/`)
 
-Written as new skills of this project from `_source_skills/` as templates:
-
-- **project-style-rpx**: RP conventions kept (`_Cls`, `_Str`, `CONST_*`, Pascal_Snake_Case, `import
-  typing as tp`, numbered `Description/Args/Returns` docstrings, `#` MIT header with JIC Smart
-  Factory, `*_Error_Cls` with operator sentences, pytest). Removed: Qt, UI design, Basler, vision
-  models, AnyScan decisions. Rewritten: `shell.md` (this `install.sh`, macOS + Ubuntu), `yaml.md` (the
-  cell configuration). New: `urscript.md` (one reader, one writer, round trip, units, tokens) and
-  `mjcf.md` (vendored models, patch in code, collision geometry, exclusions). `check_style.py`:
-  Qt exemptions removed, paths `src`, `Example`, `test`; its tests pass.
-- **feature-manager**: the procedure is kept (restate → verify the premise → challenge the solution →
-  report → measure → tests → small commits → docs). New robotics checklist: kinematics and TCP,
-  collision and decomposition, clearance, blends, joint limits and branches, sim vs reality,
-  "simulation passed ≠ safe on the robot".
-- **project-optimize**: the four kinds (cleanup, speed, complexity, reliability) and "behaviour does
-  not change" are kept. Added: the generated path is output, so it is compared byte for byte on a
-  fixed seed before and after. Examples are generic.
-
-No invented project history and no links to documents the skeleton does not create; everything
-unverified is marked *Unsettled*.
+- **project-style-rpx**: the code, shell, YAML, Markdown, URScript and MJCF conventions;
+  `scripts/check_style.py` checks `src`, `Example` and `test`.
+- **feature-manager**: how a feature, a behaviour change or a bug fix is added, with the robotics
+  review checklist.
+- **project-optimize**: cleanup, speed, complexity and reliability work that does not change
+  behaviour; a generated path is compared byte for byte.
 
 ## 14. Risks and how they are handled
 
@@ -1506,55 +1490,14 @@ unverified is marked *Unsettled*.
 | 4 | Sim vs real kinematics | DH truth; configured TCP (Polyscope = Robotiq manual), derived TCP diagnostic only (§9.3); coupling from the manual, measured on the robot (§9.3); regression pin + sanity bound (§9.4); no calibration file → residual in the clearance budget (§9.8) |
 | 5 | A→B configuration change (base ~167°, elbow −120° → +83.8°) | `movej` only, joint targets only; `movel` is never emitted |
 | 6 | Check vs real motion | joint-linear dense sampling with a displacement bound; `r=0` fixed |
-| 7 | Self-collision, limits, gripper | explicit exclusions, filterparent off; elbow ±180° as the precondition of the upper_arm–forearm exclusion; others ±360° (Polyscope limits possibly tighter); structural pair base–upper_arm reported, not excluded (Q9); gripper fixed at 50 mm with a pad-span hull; part beyond the pad ends not covered |
+| 7 | Self-collision, limits, gripper | explicit exclusions, filterparent off; elbow ±180° as the precondition of the upper_arm–forearm exclusion; others ±360° (Polyscope limits possibly tighter); structural pair base–upper_arm not excluded, 0 mm self margin (Q9 (a)); gripper fixed at 50 mm with a pad-span hull; part beyond the pad ends not covered |
 | 8 | ≤ 5 via points | planner (next feature) must report failure, never return a longer or colliding path |
 | — | Open shells over-filling space | flagged per piece (§7.4) |
 | — | 88 MB STL, 1.76 M triangles as visual mesh | MuJoCo's STL loader refuses > 200 000 faces → passed as `uservert`/`userface`, no hull stored, compile 1.3 s (§4.5) |
 
 ## 15. Open questions
 
-Resolved by the owner (2026-10-17):
-
-- TCP configured as (0, 0, 174.0, 0, 0, 0), §9.3.
-- Coupling measured, 14.0 mm, §4.4.
-- Regression pin + sanity bound, §9.4.
-- Budget with both cases, §9.8.
-- `Mount_Yaw` = 0 as a documented assumption, §9.3.
-- No speed/acceleration fields, hardware ±360° limits, §8.
-
-Rev. 4: Q8 → option (ii), pad-span hull; Q5, Q6, Q7 → defaults accepted; elbow ±180°.
-
-**For the owner:**
-
-- **Q9 — `base – upper_arm_link` (§4.5).** It is within 5 mm in 17.5 % of samples and never below
-  2.3 mm. (`base – wrist_2_link`: 0.1 %, min 2.3 mm. It is rare enough to keep the 5 mm margin.)
-  Options:
-  - (a) *recommended*: pair-specific margin 0 mm (contact only) for exactly this pair, justified
-    by a test sweeping `shoulder_pan` × `shoulder_lift`;
-  - (b) keep 5 mm and lose ≈ 17 % of joint space;
-  - (c) lower `Clearance.Self` for all pairs.
-
-**Note for the first planner task (owner, no change now):** learned pick/drop points near fixtures
-may lie inside the 20 mm margin. Approach and retreat segments must be addressed explicitly. The
-milestone keeps the hard error of §9.7.
-
-**`KNOWN_ISSUES.md` at the skeleton** (only what the skeleton decided):
-
-1. Kinematic error is measured at all 78 learned points (at most 4.04 mm at Waypoint_7, 0.377° at
-   Waypoint_1; home 1.72 mm, drop_rotate_1 4.02 mm) and checked at load. At generated via points,
-   and between points along a path, it is unmeasured and may be larger (§9.8). *Corrected
-   2026-10-21: it was said to be measured only at home and drop_rotate_1.*
-2. No `calibration.conf`: nominal DH.
-3. The carried 50 × 50 mm part is not modelled (accepted). The pad-span hull covers the space
-   between the fingers; **a part protruding beyond the pad ends is not covered** (§9.6).
-4. `Tool.Mount_Yaw` = 0 was an unmeasured assumption until the owner confirmed it (2026-10-18).
-5. Joint limits are ±360° (elbow ±180°, the precondition of the upper_arm–forearm exclusion). The
-   Polyscope safety limits may be tighter and must be checked against the robot before a path is
-   run.
-6. Cables at the base and the tool are not modelled; the remaining margin is 15.0 mm (case A) or
-   9.0 mm (case B) (§9.8).
-7. Hulls of open shells may fill space (§7.4); the pieces are listed by the build report.
-8. Ubuntu install path not verified.
+None. The limitations accepted instead of resolved are in `KNOWN_ISSUES.md`.
 
 ## 16. Sources
 
@@ -1582,156 +1525,29 @@ milestone keeps the hard error of §9.7.
 - Universal Robots, UR10e DH parameters (d, a, α as in §9.2), from UR's published "DH parameters for
   calculations of kinematics and dynamics" table.
 
-## 17. Implementation record (skeleton, 2026-10-17)
+## 17. Implementation measurements
 
-Measured on the development Mac (M2 Pro), Python 3.11, mujoco 3.16.0.
+Measured on the development Mac (M2 Pro), Python 3.11, mujoco 3.16.0. The collision-set values are
+recorded in `CAD/Collision/SF1_Environment_Collision.json`.
 
-- **Components are split at manifold edges** (an edge of exactly two faces), as trimesh does and as
-  §4.1 was measured: 2756 components. The first implementation used shared vertices (2270), then
-  any shared edge (2428). With both, the stand frame was one 21 440-face component; its CoACD parts
-  missed eps by 0.12 mm, so it fell back to one hull extending 297 mm beyond the frame. The robot
-  base sat 0.2 mm above that hull, and the static-base check refused the scene. This was an
-  implementation mismatch with §4.1, not a parameter: `Hull_Excess_Max`, `eps` and the margins were
-  not changed.
-- **Conservativeness check corrected (owner review, 2026-10-17).** The first build's check stopped
-  at the first part within eps for each point, so its reported maximum (0.99998 mm) was an upper
-  bound capped at eps, not the true maximum. The verdicts were right. The check now computes the
-  exact distance to the union: numpy point-triangle distance, matching trimesh to 4e-11 m, with
-  pieces skipped only when a facet-plane lower bound proves they cannot be closer. Each component
-  has its own seed. Exact recomputation on the old set gave a true maximum of 0.769 mm. Example of
-  the inflation: component 646 was reported 0.943 mm and is truly 0.138 mm.
-  `test/Collision/test_conservativeness.py` pins the pruned computation against the exhaustive one
+- **Components are split at manifold edges** (an edge of exactly two faces), as §4.1 was measured:
+  2756 components. Splitting at shared vertices or at any shared edge merged the stand frame into one
+  component, whose fallback hull reached 297 mm beyond it and failed the static-base check.
+- **Conservativeness is the exact distance to the union** of a component's CoACD parts (numpy
+  point-triangle distance, pieces skipped only when a facet-plane lower bound proves they cannot be
+  closer; a seed per component). A check that stops at the first part within eps reports a value
+  capped at eps (the first build reported 0.99998 mm), not the true maximum.
+  `test/Collision/test_conservativeness.py` holds the pruned computation against the exhaustive one
   and recomputes the recorded maximum.
-- **Collision set (rebuilt):**
-  - crop radius 2.026 m (a conservative chain bound: all 2756 components are kept);
-  - 6716 pieces: 2125 hull, 503 thickened (all planar), 4087 CoACD, 1 fallback;
-  - bodies: 4575 `env`, 2141 `env_stand`;
-  - conservativeness: 1 601 339 points over the accepted CoACD components; true max 0.769 mm
-    (component 2132); 0 points above 0.9·eps, 0 above 0.99·eps. The one rejected component, 1638
-    (an open shell in object (a)), is at 1.121 mm > eps and is kept as its hull;
-  - excess: max 234.8 mm (that fallback hull), p95 11.3 mm; 396 pieces flagged above 10 mm;
-  - build time 1145 s (CoACD 952 s); 3.6 MB `.npz`.
-  - The piece counts differ slightly from the first build: the per-component seeds changed the
-    excess samples, so a few borderline components fall on the other side of 10 mm.
-- **Scene:** 6785 geoms, 6751 of them collision geoms, 6716 of those environment; build 1.75 s
-  without the visual mesh.
-- **`Check_Clearance(q)`** over 1000 random `q` within the limits: mean 3.10 ms, p95 13.90 ms, max
-  55.4 ms. 714 of the 1000 random poses violate some margin. Whether the §7.2 merge pass is needed
-  is a planner-time decision; for the skeleton it is not.
-- **Closest robot ↔ environment pairs at A and B:** shoulder_link ↔ stand profiles at 99.2 mm at
-  both points (the base is excluded from the stand). Against `env` without the stand: A,
-  upper_arm_link ↔ a column of object (a) at 125.0 mm; B, upper_arm_link ↔ the side-table plate at
-  262.7 mm.
+- **Collision set:** crop radius 2.026 m (all 2756 components kept); 6718 pieces: 2125 hull,
+  503 thickened (all planar), 4089 CoACD, 1 fallback; bodies 4577 `env`, 2141 `env_stand`.
+  Conservativeness over 1 601 339 points: true maximum 0.769 mm (component 2132), 0 points above
+  0.9·eps. The fallback is component 1638 (an open shell of machine (a)), whose CoACD parts reach
+  1.121 mm > eps. Excess: maximum 234.8 mm (that fallback hull), p95 11.3 mm; 396 pieces flagged
+  above 10 mm. Build 1119 s (CoACD 935 s).
+- **`Check_Clearance(q)`** over 1000 random `q` within the limits: mean 3.10 ms, p95 13.90 ms,
+  maximum 55.4 ms; the generated rule 0.28 ms per planner sample (measured 2026-10-17, on the set
+  before the machine shift). The §7.2 merge pass was not needed.
 - **MuJoCo FK vs DH** over 1000 random `q`: ≤ 1e-15 m, ≤ 1e-15 rad.
-- **`base – upper_arm_link` true minimum:** 2.3237 mm (grid 2.3263 mm).
-- **A and B against the full environment:** no violation. *Corrected 2026-10-17: measured at `Base_Yaw` = 0. At 180° A is clear and B penetrates the rotation-station model by 27.4 mm (`KNOWN_ISSUES.md`); the closest-pair line above is also from 0°.*
-- **Collision set rebuilt with the component overrides (2026-10-17):** 2710 and 1154 translated
-  (§4.7); 6716 pieces, the same counts by method and body, conservativeness max 0.769 mm, excess max
-  234.8 mm / p95 11.3 mm, 396 flagged: every metric is identical to the build without overrides
-  (the translation is rigid); build time 1141 s. The manifest records both overrides.
-- **Planner, rotation sequence (2026-10-17, M2 Pro).** Generated rule: 0.28 ms per sample (workspace
-  check 0.05 ms after precomputing bounding points; 9.8 ms before). `Example/plan_rotation.py` with
-  the default budget takes about 36 min for both cases; two full runs gave byte-identical outputs.
-  Every S needs one via point; S2 one instead of three. Penalty weight w, smallest clearance outside
-  the station neighbourhood and estimated duration:
-
-  | Case, S | Taught | w = 0 | w = 0.5 (chosen, written) |
-  |---|---|---|---|
-  | 17 S1 | 5.95 s, 26.0 mm | 4.84 s, 24.5 mm | 4.88 s, 27.6 mm |
-  | 17 S2 | 8.30 s, 15.4 mm (fails the generated rule) | 4.51 s, 25.3 mm | 4.51 s, 33.8 mm |
-  | 17 S3 | 6.81 s, 28.5 mm | 5.65 s, 25.6 mm | 5.71 s, 32.9 mm |
-  | 18 S1 | 5.96 s, 26.5 mm | 4.89 s, 23.2 mm | 4.94 s, 26.6 mm |
-  | 18 S2 | 8.29 s, 15.4 mm (fails the generated rule) | 4.48 s, 28.9 mm | 4.47 s, 34.5 mm |
-  | 18 S3 | 6.84 s, 29.5 mm | 5.78 s, 20.4 mm | 5.71 s, 30.4 mm |
-  | home → home 17 / 18 | 23.37 / 23.49 s | 17.32 / 17.54 s | 17.41 / 17.52 s |
-
-  Estimates (§10.6). The optimised paths reach no deeper into the machine window than the taught
-  ones (deepest gripper point x = −0.756 m in both, at the shared station ends).
-- **Re-plan on the current scene (2026-10-18).** The committed S1 – S3 had been planned on the
-  2026-10-17 scene and were not re-planned after the machine shift, the post refit and the station
-  holder box (§4.9, §4.10). Re-planned with the same seed, budget and w = 0.5 s/m when the output
-  became the whole case (31 min, M2 Pro): every S still needs one via point; the via points differ
-  (the scene differs). Estimated duration and smallest clearance outside the station neighbourhood:
-
-  | Case, S | Taught | Optimised (written) |
-  |---|---|---|
-  | 17 S1 | 5.95 s, 26.0 mm | 4.81 s, 35.9 mm |
-  | 17 S2 | 8.30 s, 42.5 mm | 4.45 s, 30.0 mm |
-  | 17 S3 | 6.81 s, 30.1 mm | 5.67 s, 32.0 mm |
-  | 18 S1 | 5.96 s, 26.5 mm | 4.79 s, 46.4 mm |
-  | 18 S2 | 8.29 s, 42.5 mm | 4.46 s, 29.7 mm |
-  | 18 S3 | 6.84 s, 31.1 mm | 5.64 s, 30.3 mm |
-  | home → home 17 / 18 | 23.37 / 23.49 s | 17.24 / 17.29 s |
-
-  **The taught S2 now keeps the generated rule** (0 violations in both cases; on 2026-10-17 it
-  came to 15.4 mm and failed): the machine shift moved the reason it was optimised. The optimised S2
-  is shorter (one via point instead of three, 3.8 s less, estimate) but passes closer to the
-  environment than the taught S2 outside the station neighbourhood (30.0 / 29.7 mm against 42.5 mm).
-  The owner keeps the re-planned output (2026-10-18): **the optimisation of S2 is now about time,
-  not safety.** The optimised S2 stays 10 mm above the 20 mm hard margin; against the 30 mm penalty
-  threshold it is at it in case 17 (30.0 mm) and 0.3 mm inside in case 18 (29.7 mm, penalty 0.002 m).
-- **Machine assembly and post refit (2026-10-18, §4.9).** `machine_a` −100 mm, post 2710 a further
-  −15.7 mm; the 2026-10-17 overrides replaced. The collision set was rebuilt: 1109 s, the same 6716
-  pieces, conservativeness 0.769 mm, 398 flagged (was 396). The committed S1 – S3 keep the generated
-  rule unchanged and were not re-planned.
-- **Re-plan of case 17 on the final scene (2026-10-18, §4.11, §4.12).** The deliverable narrowed to
-  case 17 home → home (§1); machine (a) at −150 mm, the side cabinet −50 mm, no post fit, the zone
-  shrunk to the holder. S1 – S3 re-planned once: seed 20261017, the full budget, w = 0.5 s/m, the six
-  station points of case 17; 605 s (M2 Pro). Each `Verify_Path`-checked, 0 generated-rule
-  violations. Estimated duration, via points, and the smallest clearance outside the station
-  neighbourhood (with the piece), all on the final scene:
-
-  | S | Taught | Committed (planned at −100 mm) | Re-planned (written) |
-  |---|---|---|---|
-  | S1 | 5.95 s, 1 via, 60.3 mm | 4.81 s, 1 via, 64.0 mm | 4.76 s, 1 via, 29.7 mm (top profile 2699) |
-  | S2 | 8.30 s, 3 vias, 75.9 mm | 4.45 s, 1 via, 48.9 mm | 4.31 s, 1 via, 31.0 mm (top profile 2699) |
-  | S3 | 6.81 s, 1 via, 61.9 mm | 5.67 s, 1 via, 65.6 mm | 5.27 s, direct, 23.3 mm (post 2710) |
-  | home → home | 23.37 s | 17.24 s | 16.66 s |
-
-  Home → home with the station operations (2.31 s), all estimates. Within the station neighbourhood
-  S2 of every variant comes to 15.1 mm (the holder, at Waypoint_18). The objective trades clearance
-  above 30 mm for any time (the penalty starts at 30 mm): the re-planned S1 and S2 pass the window's
-  top profile at about 30 mm, and S3 runs direct, 0.40 s faster than the committed S3, 3.3 mm above
-  the 20 mm margin (penalty 0.478 m, 0.24 s of cost). **The re-planned paths use the space the
-  shift frees:** with the machine at the earlier −100 mm and the post fitted they would penetrate
-  the top profile by 19.6 mm (S1) and 16.2 mm (S2) and the post by 9.8 mm (S3). They keep ≥ 228 mm to
-  the machine-interior hull and the parts on the tables. Not repeated: a second identical run (the
-  determinism is pinned by `test_a_reduced_planning_run_is_byte_identical_twice`).
-- **Re-plan with the machine margin, the stub and the station-box rule (2026-10-18, §4.13, §9.7).**
-  The added boxes are convex meshes; `Clearance.Machine_Extra` +10 mm (30 mm to machine (a) outside
-  the zone, generated only); the stub box at its largest size; the planner keeps the station-box
-  rule. The committed S1 – S3 broke the new scene: S1 and S3 the machine margin (29.9 / 23.3 mm), S2
-  the station-box rule (9.5 mm to the stub, 0.6 mm closer than its taught end). Re-planned once:
-  seed 20261017, full budget, w = 0.5 s/m; 891 s (M2 Pro); each `Verify_Path`-checked, 0 violations.
-  On the final scene (exact distances, every sample; "outside" = outside the 50 mm station
-  neighbourhood, from the planner's report):
-
-  | S | Taught | Before (written 2026-10-18, §17 above) | After (written) |
-  |---|---|---|---|
-  | S1 | 5.95 s, 1 via; min 13.6 mm (coupler – stub); holder 146.8, stub 13.6; outside 60.3 | 4.76 s, 1 via; 13.6 (coupler – stub); holder 146.8, stub 13.6; outside 29.7 (22 violations) | 4.76 s, 1 via; 13.6 (coupler – stub); holder 146.8, stub 13.6; outside 30.4 (gripper base) |
-  | S2 | 8.30 s, 3 vias; 8.3 (pad span – stub); holder 15.1, stub 8.3; outside 75.9 (51 violations) | 4.31 s, 1 via; 9.5 (pad span – stub); holder 15.1, stub 9.5; outside 31.0 (10 violations) | 4.81 s, 2 vias; 10.1 (pad – stub); holder 15.1, stub 10.1; outside 41.7 (gripper base) |
-  | S3 | 6.81 s, 1 via; 45.0 (pad – post 2710); holder ≥ 200, stub 63.3 | 5.27 s, direct; 23.3 (wrist 2 – post); stub 63.3 (124 violations) | 5.62 s, 1 via; 45.0 (pad – post); holder ≥ 200, stub 63.3; outside 49.3 |
-  | home → home | 23.37 s | 16.66 s | **17.50 s** |
-
-  Violations: the current generated rule (the 30 mm machine margin, the station-box floors). The
-  taught S2 breaks the station-box rule itself (it passes the stub at 8.3 mm, its ends keep 10.1 mm);
-  the strict comparison reports it. The cost of the new rules: +0.84 s home → home (estimate), S2
-  +0.50 s (one via more, kept at its taught end's 10.1 mm to the stub), S3 +0.35 s (no longer direct).
-  At the earlier −100 mm the new paths would still pass into the top profile (S1 −18.5 mm, S2
-  −0.8 mm); S3 would keep 11.5 mm: the 10 mm margin covers the stated ±10 mm, not the whole shift.
-- **The pick's wrist 3 one turn lower; re-plan (2026-10-19, §10.5).** Owner decision after the branch
-  study (variant c1). The pick's three points use q6 − 2π; S1 is unchanged (its ends are), S2 and S3
-  re-planned with the same seed, budget and weight, 8 workers, 263 s; each `Verify_Path`-checked,
-  0 violations. From the planner's report ("outside" = outside the station neighbourhood):
-
-  | S | Before (17.50 s, §17 above) | After (written) |
-  |---|---|---|
-  | S1 | 4.76 s, 1 via; outside 30.4 mm | the same path |
-  | S2 | 4.81 s, 2 vias; min 10.1 mm (stub); outside 41.7 | 4.85 s, 2 vias; min 10.1 mm (stub); outside 51.7 |
-  | S3 | 5.62 s, 1 via, wrist 3 4.74 rad; min 45.0 (post); outside 49.3 | 2.74 s, 1 via, wrist 3 1.55 rad; min 45.0 (post); outside 59.4 |
-  | home → home | 17.50 s | **14.66 s** |
-
-  The other variants (taught, the previous optimisation, the proposals c2 and c3 for re-teaching the
-  drop on another branch) are kept for comparison in `Data/Generated/variants/`.
-- **Demo** (base ±45° around `home`): 1234 joint-linear samples, every margin kept, label
-  **"clearance checked"**. At 180° (2026-10-17) the same: 1234 samples, every margin kept.
+- **`base – upper_arm_link` true minimum:** 2.3237 mm (grid 2.3263 mm), pinned by
+  `test/Scene/test_core.py`; the reason for its 0 mm self margin (§9.6).

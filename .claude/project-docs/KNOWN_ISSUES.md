@@ -151,7 +151,7 @@ deliverable) pass the full generated-rule check in simulation. What that does no
   choice) only prefers clearance below 30 mm, and machine (a) outside the zone is held at 30 mm
   (±10 mm position accuracy): outside the station neighbourhood the optimised paths keep 30.4 mm
   (S1), 51.7 mm (S2) and 59.4 mm (S3); near the station S2 passes the stub at 10.1 mm, as close as
-  its taught end (re-planned 2026-10-19, SPEC §17).
+  its taught end (c1, re-planned 2026-10-19).
 - **The optimised paths depend on the estimated machine position:** they keep 30 mm to it, which
   covers the stated ±10 mm; with the machine at the earlier estimate (−100 mm, post fitted) S1 would
   penetrate the top profile by 18.5 mm and S2 by 0.8 mm (S3 would keep 11.5 mm). The space they use is freed only by the owner's estimate of a
