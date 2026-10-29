@@ -23,6 +23,14 @@ the collision model with its configured corrections, not the original CAD.
 > simulation model; only c2 has been tested on the real cell (owner, 2026-10-21). Run any other
 > path on the real cell at reduced speed first.
 
+<p align="center">
+  <img src="Media/SF1_real.jpeg" alt="The real SF1 cell viewed from behind the UR10e: the robot base on its stand in the foreground, the Robotiq 2F-85 gripper positioned at the window of machine (a), and the machine's operator panel on the left" width="85%">
+</p>
+
+**Figure 2:** The physical SF1 cell, viewed from behind the robot base. Unlike the collision model
+in Figure 1, the real cell includes elements that are not modelled, such as hoses, cabling and
+fixtures, so collision-free planning in simulation does not guarantee clearance on the real robot.
+
 ## Contents
 
 [About](#about) · [Results](#results) · [Quick start](#quick-start) · [How it works](#how-it-works) ·
@@ -63,7 +71,7 @@ Case 17, home → home. All values are **simulation estimates**; every metric is
   <img src="Media/cycle_time_light.png" alt="Stacked bar chart of the estimated home to home time per variant, split into S1, S2, S3 and the taught station operations, with the total and the change against the taught program above each bar: taught 23.37 s, b_optimised 17.50 s, c1 14.66 s, c2 12.05 s, c3 13.86 s" width="100%">
 </picture>
 
-**Figure 2:** Estimated home → home time per variant, stacked by section, with the total and its change against
+**Figure 3:** Estimated home → home time per variant, stacked by section, with the total and its change against
 the taught program. An estimate: every move from rest to rest (r = 0); blends and gripper time are
 not modelled.
 
@@ -72,7 +80,7 @@ not modelled.
   <img src="Media/path_c2_light.png" alt="The TCP path of c2 in amber over the thin blue taught path: short, low moves next to the station instead of the taught program's high loops, labelled as delivered and tested on the real cell" width="100%">
 </picture>
 
-**Figure 3:** c2 (amber), delivered — tested on the real cell (owner, 2026-10-21): the drop on IK
+**Figure 4:** c2 (amber), delivered — tested on the real cell (owner, 2026-10-21): the drop on IK
 branch S− E− W−, so the transfers stay low. Estimated 12.05 s; highest robot point 1.818 m. The
 taught path is drawn thin in blue for reference.
 
@@ -111,7 +119,7 @@ the program's blends and the gripper time are not modelled.
 </details>
 
 <details>
-<summary><b>All figures</b>: the cell, the collision model, every path and the other graphs (Figures 4–15)</summary>
+<summary><b>All figures</b>: the cell, the collision model, every path and the other graphs (Figures 5–16)</summary>
 
 Every image is generated from the repository data by
 [`Example/make_readme_figures.py`](Example/make_readme_figures.py); none is drawn by hand. All of
@@ -125,12 +133,12 @@ not the original CAD.
   <source media="(prefers-color-scheme: dark)" srcset="Media/robot_home_dark.png">
   <img src="Media/robot_home_light.png" alt="The UR10e at its home position in front of machine (a), with the robot stand, the tables and the side cabinet in grey and the station boxes in orange" width="100%">
 </picture>
-<p><b>Figure 4:</b> The robot at home, shown by its visual meshes, in front of machine (a). The station-zone pieces are orange.</p></td>
+<p><b>Figure 5:</b> The robot at home, shown by its visual meshes, in front of machine (a). The station-zone pieces are orange.</p></td>
     <td><picture>
   <source media="(prefers-color-scheme: dark)" srcset="Media/station_collision_dark.png">
   <img src="Media/station_collision_light.png" alt="Close-up of the regrasp station: machine (a) translucent grey, the station holder, stub and sill pieces orange, and the robot and gripper collision hulls red, with the gripper just above the holder" width="100%">
 </picture>
-<p><b>Figure 5:</b> The regrasp station close up, the robot at <code>Waypoint_5</code> (the retreat after the drop). Machine (a) is translucent so that the station-zone pieces (orange) and the robot's and gripper's collision hulls (red) show.</p></td>
+<p><b>Figure 6:</b> The regrasp station close up, the robot at <code>Waypoint_5</code> (the retreat after the drop). Machine (a) is translucent so that the station-zone pieces (orange) and the robot's and gripper's collision hulls (red) show.</p></td>
   </tr>
 </table>
 
@@ -139,7 +147,7 @@ not the original CAD.
   <img src="Media/collision_model_light.png" alt="The whole cell as coloured groups: the robot and gripper collision hulls red, the station boxes and zone pieces orange, the robot stand dark grey, machine (a) blue, the side cabinet purple, the tables light grey and the station-zone box translucent orange, with a legend naming each group and its margin" width="100%">
 </picture>
 
-**Figure 6:** Everything the planner checks a path against, each group in its colour with the margin it keeps
+**Figure 7:** Everything the planner checks a path against, each group in its colour with the margin it keeps
 (legend). Machine (a) and the side cabinet are at their corrected positions, the station holder and
 stub are boxes fitted to the taught program, and inside the small translucent station-zone box the
 zone pieces keep 5 mm instead of 20 mm (see [How it works](#how-it-works)).
@@ -154,24 +162,24 @@ confused with them. The times and heights in the captions are simulation estimat
   <source media="(prefers-color-scheme: dark)" srcset="Media/path_taught_dark.png">
   <img src="Media/path_taught_light.png" alt="The TCP path of the taught program as a blue line in the cell: two high loops above the regrasp station, from the robot at home to the station and back" width="100%">
 </picture>
-<p><b>Figure 7:</b> The taught program, case 17 home → home: the reference for the other path renders. Estimated 23.37 s; the robot reaches 2.322 m.</p></td>
+<p><b>Figure 8:</b> The taught program, case 17 home → home: the reference for the other path renders. Estimated 23.37 s; the robot reaches 2.322 m.</p></td>
     <td><picture>
   <source media="(prefers-color-scheme: dark)" srcset="Media/path_b_optimised_dark.png">
   <img src="Media/path_b_optimised_light.png" alt="The TCP path of b_optimised in orange over the thin blue taught path: wide loops to the left of the station and above it" width="100%">
 </picture>
-<p><b>Figure 8:</b> b_optimised (orange): S1–S3 re-planned on the taught points. Estimated 17.50 s; highest robot point 2.263 m.</p></td>
+<p><b>Figure 9:</b> b_optimised (orange): S1–S3 re-planned on the taught points. Estimated 17.50 s; highest robot point 2.263 m.</p></td>
   </tr>
   <tr>
     <td><picture>
   <source media="(prefers-color-scheme: dark)" srcset="Media/path_c1_dark.png">
   <img src="Media/path_c1_light.png" alt="The TCP path of c1 in green over the thin blue taught path: wide loops to the left of the station and above it, like b_optimised" width="100%">
 </picture>
-<p><b>Figure 9:</b> c1 (green), previous optimisation (simulation only): as b_optimised, with the re-grip's wrist 3 one turn lower. Estimated 14.66 s; highest robot point 2.263 m.</p></td>
+<p><b>Figure 10:</b> c1 (green), previous optimisation (simulation only): as b_optimised, with the re-grip's wrist 3 one turn lower. Estimated 14.66 s; highest robot point 2.263 m.</p></td>
     <td><picture>
   <source media="(prefers-color-scheme: dark)" srcset="Media/path_c3_dark.png">
   <img src="Media/path_c3_light.png" alt="The TCP path of the c3 proposal in pink over the thin blue taught path: short, low moves next to the station, labelled as not verified on the robot" width="100%">
 </picture>
-<p><b>Figure 10:</b> c3 (pink), proposal, not verified on the robot: the drop on home's IK branch S− E− W+. Estimated 13.86 s; highest robot point 1.780 m.</p></td>
+<p><b>Figure 11:</b> c3 (pink), proposal, not verified on the robot: the drop on home's IK branch S− E− W+. Estimated 13.86 s; highest robot point 1.780 m.</p></td>
   </tr>
 </table>
 
@@ -180,7 +188,7 @@ confused with them. The times and heights in the captions are simulation estimat
   <img src="Media/path_length_light.png" alt="Two horizontal bar charts per variant: the joint travel in radians (taught 45.4, b_optimised 38.6, c1 35.4, c2 23.5, c3 24.8) and the TCP path length in metres (7.06, 6.60, 6.45, 3.24, 3.37)" width="100%">
 </picture>
 
-**Figure 11:** Joint travel (the sum of |Δq| over the six joints) and TCP path length per variant, home → home,
+**Figure 12:** Joint travel (the sum of |Δq| over the six joints) and TCP path length per variant, home → home,
 computed in simulation. Less motion does not by itself mean less time.
 
 <picture>
@@ -188,7 +196,7 @@ computed in simulation. Less motion does not by itself mean less time.
   <img src="Media/max_height_light.png" alt="Horizontal bar chart of the highest robot point per variant in world z, with dashed lines at the robot base height 0.715 m and the workspace top 2.35 m: taught 2.322 m, b_optimised and c1 2.263 m, c2 1.818 m, c3 1.780 m" width="100%">
 </picture>
 
-**Figure 12:** The highest point of the robot and gripper (world z) per variant, computed in simulation, against
+**Figure 13:** The highest point of the robot and gripper (world z) per variant, computed in simulation, against
 the robot base and the workspace top that generated segments must stay below.
 
 <picture>
@@ -196,7 +204,7 @@ the robot base and the workspace top that generated segments must stay below.
   <img src="Media/clearance_light.png" alt="Three bar charts, one per transfer segment S1, S2 and S3, showing for each variant the distance of the robot to environment pair with the least room above its margin, a tick at that margin and the room as a label" width="100%">
 </picture>
 
-**Figure 13:** Per transfer segment, the robot–environment pair with the least room above its margin: bar the
+**Figure 14:** Per transfer segment, the robot–environment pair with the least room above its margin: bar the
 distance, tick the margin, label the room. Taught segments are judged by the taught rule, generated
 ones by the generated rule (20 mm to the environment, 30 mm to machine (a) outside the station
 zone, 5 mm inside it); simulation values.
@@ -206,7 +214,7 @@ zone, 5 mm inside it); simulation values.
   <img src="Media/joints_light.png" alt="Seven stacked panels over the estimated time: a timeline of each variant's sections with the station operations hatched, then the base, shoulder, elbow and three wrist joint angles in degrees for all five variants, the proposal c3 dashed" width="100%">
 </picture>
 
-**Figure 14:** The six joint angles of all five variants over the estimated time, under a timeline of each
+**Figure 15:** The six joint angles of all five variants over the estimated time, under a timeline of each
 variant's sections (taught station operations hatched); a dotted line marks where each sequence
 ends, and the proposal c3 is dashed. The timing is an estimate: every move from rest to
 rest (r = 0), blends and gripper time not modelled.
@@ -216,7 +224,7 @@ rest (r = 0), blends and gripper time not modelled.
   <img src="Media/tcp_paths_light.png" alt="Eight panels in two rows: for b_optimised, c1, c2 and c3, the TCP path in its colour over the taught path in grey, seen from above in x and y and from the side in x and z, with the robot base, home and the station zone marked" width="100%">
 </picture>
 
-**Figure 15:** TCP paths home → home from above (top row) and from the side (bottom row), each variant in its
+**Figure 16:** TCP paths home → home from above (top row) and from the side (bottom row), each variant in its
 colour against the taught path in grey, with the robot base, home and the station zone; computed in
 simulation.
 
@@ -436,7 +444,7 @@ in N processes, each with its own copy of the scene. The result is the same for 
   1 mm; otherwise the hull is kept. Flat components are thickened by 0.5 mm. That gives 6718 pieces.
   One open shell, the interior of machine (a), stays a filled hull, so the model is not valid inside
   the machine. The corrections from the configuration move whole objects (machine (a), the side
-  cabinet) and add boxes (the station holder and stub). See Figure 6 under
+  cabinet) and add boxes (the station holder and stub). See Figure 7 under
   [All figures](#results).
 - **The robot and gripper** are their collision hulls, with the gripper rigid at its opening: 50 mm
   while holding the part, 85 mm open. Self-collision exclusions are listed explicitly.
